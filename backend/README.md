@@ -1,6 +1,6 @@
 # backend — 服务端（Spring Boot API）
 
-本目录是 **LianYu-PC 的后端**：提供 REST API、SSE 流式单聊、WebSocket/STOMP 群聊、鉴权、AI 调度、记忆与文件存储等。浏览器里的页面在 [`../frontend`](../frontend)，由 Docker 或 Nginx 反代访问本服务。
+本目录是 **LianYu-PC 的后端**（Spring Boot 多模块）：提供 REST API、SSE 流式单聊、WebSocket/STOMP 群聊、鉴权、AI 调度、记忆与文件存储等。浏览器里的页面在 [`../frontend`](../frontend)，由 Docker 或 Nginx 反代访问本服务。
 
 | 项 | 说明 |
 |----|------|
