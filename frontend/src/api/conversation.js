@@ -1,7 +1,10 @@
 import http from './index'
+import { apiBasePath } from '@/utils/runtime'
 
-export function listConversations() {
-  return http.get('/conversation')
+export function listConversations(options = {}) {
+  return http.get('/conversation', {
+    skipGlobalError: options.silent === true
+  })
 }
 
 export function getConversation(id) {
@@ -28,8 +31,11 @@ export function uploadChatImage(file) {
   })
 }
 
-export function getMessages(id, params = {}) {
-  return http.get(`/conversation/${id}/messages`, { params })
+export function getMessages(id, params = {}, options = {}) {
+  return http.get(`/conversation/${id}/messages`, {
+    params,
+    skipGlobalError: options.silent === true
+  })
 }
 
 export function createGroupConversation(data) {
@@ -47,7 +53,7 @@ export function updateGroupTitle(id, title) {
 // Non-Axios SSE — fetch API handles streams better
 export function sendMessageStream(id, data) {
   const token = localStorage.getItem('lianyu-token')
-  return fetch(`/api/conversation/${id}/messages/stream`, {
+  return fetch(`${apiBasePath()}/conversation/${id}/messages/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

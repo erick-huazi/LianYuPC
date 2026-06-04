@@ -2,7 +2,7 @@
   <aside class="app-sidebar" :class="{ collapsed: settingsStore.sidebarCollapsed }">
     <div class="sidebar-brand" @click="$router.push('/app')">
       <div class="brand-icon">
-        <span class="brand-char">语</span>
+        <img :src="APP_LOGO" alt="LianYu" class="brand-logo" />
       </div>
       <transition name="fade">
         <span v-show="!settingsStore.sidebarCollapsed" class="brand-text">LianYu</span>
@@ -48,6 +48,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { Setting, UserFilled } from '@element-plus/icons-vue'
+import { APP_LOGO } from '@/constants/brand.js'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
@@ -59,6 +60,7 @@ const navItems = computed(() => [
   { path: '/app/characters', label: t('nav.characters'), icon: 'User' },
   { path: '/app/group-chat', label: t('nav.groupChat'), icon: 'ChatDotRound' },
   { path: '/app/moments', label: t('nav.moments'), icon: 'PictureRounded' },
+  { path: '/app/diary', label: t('nav.diary'), icon: 'Notebook' },
   { path: '/app/memory', label: t('nav.memory'), icon: 'Collection' }
 ])
 
@@ -109,6 +111,13 @@ function isActive(path) {
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 2px 12px rgba($color-pink-rgb, 0.25);
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .brand-char {

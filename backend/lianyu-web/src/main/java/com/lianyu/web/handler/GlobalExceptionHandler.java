@@ -57,7 +57,7 @@ public class GlobalExceptionHandler {
             return null;
         }
         FieldError fieldError = e.getBindingResult().getFieldError();
-        String msg = fieldError != null ? fieldError.getDefaultMessage() : "参数校验失败";
+        String msg = fieldError != null ? fieldError.getDefaultMessage() : "填写内容有误，请检查后重试";
         return ResponseEntity.badRequest().body(Result.fail(ErrorCode.BAD_REQUEST, msg));
     }
 

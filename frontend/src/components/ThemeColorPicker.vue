@@ -4,6 +4,7 @@
     :width="300"
     trigger="click"
     popper-class="theme-color-popover"
+    @show="$emit('open')"
   >
     <template #reference>
       <button class="theme-trigger" type="button" title="主题配色">
@@ -107,6 +108,8 @@ import {
 } from '@/utils/themeColor'
 
 const settingsStore = useSettingsStore()
+
+defineEmits(['open'])
 
 const bgPredefine = computed(() => BG_PRESETS.map(p => p.color))
 const accentPredefine = computed(() => ACCENT_PRESETS.map(p => p.color))

@@ -1,11 +1,29 @@
 <template>
-  <div class="character-square-page stagger-container">
+  <div class="character-square-page companion-page stagger-container">
+    <div class="square-page__ambient" aria-hidden="true">
+      <div class="square-page__mesh" />
+      <div class="square-orb square-orb--1" />
+      <div class="square-orb square-orb--2" />
+      <div class="square-page__grid" />
+    </div>
+
+    <div class="square-page__content">
     <header class="page-header">
       <div>
         <h1 class="page-title">{{ t('characterSquare.title') }}</h1>
         <p class="page-desc">{{ t('characterSquare.desc') }}</p>
       </div>
     </header>
+
+    <div class="search-row stagger-item">
+      <el-input
+        v-model="searchQuery"
+        class="search-input"
+        :placeholder="t('characterSquare.searchPlaceholder')"
+        clearable
+        :prefix-icon="Search"
+      />
+    </div>
 
     <div v-if="allTags.length" class="tag-filter stagger-item">
       <el-check-tag
@@ -31,6 +49,14 @@
       <span>{{ t('common.loading') }}</span>
     </div>
 
+    <div v-else-if="searchNoMatch" class="empty-state glass stagger-item">
+      <div class="empty-icon">
+        <el-icon :size="44"><Search /></el-icon>
+      </div>
+      <h3>{{ t('characterSquare.searchEmptyTitle') }}</h3>
+      <p>{{ t('characterSquare.searchEmptyDesc') }}</p>
+    </div>
+
     <div v-else-if="templates.length === 0" class="empty-state glass stagger-item">
       <div class="empty-icon">
         <el-icon :size="44"><Shop /></el-icon>
@@ -44,10 +70,11 @@
         v-for="(item, idx) in templates"
         :key="item.id"
         class="template-card glass stagger-item"
-        :style="{ animationDelay: `${idx * 0.05}s` }"
+        :style="{ animationDelay: `${idx * 0.05}s`, '--shine-delay': `${(idx % 6) * 0.65}s` }"
       >
+        <span class="template-card__shine" aria-hidden="true" />
         <div class="card-media">
-          <img v-if="item.avatarUrl" :src="item.avatarUrl" class="avatar-img" :alt="item.name" />
+          <img v-if="item.avatarUrl" :src="resolveMediaUrl(item.avatarUrl)" class="avatar-img" :alt="item.name" />
           <div v-else class="avatar-placeholder">
             <el-icon :size="28"><User /></el-icon>
           </div>
@@ -96,7 +123,7 @@
       </div>
     </div>
 
-    <div v-if="!loading && total > PAGE_SIZE" class="square-pagination">
+    <div v-if="!loading && !searchNoMatch && total > PAGE_SIZE" class="square-pagination">
       <el-pagination
         background
         layout="prev, pager, next"
@@ -105,6 +132,7 @@
         :total="total"
         @current-change="onPageChange"
       />
+    </div>
     </div>
 
     <el-drawer
@@ -116,7 +144,7 @@
     >
       <div v-if="previewItem" class="preview-body">
         <div class="preview-hero">
-          <img v-if="previewItem.avatarUrl" :src="previewItem.avatarUrl" class="preview-avatar" :alt="previewItem.name" />
+          <img v-if="previewItem.avatarUrl" :src="resolveMediaUrl(previewItem.avatarUrl)" class="preview-avatar" :alt="previewItem.name" />
           <div v-else class="preview-avatar placeholder">
             <el-icon :size="36"><User /></el-icon>
           </div>
@@ -139,50 +167,80 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Loading, Shop, User } from '@element-plus/icons-vue'
-import { addCharacterFromSquare, listCharacterSquareTemplates } from '@/api/characterSquare'
+import { ChatDotRound, Loading, Search, Shop, User } from '@element-plus/icons-vue'
+import { useCharacterSquareStore } from '@/stores/characterSquare'
 import { createConversation } from '@/api/conversation'
+import { getSavedUserCity, saveUserCity } from '@/utils/userCity'
+import { resolveMediaUrl } from '@/utils/media'
 
 const { t } = useI18n()
 const router = useRouter()
+const squareStore = useCharacterSquareStore()
 
 const PAGE_SIZE = 12
+const CATALOG_SIZE = 100
 
 const loading = ref(true)
-const templates = ref([])
+const catalog = ref([])
 const allTags = ref([])
 const activeTag = ref('')
+const searchQuery = ref('')
 const page = ref(1)
-const total = ref(0)
 const addingId = ref(null)
 const previewVisible = ref(false)
 const previewItem = ref(null)
 
-watch(activeTag, () => {
-  page.value = 1
-  loadTemplates()
+const filteredCatalog = computed(() => {
+  let list = catalog.value
+  const tag = activeTag.value?.trim()
+  if (tag) {
+    list = list.filter(item => item.tags?.includes(tag))
+  }
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(item => (item.name || '').toLowerCase().includes(q))
+  }
+  return list
 })
 
-onMounted(loadTemplates)
+const total = computed(() => filteredCatalog.value.length)
 
-async function loadTemplates() {
+const searchNoMatch = computed(
+  () => !loading.value && searchQuery.value.trim() !== '' && filteredCatalog.value.length === 0,
+)
+
+const templates = computed(() => {
+  const list = filteredCatalog.value
+  const from = (page.value - 1) * PAGE_SIZE
+  return list.slice(from, from + PAGE_SIZE)
+})
+
+watch(activeTag, () => {
+  page.value = 1
+})
+
+watch(searchQuery, () => {
+  page.value = 1
+})
+
+onMounted(() => loadCatalog())
+
+async function loadCatalog(force = false) {
   loading.value = true
   try {
-    const data = await listCharacterSquareTemplates({
-      page: page.value,
-      size: PAGE_SIZE,
-      tag: activeTag.value || undefined
+    const data = await squareStore.fetchTemplates({
+      page: 1,
+      size: CATALOG_SIZE,
+      tag: '',
+      force,
     })
-    templates.value = data?.records || []
-    total.value = data?.total ?? 0
+    catalog.value = data?.records || []
     allTags.value = data?.tags || []
-    if (data?.page) {
-      page.value = data.page
-    }
+    page.value = 1
   } finally {
     loading.value = false
   }
@@ -190,7 +248,6 @@ async function loadTemplates() {
 
 function onPageChange(nextPage) {
   page.value = nextPage
-  loadTemplates()
 }
 
 function openPreview(item) {
@@ -198,11 +255,39 @@ function openPreview(item) {
   previewVisible.value = true
 }
 
+async function promptUserCity() {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t('characterSquare.cityPromptMessage'),
+      t('characterSquare.cityPromptTitle'),
+      {
+        confirmButtonText: t('characterSquare.confirmAdd'),
+        cancelButtonText: t('common.cancel'),
+        inputValue: getSavedUserCity(),
+        inputPlaceholder: t('characterSquare.cityPlaceholder'),
+        inputValidator: (val) => {
+          if (!val?.trim()) return t('characterSquare.cityRequired')
+          return true
+        }
+      }
+    )
+    const city = value?.trim()
+    if (city) saveUserCity(city)
+    return city || null
+  } catch {
+    return null
+  }
+}
+
 async function handleAdd(item) {
   if (!item || item.added || addingId.value != null) return
+  const city = await promptUserCity()
+  if (!city) return
   addingId.value = item.id
   try {
-    const created = await addCharacterFromSquare(item.id)
+    const created = await squareStore.addTemplate(item.id, { city })
+    squareStore.markAddedInCache(item.id, created?.id)
+    markAddedLocal(item.id, created?.id)
     item.added = true
     item.addedCharacterId = created?.id ?? null
     ElMessage.success(t('characterSquare.addSuccess'))
@@ -227,11 +312,19 @@ async function handleAdd(item) {
     const msg = err?.message || ''
     if (msg.includes(t('characterSquare.alreadyAdded')) || msg.includes('已经添加过')) {
       item.added = true
-      await loadTemplates()
+      await loadCatalog()
     }
   } finally {
     addingId.value = null
   }
+}
+
+function markAddedLocal(templateId, characterId) {
+  catalog.value = catalog.value.map(item =>
+    item.id === templateId
+      ? { ...item, added: true, addedCharacterId: characterId ?? item.addedCharacterId }
+      : item,
+  )
 }
 
 async function startChat(characterId) {
@@ -249,9 +342,73 @@ async function startChat(characterId) {
 
 <style lang="scss" scoped>
 .character-square-page {
+  position: relative;
   max-width: $max-content-width;
   margin: 0 auto;
   padding: $space-6 $space-8 $space-12;
+  overflow: hidden;
+}
+
+.square-page__ambient {
+  position: absolute;
+  inset: -$space-8 -$space-4;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.square-page__mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 65% 50% at 8% 0%, rgba($color-pink-rgb, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 92% 20%, rgba(100, 90, 200, 0.1), transparent 50%),
+    radial-gradient(ellipse 45% 35% at 50% 100%, rgba($color-pink-rgb, 0.06), transparent 48%);
+}
+
+.square-page__grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, black, transparent);
+}
+
+.square-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(64px);
+  animation: squareOrbFloat 12s ease-in-out infinite alternate;
+}
+
+.square-orb--1 {
+  width: 200px;
+  height: 200px;
+  top: -4%;
+  right: 6%;
+  background: rgba($color-pink-rgb, 0.2);
+}
+
+.square-orb--2 {
+  width: 160px;
+  height: 160px;
+  bottom: 8%;
+  left: -4%;
+  background: rgba(120, 100, 200, 0.12);
+  animation-delay: -4s;
+}
+
+@keyframes squareOrbFloat {
+  from { transform: translate(0, 0); }
+  to { transform: translate(12px, -16px); }
+}
+
+.square-page__content {
+  position: relative;
+  z-index: 1;
 }
 
 .page-header {
@@ -269,6 +426,26 @@ async function startChat(characterId) {
 .page-desc {
   font-size: $font-size-sm;
   color: $color-text-muted;
+}
+
+.search-row {
+  margin-bottom: $space-5;
+}
+
+.search-input {
+  max-width: 360px;
+
+  :deep(.el-input__wrapper) {
+    border-radius: $radius-pill;
+    background: rgba($color-pink-rgb, 0.04);
+    box-shadow: none;
+    border: 1px solid rgba($color-pink-rgb, 0.12);
+  }
+
+  :deep(.el-input__wrapper.is-focus) {
+    border-color: rgba($color-pink-rgb, 0.35);
+    box-shadow: 0 0 0 3px rgba($color-pink-rgb, 0.12);
+  }
 }
 
 .tag-filter {
@@ -334,6 +511,8 @@ async function startChat(characterId) {
 }
 
 .template-card {
+  position: relative;
+  overflow: hidden;
   border-radius: $radius-lg;
   padding: $space-4 $space-4 $space-5;
   display: flex;
@@ -348,6 +527,47 @@ async function startChat(characterId) {
     border-color: rgba($color-pink-rgb, 0.12);
     box-shadow: $shadow-glow-pink;
     transform: translateY(-2px);
+  }
+}
+
+.template-card__shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 55%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 35%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(255, 255, 255, 0.06) 65%,
+    transparent 100%
+  );
+  animation: cardShineSweep 5.5s ease-in-out infinite;
+  animation-delay: var(--shine-delay, 0s);
+}
+
+@keyframes cardShineSweep {
+  0%,
+  72%,
+  100% {
+    left: -100%;
+  }
+  88% {
+    left: 130%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .square-orb {
+    animation: none;
+  }
+
+  .template-card__shine {
+    display: none;
   }
 }
 

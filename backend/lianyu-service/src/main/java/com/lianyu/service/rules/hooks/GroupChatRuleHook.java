@@ -39,6 +39,7 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + "5) @は控えめに：1メッセージにつき必要なときだけ最大1人。\n\n"
                     + "発話制約：自分（" + name + "）としてのみ話す。"
                     + "他キャラになりすます・「名前:セリフ」の脚本形式は禁止。\n"
+                    + groupRealLifeGroundingHint(OutputLanguage.JA)
                     + mention;
             case EN -> """
                     === Group chat ===
@@ -54,6 +55,7 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + "5) Use mentions sparingly: at most one @ per message, only when needed.\n\n"
                     + "You must speak only as yourself (" + name + "). Never impersonate other characters "
                     + "or format lines like \"Name: spoken line\". No multi-character script layouts.\n"
+                    + groupRealLifeGroundingHint(OutputLanguage.EN)
                     + mention;
             case ZH_TW -> """
                     === 群聊資訊 ===
@@ -69,6 +71,8 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + "5) @要精準、克制：每條訊息最多@1人，只有在確實需要點名時才用，避免無意義連環@。\n\n"
                     + "表達約束：只能以你自己（" + name + "）的身份發言，"
                     + "嚴禁代替其他角色發言，嚴禁輸出「角色名: 台詞」的多人劇本格式。\n"
+                    + groupHumanizeHint(OutputLanguage.ZH_TW)
+                    + groupRealLifeGroundingHint(OutputLanguage.ZH_TW)
                     + mention;
             case ZH -> """
                     === 群聊信息 ===
@@ -84,7 +88,8 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + "5) @要精准、克制：每条消息最多@1人，只有在确实需要点名时才用，避免无意义连环@。\n\n"
                     + "表达约束：只能以你自己（" + name + "）的身份发言，"
                     + "严禁代替其他角色发言，严禁输出「角色名: 台词」的多人剧本格式。\n"
-                    + groupHumanizeHint(OutputLanguage.fromCode(context.outputLanguage()))
+                    + groupHumanizeHint(OutputLanguage.ZH)
+                    + groupRealLifeGroundingHint(OutputLanguage.ZH)
                     + mention;
         };
     }
@@ -98,6 +103,15 @@ public class GroupChatRuleHook implements PromptRuleHook {
             case JA -> "\n口調：毎回優しくしない。ツッコミ・反論・たまに「うん」だけも可。連続の超短文は避ける。\n";
             case ZH_TW -> "\n語氣：不必句句熱情或安慰；可吐槽、反駁、偶爾極短一句（如「嗯」「行」），勿連續敷衍。\n";
             case ZH -> "\n语气：不必句句热情或安慰；可吐槽、反驳、偶尔极短一句（如「嗯」「行」），勿连续敷衍。\n";
+        };
+    }
+
+    private String groupRealLifeGroundingHint(OutputLanguage lang) {
+        return switch (lang) {
+            case EN -> "\nFocus on the user's real-life topics in group chat. Keep your voice, but don't perform lore or advance a plot unprompted.\n";
+            case JA -> "\n群聊でもユーザーの現実の話題を優先。口調は保つが、設定演技や勝手な脚本進行はしない。\n";
+            case ZH_TW -> "\n群聊也要優先接住用戶現實生活話題；保持語氣，但不要自顧自演設定劇情。\n";
+            case ZH -> "\n群聊也要优先接住用户现实生活话题；保持语气，但不要自顾自演设定剧情。\n";
         };
     }
 }

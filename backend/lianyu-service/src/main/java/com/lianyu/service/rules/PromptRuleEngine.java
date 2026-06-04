@@ -1,7 +1,6 @@
 package com.lianyu.service.rules;
 
 import org.springframework.stereotype.Component;
-
 import java.util.Comparator;
 import java.util.List;
 

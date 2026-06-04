@@ -2,8 +2,8 @@ package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.Result;
-import com.lianyu.service.ConversationService;
-import com.lianyu.service.FileStorageService;
+import com.lianyu.service.conversation.ConversationService;
+import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

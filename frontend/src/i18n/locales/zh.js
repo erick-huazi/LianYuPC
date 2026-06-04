@@ -10,13 +10,17 @@ export default {
   },
   nav: {
     home: '首页',
-    characterSquare: '角色广场',
-    characters: '角色',
+    characterSquare: '广场',
+    characters: '羁绊',
     groupChat: '群聊',
-    moments: '朋友圈',
+    moments: '动态',
+    diary: '日记',
     memory: '记忆',
-    profile: '个人资料',
-    settings: '设置'
+    profile: '我的',
+    settings: '设置',
+    more: '更多',
+    menuHub: '星盘导航',
+    menuClose: '收起'
   },
   routes: {
     home: '首页',
@@ -26,6 +30,7 @@ export default {
     chat: '对话',
     groupChat: '群聊',
     moments: '朋友圈',
+    diary: '角色日记',
     memory: '记忆',
     profile: '个人资料',
     settings: '设置'
@@ -39,8 +44,19 @@ export default {
     enableBrowserNotify: '启用系统通知',
     pushOff: '关闭离线推送',
     pushOn: '开启离线推送',
+    pushHint: '离线推送已默认开启，点击铃铛可管理或关闭',
+    pushEnabledSuccess: '离线推送已开启',
+    pushEnabledDesktop: '离线推送已开启，应用在后台或最小化时也会通知你',
+    pushDisabledSuccess: '已关闭离线推送',
+    pushPermissionDenied: '请允许系统通知权限后再试',
+    pushUnsupported: '当前环境不支持 Web Push，请使用桌面客户端',
+    pushNoPublicKey: '服务端未配置推送密钥',
+    pushSubscribeFailed: '推送订阅失败，请稍后重试',
     logout: '退出登录',
-    profile: '个人资料'
+    logoutConfirm: '确定要退出当前账号吗？',
+    profile: '个人资料',
+    changePassword: '修改密码',
+    apiSettings: 'API 设置'
   },
   theme: {
     title: '主题配色',
@@ -49,6 +65,15 @@ export default {
     bgCool: '背景 · 偏冷',
     btnWarm: '按钮 · 偏暖',
     reset: '恢复默认'
+  },
+  onboarding: {
+    themeHint: '点击这里可以切换主题配色',
+    squareHint: '如果不知道想要什么角色，可以来广场看看',
+    groupMentionHint: '点击此处可以选择@某位角色'
+  },
+  launcher: {
+    newMessageHint: '{name}给你发消息了哦',
+    defaultCharacterName: '她'
   },
   common: {
     loading: '加载中...',
@@ -72,17 +97,30 @@ export default {
     notLoggedIn: '未登录'
   },
   home: {
-    greetingNight: '夜深了，{name} ✨',
-    greetingMorning: '早上好，{name} ☀️',
-    greetingAfternoon: '下午好，{name} 🌤',
-    greetingEvening: '晚上好，{name} 🌙',
-    subtitle: '选择角色，开始对话',
-    welcomeTitle: '欢迎使用 LianYu',
-    welcomeDesc: '在「角色管理」中创建你的第一个角色，然后在此开始对话。',
-    goCharacters: '前往角色管理',
+    eyebrow: '今日陪伴',
+    greetingNight: '夜深了，{name}',
+    greetingMorning: '早上好，{name}',
+    greetingAfternoon: '下午好，{name}',
+    greetingEvening: '晚上好，{name}',
+    subtitle: '她们在这里等你，随时开口',
+    moodSection: '此刻心情',
+    welcomeTitle: '续写未完的对话',
+    welcomeDesc: '从羁绊列表回到熟悉的角色，或在广场遇见新的相遇。',
+    goCharacters: '打开羁绊',
+    exploreSquare: '逛逛广场',
+    discoverSection: '去发现',
+    feedSection: '最新动态',
+    feedViewAll: '查看全部',
+    feedEmpty: '还没有新动态，去和她们聊聊吧',
+    atmosphereEyebrow: '此刻陪伴',
+    atmosphereContinue: '和她聊聊',
+    atmosphereFallbackQuote: '想对你说点什么，却又不知从何说起……',
+    atmosphereEmptyTitle: '还没有羁绊',
+    atmosphereEmptyDesc: '去广场遇见第一位角色，让右侧也亮起她的身影。',
     statCharacters: '角色',
     statConversations: '会话',
-    statTodayMessages: '今日消息'
+    statTodayMessages: '今日消息',
+    emotionHint: '今天{name}{emotion}'
   },
   auth: {
     brandLogin: '与心之所向，促膝长谈',
@@ -106,6 +144,9 @@ export default {
     title: '角色广场',
     desc: '挑选预置二次元角色，一键加入我的角色',
     allTags: '全部',
+    searchPlaceholder: '搜索角色名称',
+    searchEmptyTitle: '未找到该角色',
+    searchEmptyDesc: '该角色暂未添加，可联系开发团队添加',
     add: '加入我的角色',
     added: '已添加',
     preview: '预览',
@@ -117,6 +158,11 @@ export default {
     goCharacters: '前往角色管理',
     chatNow: '立即开聊',
     alreadyAdded: '你已经添加过该角色了哦',
+    cityPromptTitle: '填写所在城市',
+    cityPromptMessage: '为方便精确计算当地时间与天气，请填写你所在的城市。',
+    cityPlaceholder: '如 上海、北京、广州',
+    cityRequired: '请填写城市',
+    confirmAdd: '确认加入',
     emptyTitle: '暂无角色',
     emptyDesc: '请稍后再来或联系管理员'
   },
@@ -128,6 +174,10 @@ export default {
     emptyDesc: '创建你的第一个 AI 角色，赋予它独特的性格和说话风格',
     noPrompt: '未设定性格提示词',
     noMessagesYet: '还没有消息',
+    noCharacterLineYet: '她还没有开口，去和她聊聊吧',
+    hoverHint: '悬停左侧角色卡片，看看她最近说了什么',
+    lastLineEyebrow: '她最近说',
+    continueChat: '继续对话',
     chatDetail: '聊天详情',
     deleteConfirm: '确定删除角色「{name}」吗？此操作不可恢复。',
     dialogCreate: '创建角色',
@@ -138,7 +188,8 @@ export default {
     send: '发送',
     thinking: '思考中...',
     loadMore: '加载更早消息',
-    noMessages: '还没有消息，打个招呼吧'
+    noMessages: '还没有消息，打个招呼吧',
+    typing: '{name}正在输入中...',
   },
   group: {
     title: '群聊',
@@ -146,10 +197,10 @@ export default {
     create: '创建群聊',
     join: '加入群聊',
     members: '成员',
-    placeholder: '输入消息，@ 可提及角色',
-    placeholderDetailed: '输入消息...（可 @角色）(Enter 发送)',
-    mentionTitle: '@ 提及角色',
-    mention: '@ 提及',
+    placeholder: "输入消息，{'@'} 可提及角色",
+    placeholderDetailed: "输入消息...（可 {'@'}角色）(Enter 发送)",
+    mentionTitle: "{'@'} 提及角色",
+    mention: "{'@'} 提及",
     connecting: '连接中...',
     connected: '已连接',
     disconnected: '未连接',
@@ -208,7 +259,28 @@ export default {
     commentSent: '评论已发送，角色们可能会回复',
     reply: '回复',
     replyingTo: '回复 {name}',
-    you: '你'
+    you: '你',
+    activeCharacters: '动态里的她',
+    recentDiary: '最近日记'
+  },
+  feed: {
+    eyebrow: '陪伴时光',
+    today: '今天',
+    yesterdayLabel: '昨天',
+    yesterday: '昨天 {time}',
+    commentCount: '{n} 条评论',
+    moreComments: '还有 {n} 条评论',
+    addComment: '写评论',
+    hideComments: '收起评论',
+    typeDiary: '日记',
+    typeMoment: '动态'
+  },
+  diary: {
+    title: '角色日记',
+    desc: '深夜写下的内心独白，只属于你',
+    badge: '日记',
+    empty: '还没有日记',
+    emptyDesc: '和角色多聊聊，她们会在每天深夜写下心里话'
   },
   settings: {
     title: '设置中心',

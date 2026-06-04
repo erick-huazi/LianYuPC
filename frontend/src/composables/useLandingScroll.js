@@ -54,6 +54,9 @@ export function useRevealOnScroll() {
   let revealObserver
 
   onMounted(() => {
+    const isElectron = window.electronAPI?.isElectron === true
+      || /Electron/i.test(window.navigator.userAgent)
+
     revealObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -67,6 +70,15 @@ export function useRevealOnScroll() {
     )
 
     document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
+
+    // Electron 下 IntersectionObserver 有时首屏不触发，直接展示内容
+    if (isElectron) {
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.reveal').forEach((el) => {
+          el.classList.add('reveal--visible')
+        })
+      })
+    }
   })
 
   onBeforeUnmount(() => {

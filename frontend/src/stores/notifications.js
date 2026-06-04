@@ -10,6 +10,12 @@ import {
   subscribePush,
   unsubscribePush
 } from '@/api/notification'
+import { buildWsUrl, canUseWebPush, isElectronRuntime, resolveServiceWorkerUrl } from '@/utils/runtime'
+import { activeChatConversationId, requestActiveChatRefresh } from '@/composables/useActiveChatContext'
+import { getElectronAPI } from '@/utils/electron'
+
+const DESKTOP_PUSH_KEY = 'lianyu-desktop-push-enabled'
+const PUSH_OPT_OUT_KEY = 'lianyu-push-opt-out'
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const unreadCount = ref(0)
@@ -25,10 +31,12 @@ export const useNotificationsStore = defineStore('notifications', () => {
   async function init() {
     if (inited) return
     inited = true
-    await refreshUnreadCount()
-    await refreshLatest()
     connectWebSocket()
     await syncPushState()
+    if (localStorage.getItem(PUSH_OPT_OUT_KEY) !== '1' && !pushEnabled.value) {
+      await enablePush({ silent: true })
+    }
+    void Promise.all([refreshUnreadCount(), refreshLatest()])
   }
 
   function dispose() {
@@ -42,14 +50,14 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   async function refreshUnreadCount() {
     try {
-      const res = await getUnreadCount()
+      const res = await getUnreadCount({ silent: true })
       unreadCount.value = Number(res?.unreadCount || 0)
     } catch {}
   }
 
   async function refreshLatest() {
     try {
-      const list = await listNotifications({ limit: 20 })
+      const list = await listNotifications({ limit: 20 }, { silent: true })
       latest.value = Array.isArray(list) ? list : []
     } catch {}
   }
@@ -65,7 +73,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   async function markConversationRead(conversationId) {
     if (!conversationId) return
     try {
-      await markNotificationsRead({ conversationId })
+      await markNotificationsRead({ conversationId }, { silent: true })
       latest.value = latest.value.map(n =>
         n.conversationId === conversationId ? { ...n, read: true } : n
       )
@@ -114,6 +122,19 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   function onIncomingNotification(data) {
     if (!data) return
+    const convId = data.conversationId != null ? Number(data.conversationId) : null
+    const viewingSameChat =
+      convId != null &&
+      activeChatConversationId.value != null &&
+      activeChatConversationId.value === convId
+
+    if (viewingSameChat) {
+      latest.value = [{ ...data, read: true }, ...latest.value].slice(0, 50)
+      void markConversationRead(convId)
+      requestActiveChatRefresh(convId)
+      return
+    }
+
     latest.value = [data, ...latest.value].slice(0, 50)
     if (!data.read) {
       unreadCount.value += 1
@@ -125,7 +146,31 @@ export const useNotificationsStore = defineStore('notifications', () => {
       duration: 4500
     })
     playSound()
-    notifyBrowserIfHidden(data)
+    notifyIfPushEnabled(data)
+    pulseLauncherIfNeeded(data)
+  }
+
+  function extractCharacterName(title) {
+    if (!title) return '她'
+    const cleaned = String(title).trim()
+    const zhMatch = cleaned.match(/^(.+?)\s*(给你发来消息|在群聊中发言|发布了|评论了)/)
+    if (zhMatch?.[1]) return zhMatch[1].trim()
+    const enMatch = cleaned.match(/^(.+?)\s+(sent you|posted|commented)/i)
+    if (enMatch?.[1]) return enMatch[1].trim()
+    return cleaned.split(/\s+/)[0] || '她'
+  }
+
+  function pulseLauncherIfNeeded(data) {
+    const electronAPI = getElectronAPI()
+    if (!electronAPI?.notifyLauncherNewMessage) return
+    const type = data?.type || ''
+    if (type.startsWith('MOMENT_')) return
+    void electronAPI.notifyLauncherNewMessage({
+      characterName: extractCharacterName(data?.title),
+      preview: data?.contentPreview || '',
+      conversationId: data?.conversationId ?? null,
+      characterId: data?.characterId ?? null,
+    })
   }
 
   function playSound() {
@@ -146,9 +191,21 @@ export const useNotificationsStore = defineStore('notifications', () => {
     } catch {}
   }
 
-  function notifyBrowserIfHidden(data) {
-    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') return
+  function buildNotificationTarget(conversationId) {
+    if (!conversationId) return '#/app'
+    return `#/app/chat/${conversationId}`
+  }
+
+  function shouldShowNativeNotification() {
+    if (typeof document === 'undefined') return false
+    return document.visibilityState === 'hidden' || !document.hasFocus()
+  }
+
+  function notifyIfPushEnabled(data) {
+    if (!pushEnabled.value) return
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    if (!shouldShowNativeNotification()) return
+
     const notification = new Notification(data.title || '新消息', {
       body: data.contentPreview || '',
       tag: `conv-${data.conversationId || 'general'}`,
@@ -156,9 +213,13 @@ export const useNotificationsStore = defineStore('notifications', () => {
     })
     notification.onclick = () => {
       window.focus()
-      if (data.conversationId) {
-        window.location.hash = `#/chat/${data.conversationId}`
+      const hash = buildNotificationTarget(data.conversationId)
+      const electronAPI = getElectronAPI()
+      if (electronAPI?.openMainWindow) {
+        electronAPI.openMainWindow(hash)
+        return
       }
+      window.location.hash = hash
     }
   }
 
@@ -167,70 +228,121 @@ export const useNotificationsStore = defineStore('notifications', () => {
       browserNotifyPermission.value = 'unsupported'
       return browserNotifyPermission.value
     }
+    if (Notification.permission === 'granted') {
+      browserNotifyPermission.value = 'granted'
+      return 'granted'
+    }
     const result = await Notification.requestPermission()
     browserNotifyPermission.value = result
     return result
   }
 
-  async function enablePush() {
+  async function enablePush(options = {}) {
+    const { silent = false } = options
     const permission = await requestBrowserNotificationPermission()
-    if (permission !== 'granted') return false
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      return false
+    if (permission !== 'granted') {
+      return { ok: false, reason: 'permission_denied' }
     }
-    const reg = await navigator.serviceWorker.register('/sw.js')
-    const keyRes = await getPushPublicKey()
-    const publicKey = keyRes?.publicKey
-    if (!publicKey) {
-      return false
+
+    if (isElectronRuntime()) {
+      localStorage.setItem(DESKTOP_PUSH_KEY, '1')
+      localStorage.removeItem(PUSH_OPT_OUT_KEY)
+      pushEnabled.value = true
+      return { ok: true, mode: 'desktop' }
     }
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey)
-    })
-    const payload = {
-      endpoint: sub.endpoint,
-      p256dh: arrayBufferToBase64(sub.getKey('p256dh')),
-      auth: arrayBufferToBase64(sub.getKey('auth')),
-      userAgent: navigator.userAgent
+
+    if (!canUseWebPush()) {
+      return { ok: false, reason: 'unsupported' }
     }
-    await subscribePush(payload)
-    pushEnabled.value = true
-    return true
+
+    try {
+      const reg = await navigator.serviceWorker.register(resolveServiceWorkerUrl())
+      await navigator.serviceWorker.ready
+      const keyRes = await getPushPublicKey()
+      const publicKey = keyRes?.publicKey
+      if (!publicKey) {
+        return { ok: false, reason: 'no_public_key' }
+      }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      })
+      await subscribePush({
+        endpoint: sub.endpoint,
+        p256dh: arrayBufferToBase64(sub.getKey('p256dh')),
+        auth: arrayBufferToBase64(sub.getKey('auth')),
+        userAgent: navigator.userAgent
+      })
+      localStorage.removeItem(PUSH_OPT_OUT_KEY)
+      pushEnabled.value = true
+      return { ok: true, mode: 'webpush' }
+    } catch (e) {
+      if (!silent) {
+        console.warn('enablePush failed:', e)
+      }
+      return { ok: false, reason: 'subscribe_failed' }
+    }
   }
 
   async function disablePush() {
-    if (!('serviceWorker' in navigator)) return
-    const reg = await navigator.serviceWorker.ready
-    const sub = await reg.pushManager.getSubscription()
-    if (sub) {
-      await unsubscribePush(sub.endpoint)
-      await sub.unsubscribe()
+    localStorage.setItem(PUSH_OPT_OUT_KEY, '1')
+
+    if (isElectronRuntime()) {
+      localStorage.removeItem(DESKTOP_PUSH_KEY)
+      pushEnabled.value = false
+      return { ok: true }
+    }
+
+    if (!('serviceWorker' in navigator)) {
+      pushEnabled.value = false
+      return { ok: true }
+    }
+
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      for (const reg of regs) {
+        const sub = await reg.pushManager.getSubscription()
+        if (!sub) continue
+        await unsubscribePush(sub.endpoint)
+        await sub.unsubscribe()
+      }
+    } catch (e) {
+      console.warn('disablePush failed:', e)
     }
     pushEnabled.value = false
+    return { ok: true }
   }
 
   async function syncPushState() {
+    if (isElectronRuntime()) {
+      pushEnabled.value =
+        localStorage.getItem(DESKTOP_PUSH_KEY) === '1'
+        && Notification.permission === 'granted'
+      return
+    }
+
     if (!('serviceWorker' in navigator)) {
       pushEnabled.value = false
       return
     }
+
     try {
-      const reg = await navigator.serviceWorker.getRegistration('/sw.js')
-      if (!reg) {
-        pushEnabled.value = false
-        return
+      const regs = await navigator.serviceWorker.getRegistrations()
+      for (const reg of regs) {
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          pushEnabled.value = true
+          return
+        }
       }
-      const sub = await reg.pushManager.getSubscription()
-      pushEnabled.value = !!sub
+      pushEnabled.value = false
     } catch {
       pushEnabled.value = false
     }
   }
 
   function buildBrokerUrl() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${window.location.host}/ws`
+    return buildWsUrl()
   }
 
   return {

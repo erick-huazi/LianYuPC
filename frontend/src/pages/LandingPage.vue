@@ -4,11 +4,13 @@
     <div class="landing__grain" aria-hidden="true" />
     <div class="landing__orb landing__orb--a" aria-hidden="true" />
     <div class="landing__orb landing__orb--b" aria-hidden="true" />
+    <div class="landing__orb landing__orb--c" aria-hidden="true" />
+    <LandingParticles />
 
     <header class="landing-nav" :class="{ 'landing-nav--scrolled': navScrolled }">
       <div class="landing-nav__inner">
         <button type="button" class="landing-nav__brand" @click="scrollTo('hero')">
-          <span class="landing-nav__mark">恋</span>
+          <img :src="APP_LOGO" alt="恋语 LianYu" class="landing-nav__logo" />
           <span class="landing-nav__wordmark">
             <span class="landing-nav__title">恋语</span>
             <span class="landing-nav__sub">LianYu</span>
@@ -30,7 +32,10 @@
 
         <div class="landing-nav__actions">
           <button type="button" class="btn btn-ghost" @click="goLogin">登录</button>
-          <button type="button" class="btn btn-solid" @click="goRegister">注册</button>
+          <button type="button" class="btn btn-solid" @click="goRegister">
+            <span class="btn__shine" aria-hidden="true" />
+            注册
+          </button>
         </div>
       </div>
     </header>
@@ -52,6 +57,7 @@
           </p>
           <div class="hero__actions">
             <button type="button" class="btn btn-solid btn-xl" @click="goRegister">
+              <span class="btn__shine" aria-hidden="true" />
               免费开始
               <span class="btn__arrow" aria-hidden="true">→</span>
             </button>
@@ -176,7 +182,10 @@
         <h2 class="cta__title">今晚，先找一个人说说话吧</h2>
         <p class="cta__desc">注册即可创建角色、开启单聊或群聊。你的故事，从第一句回应开始。</p>
         <div class="cta__actions">
-          <button type="button" class="btn btn-solid btn-xl" @click="goRegister">立即注册</button>
+          <button type="button" class="btn btn-solid btn-xl" @click="goRegister">
+            <span class="btn__shine" aria-hidden="true" />
+            立即注册
+          </button>
           <button type="button" class="btn btn-ghost btn-xl" @click="goLogin">已有账号登录</button>
         </div>
       </div>
@@ -184,7 +193,10 @@
 
     <footer class="landing-footer">
       <div class="landing-footer__inner">
-        <span class="landing-footer__brand">恋语 LianYu</span>
+        <span class="landing-footer__brand">
+          <img :src="APP_LOGO" alt="" class="landing-footer__logo" aria-hidden="true" />
+          恋语 LianYu
+        </span>
         <nav class="landing-footer__links">
           <button type="button" @click="scrollTo('features')">功能</button>
           <button type="button" @click="scrollTo('cast')">角色</button>
@@ -201,12 +213,14 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import LandingCastShowcase from '@/components/landing/LandingCastShowcase.vue'
 import LandingHeroOrbit from '@/components/landing/LandingHeroOrbit.vue'
+import LandingParticles from '@/components/landing/LandingParticles.vue'
 import {
   LANDING_ROLES_ALL,
   cloneRolesForShowcase,
   preloadRoleImages,
 } from '@/data/landingRoles.js'
 import { useLandingScroll, useRevealOnScroll } from '@/composables/useLandingScroll.js'
+import { APP_LOGO } from '@/constants/brand.js'
 
 const router = useRouter()
 const year = new Date().getFullYear()
@@ -377,6 +391,22 @@ function goRegister() {
   animation-delay: -5s;
 }
 
+.landing__orb--c {
+  width: min(28vw, 240px);
+  height: min(28vw, 240px);
+  left: 42%;
+  top: 38%;
+  background: rgba(244, 166, 181, 0.12);
+  animation-delay: -9s;
+}
+
+:deep(.landing-particles) {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 /* Nav */
 .landing-nav {
   position: fixed;
@@ -417,6 +447,14 @@ function goRegister() {
   color: inherit;
   cursor: pointer;
   padding: 0;
+}
+
+.landing-nav__logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: 0 8px 24px rgba(244, 166, 181, 0.35);
 }
 
 .landing-nav__mark {
@@ -508,9 +546,40 @@ function goRegister() {
 }
 
 .btn-solid {
+  position: relative;
+  overflow: hidden;
   background: linear-gradient(135deg, $color-pink-primary, $color-pink-dark);
   color: $color-text-inverse;
   box-shadow: 0 10px 32px rgba($color-pink-rgb, 0.35);
+}
+
+.btn__shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: landingBtnShine 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes landingBtnShine {
+  0%,
+  70%,
+  100% {
+    left: -100%;
+  }
+  85% {
+    left: 140%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn__shine {
+    animation: none;
+    display: none;
+  }
 }
 
 .btn-ghost {
@@ -1036,8 +1105,18 @@ function goRegister() {
 }
 
 .landing-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--landing-font-display);
   font-weight: 600;
+}
+
+.landing-footer__logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .landing-footer__links {

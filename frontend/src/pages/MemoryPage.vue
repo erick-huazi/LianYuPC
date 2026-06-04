@@ -14,7 +14,7 @@
         @change="fetchMemories"
       >
         <el-option
-          v-for="c in characters"
+          v-for="c in charactersStore.list"
           :key="c.id"
           :label="c.name"
           :value="c.id"
@@ -102,7 +102,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { listCharacters } from '@/api/character'
+import { useCharactersStore } from '@/stores/characters'
 import { listMemories, getMemory, deleteMemory } from '@/api/memory'
 import { Loading, Collection, ArrowDown, ArrowRight, RefreshRight, Delete, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -110,7 +110,7 @@ import { resolveMediaUrl } from '@/utils/media'
 import { dateLocaleForUi } from '@/utils/dateLocale'
 
 const { t, locale } = useI18n()
-const characters = ref([])
+const charactersStore = useCharactersStore()
 const memories = ref([])
 const loading = ref(true)
 const filterCharId = ref(null)
@@ -123,7 +123,7 @@ const groupedMemories = computed(() => {
   for (const mem of memories.value) {
     const charId = mem.characterId
     if (!groups.has(charId)) {
-      const char = characters.value.find(c => c.id === charId)
+      const char = charactersStore.list.find(c => c.id === charId)
       groups.set(charId, {
         charId,
         charName: mem.characterName || char?.name || t('memory.roleIndex', { id: charId }),
@@ -137,10 +137,7 @@ const groupedMemories = computed(() => {
 })
 
 onMounted(async () => {
-  const [charList] = await Promise.all([
-    listCharacters().catch(() => [])
-  ])
-  characters.value = charList || []
+  await charactersStore.fetchList().catch(() => [])
   fetchMemories()
 })
 
@@ -155,7 +152,7 @@ async function fetchMemories() {
 
 function getCharName(charId) {
   const mem = memories.value.find(m => m.characterId === charId)
-  return mem?.characterName || characters.value.find(c => c.id === charId)?.name || t('memory.roleIndex', { id: charId })
+  return mem?.characterName || charactersStore.list.find(c => c.id === charId)?.name || t('memory.roleIndex', { id: charId })
 }
 
 async function toggleSources(memId) {

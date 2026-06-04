@@ -1,8 +1,8 @@
 package com.lianyu.service.dto;
 
+import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Data;
-import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -15,5 +15,6 @@ public class ConversationResponse {
     private String mode;
     private String title;
     private String lastMessage;
+    private String lastCharacterMessage;
     private LocalDateTime createdAt;
 }

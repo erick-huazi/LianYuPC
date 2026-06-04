@@ -68,25 +68,83 @@
         </div>
       </el-form>
     </section>
+
+    <section id="password" class="profile-card glass stagger-item password-card">
+      <div class="password-card__head">
+        <h2 class="section-title">账号安全</h2>
+        <p class="section-desc">修改登录密码后，其它设备可能需要重新登录。</p>
+      </div>
+      <el-form
+        ref="passwordFormRef"
+        :model="passwordForm"
+        :rules="passwordRules"
+        label-position="top"
+        class="password-form"
+        @submit.prevent="handleChangePassword"
+      >
+        <el-form-item label="当前密码" prop="oldPassword">
+          <el-input
+            v-model="passwordForm.oldPassword"
+            type="password"
+            show-password
+            autocomplete="current-password"
+          />
+        </el-form-item>
+        <div class="form-grid">
+          <el-form-item label="新密码" prop="newPassword">
+            <el-input
+              v-model="passwordForm.newPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+            />
+          </el-form-item>
+          <el-form-item label="确认新密码" prop="confirmPassword">
+            <el-input
+              v-model="passwordForm.confirmPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+            />
+          </el-form-item>
+        </div>
+        <div class="form-actions">
+          <el-button type="primary" class="btn-cta" :loading="changingPassword" @click="handleChangePassword">
+            更新密码
+          </el-button>
+        </div>
+      </el-form>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, UserFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { resolveMediaUrl } from '@/utils/media'
 
 const userStore = useUserStore()
+const route = useRoute()
 const formRef = ref(null)
+const passwordFormRef = ref(null)
 const fileInput = ref(null)
 const savingProfile = ref(false)
+const changingPassword = ref(false)
 const uploadingAvatar = ref(false)
 const isDragging = ref(false)
 const localPreviewUrl = ref('')
 
 const form = reactive({
   nickname: userStore.nickname || ''
+})
+
+const passwordForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
 })
 
 watch(
@@ -97,7 +155,10 @@ watch(
   { immediate: true }
 )
 
-const previewUrl = computed(() => localPreviewUrl.value || userStore.avatarUrl || '')
+const previewUrl = computed(() => {
+  const raw = localPreviewUrl.value || userStore.avatarUrl || ''
+  return raw.startsWith('blob:') ? raw : resolveMediaUrl(raw)
+})
 
 const rules = {
   nickname: [
@@ -105,6 +166,38 @@ const rules = {
     { max: 128, message: '昵称不能超过 128 个字符', trigger: 'blur' }
   ]
 }
+
+const validateConfirmPassword = (_rule, value, callback) => {
+  if (value !== passwordForm.newPassword) {
+    callback(new Error('两次输入的新密码不一致'))
+    return
+  }
+  callback()
+}
+
+const passwordRules = {
+  oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, max: 128, message: '密码长度 6–128 位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' }
+  ]
+}
+
+onMounted(async () => {
+  try {
+    await userStore.fetchProfile()
+  } catch {
+    // ignore
+  }
+  if (route.hash === '#password') {
+    await nextTick()
+    document.getElementById('password')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
 
 function triggerUpload() {
   fileInput.value?.click()
@@ -160,6 +253,25 @@ async function handleSave() {
     ElMessage.success('资料已保存')
   } finally {
     savingProfile.value = false
+  }
+}
+
+async function handleChangePassword() {
+  const valid = await passwordFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+  changingPassword.value = true
+  try {
+    await userStore.changePassword({
+      oldPassword: passwordForm.oldPassword,
+      newPassword: passwordForm.newPassword
+    })
+    passwordForm.oldPassword = ''
+    passwordForm.newPassword = ''
+    passwordForm.confirmPassword = ''
+    passwordFormRef.value?.clearValidate()
+    ElMessage.success('密码已更新')
+  } finally {
+    changingPassword.value = false
   }
 }
 </script>
@@ -271,6 +383,30 @@ async function handleSave() {
   margin-top: $space-4;
   display: flex;
   justify-content: flex-start;
+}
+
+.password-card {
+  margin-top: $space-5;
+}
+
+.password-card__head {
+  margin-bottom: $space-4;
+}
+
+.section-title {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $space-2;
+}
+
+.section-desc {
+  font-size: $font-size-sm;
+  color: $color-text-muted;
+}
+
+.password-form {
+  max-width: 640px;
 }
 
 @media (max-width: 900px) {

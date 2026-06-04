@@ -2,9 +2,9 @@ package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.Result;
-import com.lianyu.service.AiChatQuotaService;
-import com.lianyu.service.AiChatService;
-import com.lianyu.service.ApiKeyVaultService;
+import com.lianyu.service.ai.AiChatQuotaService;
+import com.lianyu.service.ai.AiChatService;
+import com.lianyu.service.ai.ApiKeyVaultService;
 import com.lianyu.service.dto.AiChatRequest;
 import com.lianyu.service.dto.ChatResult;
 import com.lianyu.service.dto.CreateVaultRequest;

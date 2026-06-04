@@ -11,7 +11,8 @@ import com.lianyu.dao.mapper.CharacterMapper;
 import com.lianyu.dao.mapper.ConversationMapper;
 import com.lianyu.dao.mapper.MemoryMetaMapper;
 import com.lianyu.dao.mapper.MessageMapper;
-import com.lianyu.service.MemoryWriter;
+import com.lianyu.service.memory.MemoryCacheService;
+import com.lianyu.service.memory.MemoryWriter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class MemoryController {
     private final CharacterMapper characterMapper;
     private final ConversationMapper conversationMapper;
     private final MemoryWriter memoryWriter;
+    private final MemoryCacheService memoryCacheService;
 
     @Operation(summary = "记忆列表（按角色分组）")
     @GetMapping
@@ -126,6 +128,7 @@ public class MemoryController {
 
         memoryWriter.deleteVectors(meta.getMilvusVecId() == null ? List.of() : List.of(meta.getMilvusVecId()));
         memoryMetaMapper.deleteById(id);
+        memoryCacheService.invalidate(userId, meta.getCharacterId());
         return Result.ok();
     }
 

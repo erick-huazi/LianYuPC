@@ -4,10 +4,11 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.ErrorCode;
 import com.lianyu.common.base.Result;
 import com.lianyu.common.exception.BusinessException;
-import com.lianyu.service.AuthRateLimiter;
-import com.lianyu.service.AuthService;
-import com.lianyu.service.CaptchaService;
+import com.lianyu.service.auth.AuthRateLimiter;
+import com.lianyu.service.auth.AuthService;
+import com.lianyu.service.auth.CaptchaService;
 import com.lianyu.service.dto.CaptchaVerifyRequest;
+import com.lianyu.service.dto.ChangePasswordRequest;
 import com.lianyu.service.dto.LoginRequest;
 import com.lianyu.service.dto.LoginResponse;
 import com.lianyu.service.dto.RegisterRequest;
@@ -52,11 +53,10 @@ public class AuthController {
 
     @Operation(summary = "注册")
     @PostMapping("/register")
-    public Result<Void> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+    public Result<LoginResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
         authRateLimiter.checkLoginOrRegister(resolveClientIp(httpRequest), request.getUsername());
         verifyCaptcha(request.getCaptcha());
-        authService.register(request);
-        return Result.ok();
+        return Result.ok(authService.register(request));
     }
 
     @Operation(summary = "登录")
@@ -93,6 +93,14 @@ public class AuthController {
     public Result<UserProfile> uploadAvatar(@RequestParam("file") MultipartFile file) {
         long userId = StpUtil.getLoginIdAsLong();
         return Result.ok(authService.uploadAvatar(userId, file));
+    }
+
+    @Operation(summary = "修改当前用户密码")
+    @PutMapping("/me/password")
+    public Result<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        long userId = StpUtil.getLoginIdAsLong();
+        authService.changePassword(userId, request);
+        return Result.ok();
     }
 
     private void verifyCaptcha(CaptchaVerifyRequest captcha) {

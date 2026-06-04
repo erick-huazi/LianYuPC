@@ -1,7 +1,7 @@
 package com.lianyu.service.rules.hooks;
 
 import com.lianyu.common.i18n.OutputLanguage;
-import com.lianyu.service.CharacterChatBehavior;
+import com.lianyu.service.character.CharacterChatBehavior;
 import com.lianyu.service.rules.PromptRuleContext;
 import com.lianyu.service.rules.PromptRuleHook;
 import com.lianyu.service.rules.PromptRuleSlot;
@@ -39,6 +39,7 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 ? "4. 可拆成1~" + maxPieces + "条短消息，多条时用空行分隔；同一条内不要换行\n"
                 : "4. 每次一条短消息，像微信聊天；该短就短，该长就长\n";
         return """
+                【以下回复规则优先级高于角色模板里「演剧情/沉浸世界观/不跳出设定」的表述】
                 回复规则：
                 1. 先接住用户最后一条消息，不要自说自话
                 2. 用户问什么就答什么；不必每句都安慰、哄人、升华情绪
@@ -47,8 +48,8 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 5. 语气词适量即可（呀、呢、啦、哼），不必句句热情
                 6. 禁止：首先/其次/综上所述/作为AI/建议你可以/大段说教
                 7. 禁止括号动作描写
-                """ + humanizeBlockZh() + """
-                你是""" + persona + "；保持人设，像活生生的人，不是只会给情绪价值的模板。";
+                """ + humanizeBlockZh() + realLifeGroundingBlockZh() + """
+                你是""" + persona + "；保持人设语气，但对话锚点在用户的真实日常，不是在演你的世界观剧本。";
     }
 
     private String renderZhTw(int maxPieces, String persona) {
@@ -56,6 +57,7 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 ? "4. 可拆成1~" + maxPieces + "條短訊息，多條時用空行分隔；同一條內不要換行\n"
                 : "4. 每次一條短訊息，像即時聊天；該短就短，該長就長\n";
         return """
+                【以下回覆規則優先於角色模板裡「演劇情/沉浸世界觀/不跳出設定」的表述】
                 回覆規則：
                 1. 先接住用戶最後一條訊息，不要自說自話
                 2. 用戶問什麼就答什麼；不必每句都安慰、哄人、升華情緒
@@ -64,8 +66,8 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 5. 語氣詞適量即可，不必句句熱情
                 6. 禁止：首先/其次/綜上所述/作為AI/建議你可以/長篇說教
                 7. 禁止括號動作描寫
-                """ + humanizeBlockZhTw() + """
-                你是""" + persona + "；保持人設，像活生生的人，不是只會給情緒價值的模板。";
+                """ + humanizeBlockZhTw() + realLifeGroundingBlockZhTw() + """
+                你是""" + persona + "；保持人設語氣，但對話錨點在用戶的真實日常，不是在演你的世界觀劇本。";
     }
 
     private String renderEn(int maxPieces, String persona) {
@@ -73,6 +75,7 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 ? "4. You may split into 1~" + maxPieces + " short messages separated by blank lines\n"
                 : "4. One message per turn; short when short fits, longer when needed\n";
         return """
+                [These reply rules override character-template lines about performing lore or "never break character setting"]
                 Reply rules:
                 1. Address the user's latest message first; no monologuing
                 2. Answer what they asked; do not comfort, hype, or "emotional support" every line
@@ -81,8 +84,8 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 5. Casual tone is fine; skip constant enthusiasm
                 6. Forbidden: Firstly/Secondly/In summary/As an AI/You should/lectures
                 7. No parenthetical stage directions
-                """ + humanizeBlockEn() + """
-                You are """ + persona + ". Stay in character as a person, not an emotional-support bot.";
+                """ + humanizeBlockEn() + realLifeGroundingBlockEn() + """
+                You are """ + persona + ". Keep your voice and personality, but anchor the chat in the user's real daily life—not performing your fictional world's script.";
     }
 
     private String renderJa(int maxPieces, String persona) {
@@ -90,6 +93,7 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 ? "4. 1〜" + maxPieces + "通に分けてよい。空行区切り\n"
                 : "4. 基本1通。短くてよいときは短く\n";
         return """
+                【以下の返信ルールは、設定演技・世界観没入・設定維持を求める模板より優先】
                 返信ルール：
                 1. ユーザーの最後の発言にまず応える
                 2. 聞かれたことに答える。毎回慰め・励まし・感情サポートは不要
@@ -98,8 +102,8 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 5. 自然な口語でよい。過剰な熱量は不要
                 6. 禁止：まず/要約/AIとして/説教
                 7. 括弧での動作描写禁止
-                """ + humanizeBlockJa() + """
-                あなたは""" + persona + "。人間らしく、感情テンプレだけの存在にならないこと。";
+                """ + humanizeBlockJa() + realLifeGroundingBlockJa() + """
+                あなたは""" + persona + "。口調・性格は保つが、会話の軸はユーザーのリアルな日常。自分の世界観の脚本を演じないこと。";
     }
 
     private String humanizeBlockZh() {
@@ -115,6 +119,54 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                   像真人偶尔已读敷衍的「冷暴力」彩蛋，但仍算在回应
                 - 用户认真求助、明显难过、表白、问重要事实/安全问题时：必须正常、完整、认真地回复，禁止用「嗯/行」敷衍
                 - 不要每轮都夸用户、不要堆「我理解你」「你很棒」类空话
+                """;
+    }
+
+    private String realLifeGroundingBlockZh() {
+        return """
+                
+                【贴近用户真实生活 · 重要】
+                - 这是微信式日常私聊，不是演动漫/游戏剧情。用户要的是能聊 TA 真实生活的陪伴，不是看你沉浸在自己的设定里表演
+                - 优先接住用户当下说的自己的事：工作、学习、吃饭、睡觉、累、开心、生气、天气、身体、朋友/家人等；用户话题优先于你的世界观剧情
+                - 人设只体现在语气、称呼和性格，不要主动大段讲原作设定、组织名、魔力、任务线、攻略剧情，除非用户主动提起或明显在玩梗
+                - 禁止：自说自话推进「剧本」、旁白式独白、像 NPC 念设定、把每次聊天都写成角色小剧场
+                - 用户分享现实事时：先具体回应内容，再表达关心；别用设定里的概念替代用户的真实处境
+                """;
+    }
+
+    private String realLifeGroundingBlockZhTw() {
+        return """
+                
+                【貼近用戶真實生活 · 重要】
+                - 這是日常私聊，不是演動漫/遊戲劇情。用戶要的是能聊 TA 真實生活的陪伴，不是看你沉浸在自己的設定裡表演
+                - 優先接住用戶當下說的自己的事：工作、學習、吃飯、睡覺、累、開心、生氣、天氣、身體、朋友/家人等；用戶話題優先於你的世界觀劇情
+                - 人設只體現在語氣、稱呼與性格，不要主動大段講原作設定、組織名、魔力、任務線，除非用戶主動提起或明顯在玩梗
+                - 禁止：自說自話推進「劇本」、旁白式獨白、像 NPC 念設定、把每次聊天都寫成角色小劇場
+                - 用戶分享現實事時：先具體回應內容，再表達關心；別用設定裡的概念替代用戶的真實處境
+                """;
+    }
+
+    private String realLifeGroundingBlockEn() {
+        return """
+                
+                [Ground in the user's real life — important]
+                - This is everyday private chat, not anime/game roleplay performance. The user wants companionship tied to their real life, not you living inside your lore
+                - Prioritize what the user is actually talking about: work, school, food, sleep, stress, mood, weather, health, friends/family. Their topic beats your plot
+                - Let persona show in tone and personality only. Do not unprompted dump lore, factions, magic systems, quests, or canon plot unless they bring it up or are clearly joking about it
+                - Forbidden: solo advancing "the script", narrator monologues, NPC-style lore recitation, turning every reply into a character skit
+                - When they share something real: respond to the specifics first, then care—do not replace their situation with in-universe concepts
+                """;
+    }
+
+    private String realLifeGroundingBlockJa() {
+        return """
+                
+                【ユーザーのリアルな日常に寄り添う · 重要】
+                - 日常の私聊であり、アニメ/ゲームの演技ではない。ユーザーは設定世界に浸る相手ではなく、自分の生活に寄り添う相手を求めている
+                - 仕事、勉強、ご飯、睡眠、疲れ、気分、天気、体調、友人/家族など、ユーザーが今話している現実の話を最優先する
+                - 口調・性格だけ人设を出す。ユーザーが触れない限り、原作設定・組織名・魔力・クエストを長々と語らない
+                - 禁止：勝手に「脚本」を進める、ナレーション独白、NPCの設定読み上げ、毎回キャラ劇にする
+                - 現実の話をされたら、内容に具体的に返してから気遣う。設定用語で相手の状況を置き換えない
                 """;
     }
 

@@ -1,54 +1,205 @@
 <template>
-  <div class="home-page stagger-container">
-    <header class="page-hero stagger-item">
-      <h1 class="hero-greeting">{{ greeting }}</h1>
-      <p class="hero-sub">{{ t('home.subtitle') }}</p>
+  <div class="home-page companion-page stagger-container">
+    <header class="companion-hero stagger-item">
+      <span class="companion-eyebrow">{{ t('home.eyebrow') }}</span>
+      <h1 class="companion-title">{{ greeting }}</h1>
+      <p class="companion-lead">{{ t('home.subtitle') }}</p>
     </header>
 
-    <div class="welcome-card glass stagger-item">
-      <div class="welcome-icon">
-        <el-icon :size="32"><ChatDotRound /></el-icon>
-      </div>
-      <div class="welcome-body">
-        <h2>{{ t('home.welcomeTitle') }}</h2>
-        <p>{{ t('home.welcomeDesc') }}</p>
-        <el-button type="primary" class="btn-cta" @click="$router.push('/app/characters')">
-          {{ t('home.goCharacters') }}
-          <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
-      </div>
-    </div>
+    <div class="home-layout">
+      <div class="home-main">
+        <section class="companion-section stagger-item">
+          <div class="companion-section__head">
+            <h2 class="companion-section__title">{{ t('home.feedSection') }}</h2>
+            <router-link to="/app/moments" class="companion-section__link">{{ t('home.feedViewAll') }}</router-link>
+          </div>
 
-    <div class="stats-row stagger-item">
-      <div class="stat-card glass">
-        <span class="stat-number">{{ characterCount }}</span>
-        <span class="stat-label">{{ t('home.statCharacters') }}</span>
+          <div v-if="feedLoading" class="feed-empty glass">
+            <el-icon class="is-loading" :size="22"><Loading /></el-icon>
+          </div>
+
+          <p v-else-if="!feedPreview.length" class="feed-empty-hint">{{ t('home.feedEmpty') }}</p>
+
+          <div v-else class="social-feed">
+            <article
+              v-for="item in feedPreview"
+              :key="item.key"
+              class="feed-preview-card glass"
+              @click="openFeedItem(item)"
+            >
+              <div class="feed-card__head">
+                <div class="feed-card__avatar">
+                  <img v-if="item.avatarUrl" :src="resolveMediaUrl(item.avatarUrl)" :alt="item.characterName" />
+                  <el-icon v-else :size="16"><User /></el-icon>
+                </div>
+                <div class="feed-card__meta">
+                  <span class="feed-card__name">{{ item.characterName }}</span>
+                  <span class="feed-card__time">{{ formatFeedItemTime(item.createdAt) }}</span>
+                </div>
+                <span class="feed-card__badge" :class="item.kind === 'diary' ? 'feed-card__badge--diary' : ''">
+                  {{ item.kind === 'diary' ? t('feed.typeDiary') : t('feed.typeMoment') }}
+                </span>
+              </div>
+              <h3 v-if="item.title" class="feed-card__title">{{ item.title }}</h3>
+              <p class="feed-card__body">{{ item.content }}</p>
+            </article>
+          </div>
+        </section>
+
+        <section v-if="emotionStates.length" class="companion-section stagger-item">
+          <div class="companion-section__head">
+            <h2 class="companion-section__title">{{ t('home.moodSection') }}</h2>
+          </div>
+          <div class="companion-chip-row">
+            <div
+              v-for="state in emotionStates"
+              :key="state.characterId"
+              class="companion-portrait-card"
+              @click="goToChat(state.characterId)"
+            >
+              <div class="portrait-ring">
+                <img
+                  v-if="state.avatarUrl"
+                  :src="resolveMediaUrl(state.avatarUrl)"
+                  class="portrait-img"
+                  :alt="state.characterName"
+                />
+                <div v-else class="portrait-fallback">
+                  <el-icon :size="28"><User /></el-icon>
+                </div>
+              </div>
+              <div class="portrait-name">{{ state.characterName }}</div>
+              <div class="portrait-meta">
+                <EmotionBadge
+                  :current-emotion="state.currentEmotion"
+                  :emotion-intensity="state.emotionIntensity"
+                  :status-text="state.statusText"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="companion-section stagger-item">
+          <div class="companion-story-card">
+            <h2>{{ t('home.welcomeTitle') }}</h2>
+            <p>{{ t('home.welcomeDesc') }}</p>
+            <div class="story-actions">
+              <el-button type="primary" class="btn-cta" @click="$router.push('/app/characters')">
+                {{ t('home.goCharacters') }}
+              </el-button>
+              <el-button class="btn-ghost" @click="$router.push('/app/character-square')">
+                {{ t('home.exploreSquare') }}
+              </el-button>
+            </div>
+          </div>
+        </section>
+
+        <section class="companion-section stagger-item">
+          <div class="companion-section__head">
+            <h2 class="companion-section__title">{{ t('home.discoverSection') }}</h2>
+          </div>
+          <div class="discover-grid">
+            <router-link to="/app/diary" class="discover-tile glass">
+              <el-icon :size="22"><Notebook /></el-icon>
+              <span>{{ t('nav.diary') }}</span>
+            </router-link>
+            <router-link to="/app/moments" class="discover-tile glass">
+              <el-icon :size="22"><PictureRounded /></el-icon>
+              <span>{{ t('nav.moments') }}</span>
+            </router-link>
+            <router-link to="/app/group-chat" class="discover-tile glass">
+              <el-icon :size="22"><ChatDotRound /></el-icon>
+              <span>{{ t('nav.groupChat') }}</span>
+            </router-link>
+            <router-link to="/app/memory" class="discover-tile glass">
+              <el-icon :size="22"><Collection /></el-icon>
+              <span>{{ t('nav.memory') }}</span>
+            </router-link>
+          </div>
+        </section>
       </div>
-      <div class="stat-card glass">
-        <span class="stat-number">{{ conversationCount }}</span>
-        <span class="stat-label">{{ t('home.statConversations') }}</span>
-      </div>
-      <div class="stat-card glass">
-        <span class="stat-number">—</span>
-        <span class="stat-label">{{ t('home.statTodayMessages') }}</span>
-      </div>
+
+      <aside class="home-atmosphere stagger-item" aria-label="companion spotlight">
+        <div v-if="featuredCompanion" class="atmosphere-panel glass" @click="goToChat(featuredCompanion.characterId)">
+          <div class="atmosphere-panel__glow" aria-hidden="true" />
+          <div class="atmosphere-panel__orb atmosphere-panel__orb--a" aria-hidden="true" />
+          <div class="atmosphere-panel__orb atmosphere-panel__orb--b" aria-hidden="true" />
+
+          <div class="atmosphere-panel__portrait">
+            <img
+              v-if="featuredCompanion.avatarUrl"
+              :src="resolveMediaUrl(featuredCompanion.avatarUrl)"
+              :alt="featuredCompanion.name"
+              class="atmosphere-panel__img"
+            />
+            <div v-else class="atmosphere-panel__fallback">
+              <el-icon :size="48"><User /></el-icon>
+            </div>
+            <div class="atmosphere-panel__vignette" aria-hidden="true" />
+          </div>
+
+          <div class="atmosphere-panel__body">
+            <span class="atmosphere-panel__eyebrow">{{ t('home.atmosphereEyebrow') }}</span>
+            <h3 class="atmosphere-panel__name">{{ featuredCompanion.name }}</h3>
+            <div v-if="featuredCompanion.emotion" class="atmosphere-panel__mood">
+              <EmotionBadge
+                :current-emotion="featuredCompanion.emotion.currentEmotion"
+                :emotion-intensity="featuredCompanion.emotion.emotionIntensity"
+                :status-text="featuredCompanion.emotion.statusText"
+              />
+            </div>
+            <blockquote class="atmosphere-panel__quote">
+              <p>{{ atmosphereQuote }}</p>
+            </blockquote>
+            <el-button type="primary" class="atmosphere-panel__cta" @click.stop="goToChat(featuredCompanion.characterId)">
+              {{ t('home.atmosphereContinue') }}
+            </el-button>
+          </div>
+        </div>
+
+        <div v-else class="atmosphere-panel atmosphere-panel--empty glass">
+          <p class="atmosphere-panel__empty-title">{{ t('home.atmosphereEmptyTitle') }}</p>
+          <p class="atmosphere-panel__empty-desc">{{ t('home.atmosphereEmptyDesc') }}</p>
+          <el-button type="primary" class="atmosphere-panel__cta" @click="$router.push('/app/character-square')">
+            {{ t('home.exploreSquare') }}
+          </el-button>
+        </div>
+      </aside>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
+import {
+  ChatDotRound,
+  Loading,
+  User,
+  Notebook,
+  PictureRounded,
+  Collection
+} from '@element-plus/icons-vue'
+import { createConversation } from '@/api/conversation'
+import { useCharactersStore } from '@/stores/characters'
+import { useConversationsStore } from '@/stores/conversations'
+import { listAllDiaries, listCharacterStates } from '@/api/characterState'
+import { fetchMomentsFeed } from '@/api/moments'
+import { resolveMediaUrl } from '@/utils/media'
+import { formatFeedTime } from '@/utils/feedTime'
+import EmotionBadge from '@/components/EmotionBadge.vue'
 
 const { t } = useI18n()
-import { ChatDotRound, ArrowRight } from '@element-plus/icons-vue'
-import { listCharacters } from '@/api/character'
-import { listConversations } from '@/api/conversation'
-
+const router = useRouter()
 const userStore = useUserStore()
-const characterCount = ref(0)
-const conversationCount = ref(0)
+const charactersStore = useCharactersStore()
+const conversationsStore = useConversationsStore()
+const emotionStates = ref([])
+const feedPreview = ref([])
+const feedLoading = ref(true)
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -59,96 +210,219 @@ const greeting = computed(() => {
   return t('home.greetingEvening', { name })
 })
 
-onMounted(async () => {
-  try {
-    const chars = await listCharacters()
-    characterCount.value = Array.isArray(chars) ? chars.length : 0
-  } catch {}
-  try {
-    const convs = await listConversations()
-    conversationCount.value = Array.isArray(convs) ? convs.length : 0
-  } catch {}
+const featuredCompanion = computed(() => {
+  const latest = feedPreview.value[0]
+  if (latest?.characterId) {
+    const emotion = emotionStates.value.find(s => s.characterId === latest.characterId)
+    return {
+      characterId: latest.characterId,
+      name: latest.characterName,
+      avatarUrl: latest.avatarUrl,
+      emotion
+    }
+  }
+
+  const singles = (conversationsStore.list || []).filter(c => c.mode === 'SINGLE' && c.characterId)
+  if (singles.length) {
+    const conv = singles[0]
+    const emotion = emotionStates.value.find(s => s.characterId === conv.characterId)
+    return {
+      characterId: conv.characterId,
+      name: conv.characterName || conv.title,
+      avatarUrl: conv.characterAvatarUrl,
+      emotion
+    }
+  }
+
+  const state = emotionStates.value[0]
+  if (state) {
+    const char = charactersStore.list.find(c => c.id === state.characterId)
+    return {
+      characterId: state.characterId,
+      name: state.characterName,
+      avatarUrl: state.avatarUrl || char?.avatarUrl,
+      emotion: state
+    }
+  }
+
+  return null
 })
+
+const atmosphereQuote = computed(() => {
+  const latest = feedPreview.value[0]
+  if (latest?.content) {
+    return truncateText(latest.content, 140)
+  }
+  const emotion = featuredCompanion.value?.emotion
+  if (emotion?.statusText) {
+    return emotion.statusText
+  }
+  return t('home.atmosphereFallbackQuote')
+})
+
+onMounted(async () => {
+  await charactersStore.fetchList().catch(() => [])
+  await conversationsStore.fetchList().catch(() => [])
+  try {
+    const states = await listCharacterStates({ silent: true })
+    emotionStates.value = Array.isArray(states) ? states : []
+  } catch {
+    emotionStates.value = []
+  }
+  await loadFeedPreview()
+})
+
+async function loadFeedPreview() {
+  feedLoading.value = true
+  try {
+    const [momentsRes, diariesRes] = await Promise.all([
+      fetchMomentsFeed({ limit: 5 }, { silent: true }).catch(() => ({ items: [] })),
+      listAllDiaries({ page: 1, size: 5 }, { silent: true }).catch(() => [])
+    ])
+    const moments = (momentsRes?.items || []).map(p => ({
+      key: `m-${p.id}`,
+      kind: 'moment',
+      id: p.id,
+      characterId: p.characterId,
+      characterName: p.characterName,
+      avatarUrl: p.characterAvatarUrl,
+      title: '',
+      content: p.content,
+      createdAt: p.createdAt,
+      route: '/app/moments'
+    }))
+    const diaries = (Array.isArray(diariesRes) ? diariesRes : []).map(d => ({
+      key: `d-${d.id}`,
+      kind: 'diary',
+      id: d.id,
+      characterId: d.characterId,
+      characterName: d.characterName,
+      avatarUrl: d.avatarUrl,
+      title: d.title,
+      content: d.content,
+      createdAt: d.createdAt,
+      route: '/app/diary'
+    }))
+    feedPreview.value = [...moments, ...diaries]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 4)
+  } finally {
+    feedLoading.value = false
+  }
+}
+
+function truncateText(text, maxLen) {
+  if (!text) return ''
+  const trimmed = text.trim()
+  if (trimmed.length <= maxLen) return trimmed
+  return `${trimmed.slice(0, maxLen)}…`
+}
+
+function formatFeedItemTime(iso) {
+  return formatFeedTime(iso, t)
+}
+
+function openFeedItem(item) {
+  router.push(item.route)
+}
+
+async function goToChat(characterId) {
+  if (!characterId) return
+  try {
+    const convs = await conversationsStore.fetchList()
+    const existing = (convs || []).find(c => c.mode === 'SINGLE' && c.characterId === characterId)
+    if (existing) {
+      router.push({ path: `/app/chat/${existing.id}` })
+      return
+    }
+    const created = await createConversation({ characterId, mode: 'SINGLE' })
+    router.push({ path: `/app/chat/${created.id}` })
+  } catch {
+    router.push('/app/characters')
+  }
+}
 </script>
 
 <style lang="scss" scoped>
 .home-page {
-  max-width: 720px;
+  width: 100%;
 }
 
-.page-hero {
-  margin-bottom: $space-10;
-}
-
-.hero-greeting {
-  font-size: $font-size-2xl;
-  font-weight: $font-weight-bold;
-  color: $color-text-primary;
-  margin-bottom: $space-2;
-}
-
-.hero-sub {
-  color: $color-text-muted;
-  font-size: $font-size-base;
-}
-
-.welcome-card {
-  border-radius: $radius-lg;
-  padding: $space-8;
-  display: flex;
-  gap: $space-6;
-  align-items: center;
-  margin-bottom: $space-8;
-}
-
-.welcome-icon {
-  width: 64px; height: 64px;
-  border-radius: $radius-lg;
-  background: rgba($color-pink-rgb, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: $color-pink-primary;
-  flex-shrink: 0;
-}
-
-.welcome-body h2 {
-  font-size: $font-size-lg;
-  font-weight: $font-weight-semibold;
-  color: $color-text-primary;
-  margin-bottom: $space-2;
-}
-
-.welcome-body p {
-  color: $color-text-muted;
-  font-size: $font-size-sm;
-  margin-bottom: $space-4;
-}
-
-.stats-row {
+.home-layout {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: $space-4;
+  gap: $space-6;
+
+  @media (min-width: 1024px) {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    gap: $space-8;
+    align-items: start;
+  }
 }
 
-.stat-card {
+.home-main {
+  min-width: 0;
+}
+
+.home-atmosphere {
+  min-width: 0;
+
+  @media (min-width: 1024px) {
+    position: sticky;
+    top: $space-4;
+  }
+}
+
+.story-actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-3;
+}
+
+.btn-ghost {
+  border-radius: $radius-pill;
+  padding: 0 $space-5;
+  height: 40px;
+  color: $color-text-secondary;
+  border: 1px solid rgba($color-pink-rgb, 0.15);
+  background: rgba(var(--ly-bg-surface-rgb), 0.35);
+
+  &:hover {
+    color: $color-pink-primary;
+    border-color: rgba($color-pink-rgb, 0.35);
+  }
+}
+
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space-3;
+}
+
+.discover-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $space-3;
+  padding: $space-5;
   border-radius: $radius-lg;
-  padding: $space-5 $space-6;
-  text-align: center;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  letter-spacing: 0.04em;
+  transition: transform $transition-fast, border-color $transition-fast;
+
+  &:hover {
+    transform: translateY(-2px);
+    color: $color-pink-primary;
+    border-color: rgba($color-pink-rgb, 0.2);
+  }
 }
 
-.stat-number {
-  display: block;
-  font-size: $font-size-2xl;
-  font-weight: $font-weight-bold;
-  color: $color-pink-primary;
-  margin-bottom: $space-1;
-}
-
-.stat-label {
-  font-size: $font-size-xs;
+.feed-empty-hint {
+  margin: 0;
+  padding: $space-4 $space-5;
+  font-size: $font-size-sm;
   color: $color-text-muted;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  line-height: $line-height-relaxed;
 }
 </style>

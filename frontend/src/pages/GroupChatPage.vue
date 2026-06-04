@@ -1,5 +1,5 @@
 <template>
-  <div class="groupchat-page">
+  <div class="groupchat-page" :class="{ 'groupchat-page--active': !!activeGroup }">
     <header class="page-header" v-if="!activeGroup">
       <div>
         <h1 class="page-title">{{ t('group.title') }}</h1>
@@ -59,7 +59,14 @@
         <GroupAvatar :members="groupMembers" :size="36" class="group-header-avatar" />
         <el-tag v-if="wsStatus === 'connected'" type="success" size="small" effect="dark">{{ t('group.connected') }}</el-tag>
         <el-tag v-else-if="wsStatus === 'connecting'" type="warning" size="small" effect="dark">{{ t('group.connecting') }}</el-tag>
-        <el-tag v-else type="danger" size="small" effect="dark" @click="connectWebSocket(activeGroup?.id)">{{ t('group.disconnectedReconnect') }}</el-tag>
+        <el-tag
+          v-else
+          type="danger"
+          size="small"
+          effect="dark"
+          class="ws-reconnect-tag"
+          @click="reconnectWebSocket"
+        >{{ t('group.disconnectedReconnect') }}</el-tag>
         <el-button
           type="danger"
           text
@@ -110,6 +117,15 @@
       </div>
 
       <div class="group-input-area">
+        <button
+          v-if="wsStatus !== 'connected'"
+          type="button"
+          class="ws-status-hint"
+          :disabled="wsStatus === 'connecting'"
+          @click="reconnectWebSocket"
+        >
+          {{ wsStatus === 'connecting' ? t('group.connecting') : t('group.disconnectedReconnect') }}
+        </button>
         <div class="input-row">
           <el-input
             v-model="groupInput"
@@ -117,19 +133,31 @@
             :disabled="wsStatus !== 'connected'"
             @keydown.enter.exact="sendGroupMessage"
           />
-          <el-popover
-            v-model:visible="mentionPopoverVisible"
-            trigger="click"
-            placement="top"
-            width="220"
-          >
-            <template #reference>
-              <el-button
-                :icon="UserFilled"
-                :disabled="wsStatus !== 'connected' || groupMembers.length === 0"
-                :title="t('group.mentionTitle')"
-              />
-            </template>
+          <div class="mention-entry">
+            <transition name="mention-hint-fade">
+              <OnboardingHintBubble
+                v-if="showMentionHint && activeGroup"
+                placement="top"
+                :close-label="t('common.cancel')"
+                @dismiss="dismissMentionHint"
+              >
+                {{ t('onboarding.groupMentionHint') }}
+              </OnboardingHintBubble>
+            </transition>
+            <el-popover
+              v-model:visible="mentionPopoverVisible"
+              trigger="click"
+              placement="top"
+              width="220"
+              @show="dismissMentionHint"
+            >
+              <template #reference>
+                <el-button
+                  :icon="UserFilled"
+                  :disabled="wsStatus !== 'connected' || groupMembers.length === 0"
+                  :title="t('group.mentionTitle')"
+                />
+              </template>
             <div class="mention-list">
               <el-button
                 v-for="m in groupMembers"
@@ -142,6 +170,7 @@
               </el-button>
             </div>
           </el-popover>
+          </div>
           <el-button
             type="primary"
             :icon="Promotion"
@@ -175,7 +204,17 @@
             >{{ formatBadgeCount(unreadCountForGroup(g.id)) }}</span>
           </div>
           <div class="group-card-body">
-            <h3 class="group-card-title">{{ groupTitleLabel(g.title) }}</h3>
+            <div class="group-card-title-row">
+              <h3 class="group-card-title">{{ groupTitleLabel(g.title) }}</h3>
+              <el-button
+                text
+                class="group-card-edit-btn"
+                :icon="Edit"
+                :title="t('group.rename')"
+                :aria-label="t('group.rename')"
+                @click.stop="promptRenameGroup(g)"
+              />
+            </div>
             <p class="group-card-preview">
               {{ g.lastMessage || t('group.noMessagesYet') }}
             </p>
@@ -242,26 +281,29 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { Client } from '@stomp/stompjs'
-import { listCharacters } from '@/api/character'
 import {
-  listConversations,
-  createGroupConversation,
-  deleteConversation,
   getMessages,
-  getGroupMembers,
-  updateGroupTitle
+  getGroupMembers
 } from '@/api/conversation'
+import { useCharactersStore } from '@/stores/characters'
+import { useConversationsStore } from '@/stores/conversations'
 import { listNotifications } from '@/api/notification'
 import { PLATFORM_PROVIDER } from '@/constants/ai'
 import { useProvidersStore } from '@/stores/providers'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useLayoutStore } from '@/stores/layout'
 import { useConversationUnread } from '@/composables/useConversationUnread'
 import GroupAvatar from '@/components/group/GroupAvatar.vue'
+import OnboardingHintBubble from '@/components/OnboardingHintBubble.vue'
+import { useOnboardingHint } from '@/composables/useOnboardingHint'
 import { Plus, ChatDotRound, ArrowLeft, User, UserFilled, Promotion, Delete, Edit, Check, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
+import { buildWsUrl } from '@/utils/runtime'
+import { humanizeError } from '@/utils/errorMessage'
 import { dateLocaleForUi } from '@/utils/dateLocale'
 import { resolveGroupDisplayTitle } from '@/utils/groupTitle'
 
@@ -270,6 +312,7 @@ const MAX_GROUP_MEMBERS = 4
 
 const providersStore = useProvidersStore()
 const notificationsStore = useNotificationsStore()
+const layoutStore = useLayoutStore()
 const {
   ingestConversations,
   ingestUnreadNotifications,
@@ -278,9 +321,12 @@ const {
   formatBadgeCount
 } = useConversationUnread()
 const { t, locale } = useI18n()
+const { visible: showMentionHint, dismiss: dismissMentionHint } = useOnboardingHint('group-mention')
 
-const characters = ref([])
-const groups = ref([])
+const charactersStore = useCharactersStore()
+const conversationsStore = useConversationsStore()
+const { list: characters } = storeToRefs(charactersStore)
+const groups = computed(() => conversationsStore.groups)
 const activeGroup = ref(null)
 const groupMembers = ref([])
 const groupMessages = ref([])
@@ -335,11 +381,12 @@ const groupMessageTimeline = computed(() => {
 onMounted(async () => {
   await providersStore.fetchVaults()
   await notificationsStore.init()
-  characters.value = await listCharacters().catch(() => []) || []
+  await charactersStore.fetchList()
   await refreshGroupsList()
 })
 
 onUnmounted(() => {
+  layoutStore.setGroupChatSession(false)
   disconnectWebSocket()
 })
 
@@ -358,6 +405,10 @@ watch(
   { deep: true }
 )
 
+watch(activeGroup, (group) => {
+  layoutStore.setGroupChatSession(!!group)
+}, { immediate: true })
+
 function disconnectWebSocket() {
   if (stompClient) {
     stompClient.deactivate()
@@ -367,8 +418,12 @@ function disconnectWebSocket() {
 }
 
 function buildBrokerUrl() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws`
+  return buildWsUrl()
+}
+
+function reconnectWebSocket() {
+  if (wsStatus.value === 'connecting') return
+  connectWebSocket(activeGroup.value?.id)
 }
 
 function connectWebSocket(groupId) {
@@ -469,7 +524,7 @@ function handleGroupEvent(body) {
   } else if (type === 'ERROR') {
     streamingChar.value = null
     speakingCharId.value = null
-    ElMessage.error(body.content || t('group.replyFailed'))
+    ElMessage.error(humanizeError(body.content, t('group.replyFailed')))
   }
 }
 
@@ -508,7 +563,7 @@ async function handleCreateGroup() {
   creatingGroup.value = true
   try {
     const memberIds = [...selectedCharIds.value]
-    const conv = await createGroupConversation({
+    const conv = await conversationsStore.createGroup({
       characterIds: memberIds,
       title: groupTitle.value || undefined
     })
@@ -539,11 +594,10 @@ async function loadGroupMembers(groupId, fallbackIds) {
 
 async function refreshGroupsList() {
   const [convList, unreadList] = await Promise.all([
-    listConversations().catch(() => []),
-    listNotifications({ unreadOnly: true, limit: 200 }).catch(() => [])
+    conversationsStore.fetchList({ force: true, silent: true }).catch(() => []),
+    listNotifications({ unreadOnly: true, limit: 200 }, { silent: true }).catch(() => [])
   ])
   const groupList = (convList || []).filter(c => c.mode === 'GROUP')
-  groups.value = groupList
   ingestConversations(convList || [])
   ingestUnreadNotifications(unreadList || [])
 
@@ -622,6 +676,36 @@ function cancelEditGroupTitle() {
   editGroupTitleDraft.value = ''
 }
 
+async function promptRenameGroup(group) {
+  if (!group?.id) return
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t('group.renamePlaceholder'),
+      t('group.rename'),
+      {
+        confirmButtonText: t('common.save'),
+        cancelButtonText: t('common.cancel'),
+        inputValue: (group.title || '').trim(),
+        inputPlaceholder: t('group.groupTitlePlaceholder'),
+        inputMaxlength: 64
+      }
+    )
+    const nextTitle = (value ?? '').trim()
+    const currentTitle = (group.title || '').trim()
+    if (nextTitle === currentTitle) return
+
+    const updated = await conversationsStore.renameGroup(group.id, nextTitle || null)
+    const title = updated?.title ?? (nextTitle || null)
+    if (activeGroup.value?.id === group.id) {
+      activeGroup.value = { ...activeGroup.value, title }
+    }
+    ElMessage.success(t('group.renameSuccess'))
+  } catch (e) {
+    if (e === 'cancel' || e === 'close') return
+    ElMessage.error(humanizeError(e, t('group.renameFailed')))
+  }
+}
+
 async function saveGroupTitle() {
   const group = activeGroup.value
   if (!group?.id || savingGroupTitle.value) return
@@ -635,17 +719,13 @@ async function saveGroupTitle() {
 
   savingGroupTitle.value = true
   try {
-    const updated = await updateGroupTitle(group.id, nextTitle || null)
+    const updated = await conversationsStore.renameGroup(group.id, nextTitle || null)
     const title = updated?.title ?? (nextTitle || null)
     activeGroup.value = { ...group, title }
-    const idx = groups.value.findIndex(g => g.id === group.id)
-    if (idx >= 0) {
-      groups.value[idx] = { ...groups.value[idx], title }
-    }
     ElMessage.success(t('group.renameSuccess'))
     cancelEditGroupTitle()
   } catch (e) {
-    ElMessage.error(e?.message || t('group.renameFailed'))
+    ElMessage.error(humanizeError(e, t('group.renameFailed')))
   } finally {
     savingGroupTitle.value = false
   }
@@ -667,15 +747,14 @@ async function handleDeleteGroup() {
 
   deletingGroup.value = true
   try {
-    await deleteConversation(group.id)
+    await conversationsStore.remove(group.id)
     const nextCache = { ...groupMembersCache.value }
     delete nextCache[group.id]
     groupMembersCache.value = nextCache
-    groups.value = groups.value.filter(g => g.id !== group.id)
     ElMessage.success(t('group.deleteSuccess'))
     leaveGroup()
   } catch (e) {
-    ElMessage.error(e?.message || t('group.deleteFailed'))
+    ElMessage.error(humanizeError(e, t('group.deleteFailed')))
   } finally {
     deletingGroup.value = false
   }
@@ -723,13 +802,21 @@ function isUserMessage(msg) {
 
 <style lang="scss" scoped>
 .groupchat-page {
-  max-width: 900px;
-  height: calc(100vh - #{$header-height} - #{$space-6} * 2);
+  width: 100%;
+  max-width: none;
   display: flex;
   flex-direction: column;
-  margin: -$space-6;
-  margin-left: -$space-8;
-  margin-right: -$space-8;
+  flex: 1;
+  min-height: calc(100vh - #{$header-height} - #{$app-dock-offset} - #{$space-5});
+
+  &--active {
+    flex: 1;
+    min-height: 0;
+    max-height: calc(100vh - #{$header-height} - #{$app-dock-offset} - #{$space-5});
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .page-header {
@@ -737,7 +824,6 @@ function isUserMessage(msg) {
   align-items: flex-start;
   justify-content: space-between;
   padding: $space-6 $space-8;
-  animation: fadeSlideUp 0.5s ease both;
 }
 
 .header-actions {
@@ -820,11 +906,35 @@ function isUserMessage(msg) {
   min-width: 0;
 }
 
+.group-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: $space-1;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: $space-2;
+}
+
 .group-card-title {
   font-size: $font-size-base;
   font-weight: $font-weight-semibold;
   color: $color-text-primary;
-  margin-bottom: $space-2;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-card-edit-btn {
+  flex-shrink: 0;
+  padding: 2px;
+  color: $color-text-muted;
+
+  &:hover {
+    color: $color-text-primary;
+  }
 }
 
 .group-card-preview {
@@ -870,12 +980,19 @@ function isUserMessage(msg) {
 }
 
 // Group header
+.ws-reconnect-tag {
+  cursor: pointer;
+}
+
 .group-header {
   display: flex;
   align-items: center;
   gap: $space-4;
   padding: $space-3 $space-5;
   flex-shrink: 0;
+  z-index: 2;
+  background: rgba($color-bg-primary, 0.96);
+  border-bottom: 1px solid rgba($color-pink-rgb, 0.08);
 
 .group-title-area {
   display: flex;
@@ -953,6 +1070,7 @@ function isUserMessage(msg) {
 // Messages
 .group-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: $space-4 $space-6;
   display: flex;
@@ -1089,15 +1207,63 @@ function isUserMessage(msg) {
 
 // Input
 .group-input-area {
+  flex-shrink: 0;
+  z-index: 2;
+  position: relative;
+  overflow: visible;
   padding: $space-3 $space-5;
   border-top: 1px solid rgba($color-pink-rgb, 0.06);
-  background: rgba($color-bg-secondary, 0.4);
+  background: rgba($color-bg-secondary, 0.96);
+
+  .ws-status-hint {
+    display: block;
+    width: 100%;
+    margin: 0 0 $space-2;
+    padding: 0;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-size: $font-size-xs;
+    color: $color-text-muted;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+
+    &:not(:disabled):hover {
+      color: $color-pink-primary;
+    }
+  }
 
   .input-row {
     display: flex;
     gap: $space-2;
     align-items: center;
   }
+}
+
+.mention-entry {
+  position: relative;
+  overflow: visible;
+  z-index: 5;
+
+  .mention-hint-fade-enter-from,
+  .mention-hint-fade-leave-to {
+    transform: translateX(-50%) translateY(4px);
+  }
+}
+
+.mention-hint-fade-enter-active,
+.mention-hint-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.mention-hint-fade-enter-from,
+.mention-hint-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .mention-list {

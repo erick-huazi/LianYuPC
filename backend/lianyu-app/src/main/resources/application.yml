@@ -3,6 +3,12 @@ spring:
     name: lianyu-pc
   profiles:
     active: dev
+  # 本地 IDE / mvn 启动时自动加载仓库根目录 .env（Docker 仍用 compose env_file）
+  config:
+    import: >-
+      optional:file:.env[.properties],
+      optional:file:../.env[.properties],
+      optional:file:../../.env[.properties]
   output:
     ansi:
       enabled: always
@@ -120,6 +126,16 @@ lianyu:
       per-username-per-minute: 10
   character:
     max-per-user: 80
+  memory:
+    # Agentic：结构化 profile 仍预注入；语义回忆由 memory_search Tool 按需调用
+    agentic:
+      enabled: true
+    cache:
+      # 长期记忆读路径：先 Redis，未命中再查 MySQL / Milvus；写入后 invalidate
+      enabled: true
+      profile-ttl-hours: 24
+      recent-ttl-minutes: 60
+      semantic-ttl-minutes: 15
   ai:
     # 是否开放 /api/ai/chat 直连（默认关闭，走会话接口）
     direct-chat-enabled: ${LIANYU_AI_DIRECT_CHAT:false}
@@ -143,7 +159,8 @@ lianyu:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     reranker:
       model: gte-rerank-v2
-      api-key: ${RERANKER_API_KEY:}
+      # 未单独配置时与 embedding 共用同一 DashScope Key
+      api-key: ${RERANKER_API_KEY:${EMBEDDING_API_KEY:}}
       url: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
 
   mq:
@@ -162,8 +179,11 @@ lianyu:
   push:
     # 是否开启 Web Push（需要配置 VAPID 密钥）
     enabled: ${LIANYU_PUSH_ENABLED:false}
+    # 连接推送网关超时（毫秒）；国内网络访问 WNS/FCM 可能超时
+    connect-timeout-ms: 5000
+    socket-timeout-ms: 10000
     # 浏览器通知点击跳转前缀（前端 hash 路由）
-    click-url-prefix: "#/chat/"
+    click-url-prefix: "#/app/chat/"
     vapid:
       # 由你提供 VAPID 公钥/私钥后可开启离线推送
       public-key: ${LIANYU_PUSH_VAPID_PUBLIC_KEY:}
@@ -171,6 +191,9 @@ lianyu:
       subject: ${LIANYU_PUSH_VAPID_SUBJECT:mailto:admin@lianyu.local}
 
   tools:
+    chat:
+      # 角色对话是否启用 Spring AI Tool（时间/天气/记忆等，由 ToolManager 统一注册）
+      enabled: true
     # ToolManager 默认城市（角色 settings 无 city/location 时使用）
     default-city: 上海
     time:
@@ -216,23 +239,27 @@ lianyu:
     proactive:
       # 是否开启「角色主动发消息」定时任务（总开关）
       enabled: true
-      # 定时扫描间隔（毫秒），默认 45 秒扫一轮候选会话
-      scan-interval-ms: 45000
+      # 定时扫描间隔（毫秒），默认 30 秒；按活跃度评分后优先最近聊得多的角色
+      scan-interval-ms: 30000
+      # 统计「最近聊得多」的窗口（天），用于加权主动概率
+      activity-window-days: 7
       # 每轮扫描最多检查的会话数量（按最近创建排序）
       scan-limit: 40
       # 全局兜底：空闲多久后可主动（分钟）；活泼/元气更短，冷静/成熟更长
-      min-idle-minutes: 10
+      min-idle-minutes: 5
       # 每轮扫描最多实际发送几条主动消息（避免瞬时打爆 AI）
-      max-conversations-per-run: 1
+      max-conversations-per-run: 3
       # 每轮群聊主动冒泡上限（与单聊独立计数）
       max-group-proactive-per-run: 1
       group-scan-limit: 30
-      # 全局兜底：触发概率（0~1）；话多角色更高，高冷角色更低
-      trigger-probability: 0.25
+      # 全局兜底：性格基础触发概率（0~1）；最终概率还会乘「近期聊天次数」
+      trigger-probability: 0.48
       # 全局兜底：主动消息冷却下限（分钟）
-      cooldown-min-minutes: 25
+      cooldown-min-minutes: 12
       # 全局兜底：主动消息冷却上限（分钟）
-      cooldown-max-minutes: 45
+      cooldown-max-minutes: 22
+      # 主动开口前强制预取真实时间 + 天气（写入 Prompt，非 Tool 调用）
+      prefetch-realworld-context: true
       # 单角色可在 settings.chatBehavior 中覆盖，例如：
       # {"chatBehavior":{"maxRepliesPerTurn":3,"proactiveEnabled":true,"minIdleMinutes":6,"triggerProbability":0.4}}
 
@@ -242,15 +269,33 @@ lianyu:
       # 首条破冰发出后，再等多久检查是否发第二条（毫秒），默认 5 分钟
       followup-delay-ms: 300000
 
+  emotion:
+    # 情绪衰减开关
+    decay:
+      enabled: true
+      interval-ms: 900000   # 15 min
+    decay-interval-minutes: 60
+
+  diary:
+    # 角色日记
+    enabled: true
+    trigger-probability: 0.72   # 每个候选角色尝试生成日记的概率
+    max-per-run: 3
+    scan-limit: 30
+    content-max-chars: 900
+
   moments:
     # 角色朋友圈（非联网 MVP：心情 / 聊天感想 / 系统事件）
     enabled: true
-    scan-interval-ms: 120000
+    # 扫描间隔（毫秒），默认 5 分钟；发帖更稀疏
+    scan-interval-ms: 300000
+    # 统计近期聊天活跃度窗口（天），冷会话几乎不发动态
+    activity-window-days: 14
     scan-limit: 40
-    max-posts-per-run: 2
-    max-posts-per-character-per-day: 2
-    min-interval-hours: 4
-    trigger-probability: 0.35
+    max-posts-per-run: 1
+    max-posts-per-character-per-day: 1
+    min-interval-hours: 10
+    trigger-probability: 0.12
     content-max-chars: 180
     comments:
       peer-pick-count: 2

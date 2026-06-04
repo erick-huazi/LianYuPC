@@ -31,3 +31,7 @@ export function uploadProfileAvatar(file) {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
+
+export function changePassword(data) {
+  return http.put('/auth/me/password', data)
+}

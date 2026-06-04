@@ -75,14 +75,6 @@ lianyu-app → lianyu-web → lianyu-service → lianyu-ai / lianyu-dao / lianyu
 
 `user` / `character` / `conversation` / `group_member` / `message` / `memory_meta` / `api_key_vault`
 
-详见 PLAN-001 §8。
-
-## 执行计划
-
-8 阶段执行计划见 `plans/PLAN-002-execution-plan.md`。
-
-当前处于 **Phase 6 → Phase 7 交界**。Phase 1-6 已完成：后端 Phase 1-4 + 前端 Phase 5-6（登录/注册/首页/设置/角色管理/单聊 SSE 流式对话/群聊 WebSocket/记忆查看器全实现，前后端构建通过）。下一步：Phase 7 本地模型集成（Ollama 管理页、离线模式）。
-
 ## 开发环境
 
 - 最低 16GB RAM（Milvus standalone 自带 etcd+MinIO 约 4GB）
@@ -93,7 +85,6 @@ lianyu-app → lianyu-web → lianyu-service → lianyu-ai / lianyu-dao / lianyu
 
 - 所有文件操作在 `C:\Users\hp\Desktop\LianYu-PC\` 下进行
 - 安卓端目录绝不写入，仅 read-only 参考
-- 每阶段结束由 checker 智能体验收
 - `pom.xml` / `package.json` 变更后必跑 OSV-Scanner
-- 日志用 `@Slf4j` + traceId（Phase 1 到位）
-- 统一返回格式 `Result<T>`（Phase 1 到位）
+- 日志用 `@Slf4j` + traceId
+- 统一返回格式 `Result<T>`

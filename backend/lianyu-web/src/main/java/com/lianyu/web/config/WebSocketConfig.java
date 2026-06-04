@@ -2,8 +2,8 @@ package com.lianyu.web.config;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.i18n.OutputLanguage;
-import com.lianyu.service.ConversationAccessService;
-import com.lianyu.service.OutputLanguageService;
+import com.lianyu.service.conversation.ConversationAccessService;
+import com.lianyu.service.support.OutputLanguageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
@@ -56,7 +56,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("http://localhost:*", "https://localhost:*");
+                // 浏览器 dev + Electron 桌面端（file:// / null Origin）；CONNECT 仍校验 token
+                .setAllowedOriginPatterns(
+                        "*",
+                        "http://localhost:*",
+                        "https://localhost:*",
+                        "http://127.0.0.1:*",
+                        "file://*",
+                        "null"
+                );
     }
 
     @Override

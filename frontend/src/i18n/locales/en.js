@@ -10,13 +10,17 @@ export default {
   },
   nav: {
     home: 'Home',
-    characterSquare: 'Character Square',
-    characters: 'Characters',
+    characterSquare: 'Square',
+    characters: 'Bonds',
     groupChat: 'Group',
-    moments: 'Moments',
+    moments: 'Feed',
+    diary: 'Diary',
     memory: 'Memory',
-    profile: 'Profile',
-    settings: 'Settings'
+    profile: 'Me',
+    settings: 'Settings',
+    more: 'More',
+    menuHub: 'Navigation',
+    menuClose: 'Close'
   },
   routes: {
     home: 'Home',
@@ -26,6 +30,7 @@ export default {
     chat: 'Chat',
     groupChat: 'Group chat',
     moments: 'Moments',
+    diary: 'Diary',
     memory: 'Memory',
     profile: 'Profile',
     settings: 'Settings'
@@ -39,8 +44,19 @@ export default {
     enableBrowserNotify: 'Enable system notifications',
     pushOff: 'Disable offline push',
     pushOn: 'Enable offline push',
+    pushHint: 'Offline push is on by default. Tap the bell to manage or turn it off',
+    pushEnabledSuccess: 'Offline push enabled',
+    pushEnabledDesktop: 'Offline push enabled. You will be notified when the app is in the background',
+    pushDisabledSuccess: 'Offline push disabled',
+    pushPermissionDenied: 'Please allow system notifications first',
+    pushUnsupported: 'Web Push is not supported in this environment. Use the desktop app',
+    pushNoPublicKey: 'Push is not configured on the server',
+    pushSubscribeFailed: 'Failed to subscribe to push. Try again later',
     logout: 'Log out',
-    profile: 'Profile'
+    logoutConfirm: 'Sign out of your account?',
+    profile: 'Profile',
+    changePassword: 'Change password',
+    apiSettings: 'API settings'
   },
   theme: {
     title: 'Theme colors',
@@ -49,6 +65,15 @@ export default {
     bgCool: 'Background · cool',
     btnWarm: 'Buttons · warm',
     reset: 'Reset to default'
+  },
+  onboarding: {
+    themeHint: 'Tap here to change theme colors',
+    squareHint: 'Not sure which character to pick? Browse the square',
+    groupMentionHint: 'Tap here to select a character to @'
+  },
+  launcher: {
+    newMessageHint: '{name} sent you a message',
+    defaultCharacterName: 'She'
   },
   common: {
     loading: 'Loading...',
@@ -72,17 +97,30 @@ export default {
     notLoggedIn: 'Not signed in'
   },
   home: {
-    greetingNight: 'Good night, {name} ✨',
-    greetingMorning: 'Good morning, {name} ☀️',
-    greetingAfternoon: 'Good afternoon, {name} 🌤',
-    greetingEvening: 'Good evening, {name} 🌙',
-    subtitle: 'Pick a character and start chatting',
-    welcomeTitle: 'Welcome to LianYu',
-    welcomeDesc: 'Create your first character in Characters, then start a conversation here.',
-    goCharacters: 'Go to Characters',
+    eyebrow: 'Today',
+    greetingNight: 'Good night, {name}',
+    greetingMorning: 'Good morning, {name}',
+    greetingAfternoon: 'Good afternoon, {name}',
+    greetingEvening: 'Good evening, {name}',
+    subtitle: 'Someone is waiting to hear from you',
+    moodSection: 'Mood now',
+    welcomeTitle: 'Pick up where you left off',
+    welcomeDesc: 'Return to a bond or meet someone new in the square.',
+    goCharacters: 'Open bonds',
+    exploreSquare: 'Explore square',
+    discoverSection: 'Discover',
+    feedSection: 'Latest',
+    feedViewAll: 'View all',
+    feedEmpty: 'Nothing new yet — start a conversation',
+    atmosphereEyebrow: 'With you now',
+    atmosphereContinue: 'Chat with her',
+    atmosphereFallbackQuote: 'She has something to say, if you are willing to listen…',
+    atmosphereEmptyTitle: 'No bonds yet',
+    atmosphereEmptyDesc: 'Meet someone in the square — her portrait will appear here.',
     statCharacters: 'Characters',
     statConversations: 'Chats',
-    statTodayMessages: 'Messages today'
+    statTodayMessages: 'Messages today',
+    emotionHint: '{name} seems {emotion} today'
   },
   auth: {
     brandLogin: 'Talk with those who matter',
@@ -106,6 +144,9 @@ export default {
     title: 'Character Square',
     desc: 'Pick preset characters and add them to your roster',
     allTags: 'All',
+    searchPlaceholder: 'Search by character name',
+    searchEmptyTitle: 'Character not found',
+    searchEmptyDesc: 'This character is not available yet. Contact the dev team to request it.',
     add: 'Add to my characters',
     added: 'Added',
     preview: 'Preview',
@@ -117,6 +158,11 @@ export default {
     goCharacters: 'Go to characters',
     chatNow: 'Chat now',
     alreadyAdded: 'You have already added this character',
+    cityPromptTitle: 'Your city',
+    cityPromptMessage: 'Enter your city for accurate local time and weather in proactive greetings.',
+    cityPlaceholder: 'e.g. Shanghai, Beijing, Guangzhou',
+    cityRequired: 'Please enter a city',
+    confirmAdd: 'Add character',
     emptyTitle: 'No characters',
     emptyDesc: 'Please check back later'
   },
@@ -128,6 +174,10 @@ export default {
     emptyDesc: 'Create your first AI character with a unique personality and voice.',
     noPrompt: 'No personality prompt set',
     noMessagesYet: 'No messages yet',
+    noCharacterLineYet: 'She hasn\'t spoken yet — go say hello',
+    hoverHint: 'Hover a character card to see her latest line',
+    lastLineEyebrow: 'She recently said',
+    continueChat: 'Continue chat',
     chatDetail: 'Chat details',
     deleteConfirm: 'Delete character "{name}"? This cannot be undone.',
     dialogCreate: 'New character',
@@ -138,7 +188,8 @@ export default {
     send: 'Send',
     thinking: 'Thinking...',
     loadMore: 'Load earlier messages',
-    noMessages: 'No messages yet — say hello'
+    noMessages: 'No messages yet — say hello',
+    typing: '{name} is typing...'
   },
   group: {
     title: 'Group chat',
@@ -146,10 +197,10 @@ export default {
     create: 'New group',
     join: 'Join group',
     members: 'Members',
-    placeholder: 'Type a message. Use @ to mention',
-    placeholderDetailed: 'Type a message… (@ to mention, Enter to send)',
-    mentionTitle: '@ mention a character',
-    mention: '@ mention',
+    placeholder: "Type a message. Use {'@'} to mention",
+    placeholderDetailed: "Type a message… ({'@'} to mention, Enter to send)",
+    mentionTitle: "{'@'} mention a character",
+    mention: "{'@'} mention",
     connecting: 'Connecting...',
     connected: 'Connected',
     disconnected: 'Disconnected',
@@ -208,7 +259,28 @@ export default {
     commentSent: 'Comment sent. Characters may reply soon',
     reply: 'Reply',
     replyingTo: 'Replying to {name}',
-    you: 'You'
+    you: 'You',
+    activeCharacters: 'In this feed',
+    recentDiary: 'Recent diary'
+  },
+  feed: {
+    eyebrow: 'Companion time',
+    today: 'Today',
+    yesterdayLabel: 'Yesterday',
+    yesterday: 'Yesterday {time}',
+    commentCount: '{n} comments',
+    moreComments: '{n} more comments',
+    addComment: 'Comment',
+    hideComments: 'Hide comments',
+    typeDiary: 'Diary',
+    typeMoment: 'Moment'
+  },
+  diary: {
+    title: 'Character diary',
+    desc: 'Late-night inner thoughts, for your eyes only',
+    badge: 'Diary',
+    empty: 'No diary entries yet',
+    emptyDesc: 'Chat more — they write in their diary each night'
   },
   settings: {
     title: 'Settings',

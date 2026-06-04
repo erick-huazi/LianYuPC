@@ -1,16 +1,17 @@
 import { ref, computed } from 'vue'
 import { listNotifications } from '@/api/notification'
 
+const conversationModeById = ref({})
+const unreadByCharacterId = ref({})
+const unreadByGroupId = ref({})
+
 /**
  * 按会话类型拆分未读：单聊归角色卡片，群聊归群聊卡片（避免群消息误标到角色上）。
+ * 模块级共享状态，角色页 / 快速选角等可同步红点计数。
  */
 export function useConversationUnread() {
-  const conversationModeById = ref({})
-  const unreadByCharacterId = ref({})
-  const unreadByGroupId = ref({})
-
   function ingestConversations(convList) {
-    const modes = {}
+    const modes = { ...conversationModeById.value }
     for (const c of convList || []) {
       if (c?.id != null) {
         modes[c.id] = c.mode
@@ -32,7 +33,7 @@ export function useConversationUnread() {
       const mode = modes[convId]
       if (mode === 'GROUP') {
         groupMap[convId] = (groupMap[convId] || 0) + 1
-      } else if (mode === 'SINGLE' && n.characterId) {
+      } else if (n.characterId != null) {
         charMap[n.characterId] = (charMap[n.characterId] || 0) + 1
       }
     }
@@ -43,7 +44,7 @@ export function useConversationUnread() {
 
   async function refreshUnreadFromApi() {
     try {
-      const list = await listNotifications({ unreadOnly: true, limit: 200 })
+      const list = await listNotifications({ unreadOnly: true, limit: 200 }, { silent: true })
       ingestUnreadNotifications(list || [])
     } catch {
       // ignore

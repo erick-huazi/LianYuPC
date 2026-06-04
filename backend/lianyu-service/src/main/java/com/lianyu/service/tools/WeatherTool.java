@@ -1,17 +1,21 @@
 package com.lianyu.service.tools;
 
+import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import com.lianyu.common.util.CharacterSettingsUtils;
+import java.util.Map;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 
 @Slf4j
 @Component
@@ -30,15 +34,28 @@ public class WeatherTool {
     @Value("${lianyu.tools.weather.cache-minutes:15}")
     private int cacheMinutes;
 
+    @Value("${lianyu.tools.default-city:上海}")
+    private String defaultCity;
+
+    @Tool(name = "get_weather", description = """
+            查询指定城市当前天气（气温、体感、湿度、风速、天气描述）。
+            当用户问天气、冷不冷、要不要带伞、穿衣建议时调用。city 可省略，将使用角色设定中的城市。""")
+    public String getWeather(
+            @ToolParam(description = "城市名，如上海、北京；不确定可留空") String city) {
+        String resolved = resolveCityForRequest(city);
+        String fact = readCurrentWeatherFact(resolved);
+        return StrUtil.isBlank(fact) ? "（暂时无法获取该城市天气）" : fact;
+    }
+
     public String readCurrentWeatherFact(String city) {
-        if (!enabled || city == null || city.isBlank()) {
+        if (!enabled || StrUtil.isBlank(city)) {
             return "";
         }
         String trimmedCity = city.trim();
         String cacheKey = "tools:weather:" + trimmedCity;
         try {
             String cached = redisTemplate.opsForValue().get(cacheKey);
-            if (cached != null && !cached.isBlank()) {
+            if (StrUtil.isNotBlank(cached)) {
                 return cached;
             }
         } catch (Exception e) {
@@ -46,7 +63,7 @@ public class WeatherTool {
         }
 
         String weatherFact = fetchWeatherFact(trimmedCity);
-        if (weatherFact.isBlank()) {
+        if (StrUtil.isBlank(weatherFact)) {
             return "";
         }
         try {
@@ -67,7 +84,7 @@ public class WeatherTool {
                     .uri(url)
                     .retrieve()
                     .body(String.class);
-            if (body == null || body.isBlank()) {
+            if (StrUtil.isBlank(body)) {
                 return "";
             }
             JsonNode root = objectMapper.readTree(body);
@@ -85,21 +102,27 @@ public class WeatherTool {
             if (weatherDesc.isArray() && !weatherDesc.isEmpty()) {
                 desc = weatherDesc.get(0).path("value").asText("");
             }
-            if (temp.isBlank() && desc.isBlank()) {
+            if (StrUtil.isAllBlank(temp, desc)) {
                 return "";
             }
             return String.format(
                     "当前城市天气（%s）：%s，气温%s°C，体感%s°C，湿度%s%%，风速%skm/h。若用户问天气、穿衣、是否带伞等，优先据此回答。",
                     city,
-                    desc.isBlank() ? "未知" : desc,
-                    temp.isBlank() ? "?" : temp,
-                    feelsLike.isBlank() ? "?" : feelsLike,
-                    humidity.isBlank() ? "?" : humidity,
-                    wind.isBlank() ? "?" : wind
+                    StrUtil.blankToDefault(desc, "未知"),
+                    StrUtil.blankToDefault(temp, "?"),
+                    StrUtil.blankToDefault(feelsLike, "?"),
+                    StrUtil.blankToDefault(humidity, "?"),
+                    StrUtil.blankToDefault(wind, "?")
             );
         } catch (Exception e) {
             log.debug("weather fetch skipped for city={}, reason={}", city, e.getMessage());
             return "";
         }
+    }
+
+    private String resolveCityForRequest(String requestedCity) {
+        ChatToolContext.Scope scope = ChatToolContext.current();
+        Map<String, Object> settings = scope != null ? scope.characterSettings() : null;
+        return CharacterSettingsUtils.resolveCity(requestedCity, settings, defaultCity);
     }
 }

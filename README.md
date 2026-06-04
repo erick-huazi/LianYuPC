@@ -2,7 +2,7 @@
 
 LianYu 桌面 / Web 端：Spring Boot 3 + Vue 3 + Vite + Element Plus。与安卓端项目**完全独立**（安卓端目录只读参考，勿写入）。
 
-**当前进度**：Phase 1–6 已完成（登录、角色、单聊 SSE、群聊 WebSocket、记忆、角色广场等）；Phase 7 为 Ollama 本地模型。详见 `plans/PLAN-002-execution-plan.md`。
+**当前进度**：登录、角色、单聊 SSE、群聊 WebSocket、记忆、角色广场等核心功能已实现。
 
 ## 仓库结构
 
@@ -28,7 +28,6 @@ LianYu-PC/
 │   └── Dockerfile            #     Maven 打包运行 jar
 │
 ├── secrets/                  # 仅维护用示例（platform-keys.txt 不入库）
-├── plans/                    # 技术选型与阶段计划
 └── CLAUDE.md                 # 协作者 / Agent 约定
 ```
 
@@ -182,7 +181,7 @@ openssl rand -base64 32
 |--------|------|
 | `LIANYU_GATEWAY_PORT` | 仅 `--profile dev-proxy` 时 Nginx 反代宿主机 5173/8080 的端口，默认 `8088` |
 | `APP_REVISION` | 镜像标签后缀，`docker compose build` 时可改成日期或 git hash |
-| `OLLAMA_BASE_URL` / `OLLAMA_CHAT_MODEL` | 本地 Ollama（Phase 7） |
+| `OLLAMA_BASE_URL` / `OLLAMA_CHAT_MODEL` | 本地 Ollama |
 | `DASHSCOPE_API_KEY` | 百炼视觉识图等 |
 | `EMBEDDING_API_KEY` | 记忆向量嵌入（百炼兼容接口） |
 | `RERANKER_API_KEY` | 记忆重排序 |
@@ -319,6 +318,4 @@ cd frontend && npm ci && npm run build && npm run test -- --run
 
 ## 更多文档
 
-- 技术栈：`plans/PLAN-001-tech-stack.md`
-- 阶段计划：`plans/PLAN-002-execution-plan.md`
 - Agent 约定：`CLAUDE.md`

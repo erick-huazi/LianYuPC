@@ -44,4 +44,4 @@ docker compose up -d --build
 | `Dockerfile` | 多阶段镜像：Maven 打包 → JRE 运行 |
 | `settings-docker.xml` | Docker 构建时 Maven 阿里云镜像 |
 
-更全的设计说明见仓库根目录 [`CLAUDE.md`](../CLAUDE.md)、[`plans/`](../plans/)。
+更全的设计说明见仓库根目录 [`CLAUDE.md`](../CLAUDE.md)。

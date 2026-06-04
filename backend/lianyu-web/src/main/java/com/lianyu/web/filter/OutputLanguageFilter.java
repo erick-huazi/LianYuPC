@@ -2,7 +2,7 @@ package com.lianyu.web.filter;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.i18n.OutputLanguage;
-import com.lianyu.service.OutputLanguageService;
+import com.lianyu.service.support.OutputLanguageService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

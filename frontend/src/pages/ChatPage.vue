@@ -1,138 +1,174 @@
 <template>
-  <div class="chat-page">
-    <main class="chat-main" :style="chatBackgroundStyle">
-      <header v-if="activeCharacter" class="chat-header glass-strong">
-        <el-button text :icon="ArrowLeft" @click="goBack">返回</el-button>
-        <div class="chat-header-center">
-          <div class="header-avatar">
-            <img v-if="activeCharacter.avatarUrl" :src="resolveMediaUrl(activeCharacter.avatarUrl)" />
-            <el-icon v-else :size="20"><User /></el-icon>
-          </div>
-          <h2 class="header-name">{{ activeCharacter.name }}</h2>
+  <div class="chat-page gal-chat" :class="{ 'gal-chat--compact': isCompact }">
+    <div v-if="currentConvId" class="gal-scene">
+      <div class="gal-bg-wrap">
+        <div ref="galBgRef" class="gal-bg" :style="galBgStyle">
+          <img
+            v-if="customBackgroundUrl"
+            :src="customBackgroundUrl"
+            class="gal-bg__img"
+            :alt="activeCharacter?.name"
+          />
+          <div v-else class="gal-bg__ambient" />
+        </div>
+        <div class="gal-bg-vignette" />
+        <div class="gal-bg-floor" />
+      </div>
+
+      <header v-if="activeCharacter && !isCompact" class="gal-header">
+        <button type="button" class="gal-header__back" @click="goBack">
+          <el-icon :size="18"><ArrowLeft /></el-icon>
+        </button>
+        <div class="gal-header__meta">
+          <h2 class="gal-header__name" :class="{ 'is-typing': waitingReply }">{{ headerTitle }}</h2>
+          <EmotionBadge
+            v-if="emotionState"
+            :current-emotion="emotionState.currentEmotion"
+            :emotion-intensity="emotionState.emotionIntensity"
+            :status-text="emotionState.statusText"
+          />
         </div>
       </header>
 
-      <div v-if="!currentConvId" class="chat-empty">
-        <div class="empty-icon">
-          <el-icon :size="40"><ChatDotRound /></el-icon>
-        </div>
-        <p>请从角色页选择角色开始聊天</p>
-        <el-button type="primary" class="btn-cta" @click="goBack">前往角色</el-button>
+      <div v-if="isBlocked" class="blocked-banner">
+        当前角色已被拉黑，无法继续发送消息。请前往聊天详情调整设置。
       </div>
 
-      <template v-else>
-        <div v-if="isBlocked" class="blocked-banner">
-          当前角色已被拉黑，无法继续发送消息。请前往聊天详情调整设置。
-        </div>
-        <div class="message-list" ref="msgListRef">
+      <div class="gal-log" ref="msgListRef">
+        <div
+          v-for="msg in messages"
+          v-show="msg.role !== 'assistant' || msg.content"
+          :key="msg.id || msg._tempId"
+          class="gal-log__item"
+          :class="msg.role === 'user' ? 'gal-log__item--user' : 'gal-log__item--hero'"
+        >
           <div
-            v-for="msg in messages"
-            v-show="msg.role !== 'assistant' || msg.content"
-            :key="msg.id || msg._tempId"
-            class="message-row"
-            :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'"
+            v-if="msg.role !== 'user'"
+            class="gal-log__avatar gal-log__avatar--hero"
+            aria-hidden="true"
           >
-            <div v-if="msg.role === 'assistant' && msg.content" class="msg-avatar msg-avatar-other">
-              <img v-if="activeCharacter?.avatarUrl" :src="resolveMediaUrl(activeCharacter.avatarUrl)" />
-              <el-icon v-else :size="14"><User /></el-icon>
-            </div>
-            <div class="msg-bubble" :class="{
-              'bubble-user': msg.role === 'user',
-              'bubble-assistant': msg.role === 'assistant'
-            }">
-              <div v-if="msg.imageUrl" class="msg-image-wrap">
-                <img :src="resolveMediaUrl(msg.imageUrl)" alt="" class="msg-image" />
-              </div>
-              <div v-if="msg.content" class="msg-content" v-text="msg.content"></div>
-              <div class="msg-meta">
-                <span class="msg-time">{{ formatTime(msg.createdAt) }}</span>
-                <span v-if="msg.tokens" class="msg-tokens">{{ msg.tokens }} tokens</span>
-              </div>
-            </div>
-            <div v-if="msg.role === 'user'" class="msg-avatar msg-avatar-user">
-              <img v-if="userStore.avatarUrl" :src="resolveMediaUrl(userStore.avatarUrl)" alt="" />
-              <el-icon v-else :size="14"><User /></el-icon>
-            </div>
+            <img
+              v-if="characterAvatarUrl"
+              :src="resolveMediaUrl(characterAvatarUrl)"
+              :alt="activeCharacter?.name"
+            />
+            <el-icon v-else :size="18"><User /></el-icon>
           </div>
 
-          <div ref="scrollAnchor"></div>
+          <div v-if="msg.role === 'user'" class="gal-user-choice">
+            <div v-if="msg.imageUrl" class="gal-user-choice__image">
+              <img :src="resolveMediaUrl(msg.imageUrl)" alt="" />
+            </div>
+            <p v-if="msg.content" class="gal-user-choice__text">{{ msg.content }}</p>
+            <span class="gal-user-choice__time">{{ formatTime(msg.createdAt) }}</span>
+          </div>
+
+          <div v-else class="gal-dialogue">
+            <div class="gal-dialogue__nameplate">
+              <span class="gal-dialogue__name">{{ activeCharacter?.name }}</span>
+              <span v-if="!msg._streamGroupId" class="gal-dialogue__time">{{ formatTime(msg.createdAt) }}</span>
+            </div>
+            <div v-if="msg.imageUrl" class="gal-dialogue__image">
+              <img :src="resolveMediaUrl(msg.imageUrl)" alt="" />
+            </div>
+            <p v-if="msg.content" class="gal-dialogue__text">{{ msg.content }}</p>
+          </div>
+
+          <div
+            v-if="msg.role === 'user'"
+            class="gal-log__avatar gal-log__avatar--user"
+            aria-hidden="true"
+          >
+            <img
+              v-if="userStore.avatarUrl"
+              :src="resolveMediaUrl(userStore.avatarUrl)"
+              alt=""
+            />
+            <el-icon v-else :size="18"><UserFilled /></el-icon>
+          </div>
         </div>
+        <div ref="scrollAnchor" />
+      </div>
 
-        <div class="message-input-area">
-          <div v-if="pendingImageUrl" class="image-preview-row">
-            <div class="image-preview">
-              <img :src="resolveMediaUrl(pendingImageUrl)" alt="" />
-              <el-button
-                class="image-preview-remove"
-                circle
-                size="small"
-                :icon="Close"
-                @click="clearPendingImage"
-              />
-            </div>
-          </div>
-          <div class="input-row">
-            <input
-              ref="fileInputRef"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              class="hidden-file-input"
-              @change="handleImageSelect"
-            />
+      <div class="gal-input glass-strong">
+        <div v-if="pendingImageUrl" class="image-preview-row">
+          <div class="image-preview">
+            <img :src="resolveMediaUrl(pendingImageUrl)" alt="" />
             <el-button
-              :icon="Picture"
-              :disabled="waitingReply || isBlocked || uploadingImage"
-              @click="triggerImageSelect"
-            />
-            <el-input
-              v-model="inputText"
-              type="textarea"
-              :rows="1"
-              :autosize="{ minRows: 1, maxRows: 4 }"
-              :placeholder="t('chat.placeholder')"
-              @keydown.enter.exact.prevent="handleSend"
-              :disabled="waitingReply || isBlocked"
-            />
-            <el-button
-              type="primary"
-              :icon="Promotion"
-              :disabled="(!inputText.trim() && !pendingImageUrl) || waitingReply || isBlocked || uploadingImage"
-              @click="handleSend"
-            />
-          </div>
-          <div class="input-toolbar">
-            <el-select v-model="currentProvider" size="small" placeholder="Provider" style="width:160px">
-              <el-option
-                :label="PLATFORM_PROVIDER_LABEL"
-                :value="PLATFORM_PROVIDER"
-              />
-              <el-option
-                v-for="v in providersStore.vaults"
-                :key="v.provider"
-                :label="v.provider"
-                :value="v.provider"
-              />
-            </el-select>
-            <el-select
-              v-model="currentModel"
+              class="image-preview-remove"
+              circle
               size="small"
-              placeholder="Model"
-              style="width:200px"
-              :allow-create="!isPlatformSelected"
-              filterable
-              :disabled="isPlatformSelected"
-            >
-              <el-option
-                v-for="m in availableModels"
-                :key="m.id || m"
-                :label="m.name || m.id || m"
-                :value="m.id || m"
-              />
-            </el-select>
+              :icon="Close"
+              @click="clearPendingImage"
+            />
           </div>
         </div>
-      </template>
-    </main>
+        <div class="input-row">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            class="hidden-file-input"
+            @change="handleImageSelect"
+          />
+          <el-button
+            :icon="Picture"
+            :disabled="waitingReply || isBlocked || uploadingImage"
+            @click="triggerImageSelect"
+          />
+          <el-input
+            v-model="inputText"
+            type="textarea"
+            :rows="1"
+            :autosize="{ minRows: 1, maxRows: 3 }"
+            :placeholder="t('chat.placeholder')"
+            @keydown.enter.exact.prevent="handleSend"
+            :disabled="waitingReply || isBlocked"
+          />
+          <el-button
+            type="primary"
+            :icon="Promotion"
+            :disabled="(!inputText.trim() && !pendingImageUrl) || waitingReply || isBlocked || uploadingImage"
+            @click="handleSend"
+          />
+        </div>
+        <div v-if="!isCompact" class="input-toolbar">
+          <el-select v-model="currentProvider" size="small" placeholder="Provider" style="width:160px">
+            <el-option :label="PLATFORM_PROVIDER_LABEL" :value="PLATFORM_PROVIDER" />
+            <el-option
+              v-for="v in providersStore.vaults"
+              :key="v.provider"
+              :label="v.provider"
+              :value="v.provider"
+            />
+          </el-select>
+          <el-select
+            v-model="currentModel"
+            size="small"
+            placeholder="Model"
+            style="width:200px"
+            :allow-create="!isPlatformSelected"
+            filterable
+            :disabled="isPlatformSelected"
+          >
+            <el-option
+              v-for="m in availableModels"
+              :key="m.id || m"
+              :label="m.name || m.id || m"
+              :value="m.id || m"
+            />
+          </el-select>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="chat-empty-scene">
+      <div class="empty-icon">
+        <el-icon :size="40"><ChatDotRound /></el-icon>
+      </div>
+      <p>请从角色页选择角色开始聊天</p>
+      <el-button type="primary" class="btn-cta" @click="goBack">前往角色</el-button>
+    </div>
   </div>
 </template>
 
@@ -140,20 +176,27 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import gsap from 'gsap'
 
 const { t } = useI18n()
 import { useProvidersStore } from '@/stores/providers'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
-import { listCharacters } from '@/api/character'
+import { useCharactersStore } from '@/stores/characters'
+import { humanizeError } from '@/utils/errorMessage'
 import { getConversation, getMessages, sendMessageStream, uploadChatImage } from '@/api/conversation'
 import { fetchModels } from '@/api/ai'
-import { ArrowLeft, User, ChatDotRound, Promotion, Picture, Close } from '@element-plus/icons-vue'
+import { ArrowLeft, ChatDotRound, Promotion, Picture, Close, User, UserFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
 import { PLATFORM_PROVIDER, PLATFORM_MODEL, PLATFORM_PROVIDER_LABEL } from '@/constants/ai'
 import { normalizeHex } from '@/utils/themeColor'
+import EmotionBadge from '@/components/EmotionBadge.vue'
+import { getCharacterState } from '@/api/characterState'
+import { setActiveChatConversationId, setActiveChatRefreshHandler } from '@/composables/useActiveChatContext'
+import { splitAssistantReply, resolveMaxRepliesPerTurn } from '@/utils/assistantReplySplit'
+import { getElectronAPI } from '@/utils/electron'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,27 +205,50 @@ const notificationsStore = useNotificationsStore()
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
 
-const characters = ref([])
+const charactersStore = useCharactersStore()
 const messages = ref([])
 const currentConvId = ref(null)
 const activeCharacter = ref(null)
+const emotionState = ref(null)
 const msgListRef = ref(null)
 const scrollAnchor = ref(null)
 const fileInputRef = ref(null)
+const galBgRef = ref(null)
 
 const inputText = ref('')
 const pendingImageUrl = ref('')
 const uploadingImage = ref(false)
 const waitingReply = ref(false)
+const awaitingOpening = ref(false)
 const currentProvider = ref('')
 const currentModel = ref('')
 
 const availableModels = ref([])
 let conversationPollTimer = null
+let fastPollTimer = null
+let fastPollStartedAt = 0
+const FAST_POLL_MS = 2000
+const FAST_POLL_MAX_MS = 90000
+const NORMAL_POLL_MS = 10000
+let assistantLineCount = 0
+let skipBounceOnce = false
+let bounceTween = null
 
 const isPlatformSelected = computed(() => currentProvider.value === PLATFORM_PROVIDER)
+const isCompact = computed(() => route.meta.compact === true)
 const activeSettings = computed(() => activeCharacter.value?.settings || {})
 const isBlocked = computed(() => activeSettings.value.blocked === true)
+
+const headerTitle = computed(() => {
+  const name = activeCharacter.value?.name
+  if (!name) return ''
+  if (waitingReply.value || awaitingOpening.value) {
+    return t('chat.typing', { name })
+  }
+  return name
+})
+
+const characterAvatarUrl = computed(() => activeCharacter.value?.avatarUrl || '')
 
 function clampPercentage(value, fallback = 50) {
   const n = Number(value)
@@ -190,38 +256,64 @@ function clampPercentage(value, fallback = 50) {
   return Math.max(0, Math.min(100, Math.round(n)))
 }
 
-const chatBackgroundStyle = computed(() => {
+const customBackgroundUrl = computed(() => {
   const useGlobal = activeSettings.value.useGlobalChatBackground !== false
-  const imageUrl = !useGlobal
-    ? resolveMediaUrl(activeSettings.value.chatBackgroundImageUrl || '')
-    : ''
-  const posX = clampPercentage(activeSettings.value.chatBackgroundPosX, 50)
-  const posY = clampPercentage(activeSettings.value.chatBackgroundPosY, 50)
-  if (imageUrl) {
-    return {
-      backgroundImage: `linear-gradient(180deg, rgba(var(--ly-bg-surface-rgb), 0.48) 0%, rgba(var(--ly-bg-surface-rgb), 0.78) 100%), url("${imageUrl}")`,
-      backgroundSize: 'cover',
-      backgroundPosition: `${posX}% ${posY}%`,
-      backgroundRepeat: 'no-repeat'
-    }
+  if (useGlobal) return ''
+  return resolveMediaUrl(activeSettings.value.chatBackgroundImageUrl || '')
+})
+
+const galBgStyle = computed(() => {
+  if (customBackgroundUrl.value) {
+    const posX = clampPercentage(activeSettings.value.chatBackgroundPosX, 50)
+    const posY = clampPercentage(activeSettings.value.chatBackgroundPosY, 50)
+    return { '--gal-bg-pos': `${posX}% ${posY}%` }
   }
+  const useGlobal = activeSettings.value.useGlobalChatBackground !== false
   const backgroundKey = useGlobal
     ? settingsStore.getChatBackground(activeCharacter.value?.id)
     : activeSettings.value.chatBackgroundKey || settingsStore.getChatBackground(activeCharacter.value?.id)
   const normalized = normalizeHex(backgroundKey)
-  return normalized
-    ? {
-        background: `linear-gradient(180deg, ${normalized}22 0%, rgba(var(--ly-bg-surface-rgb), 0.72) 100%)`
-      }
-    : {}
+  if (normalized) {
+    return {
+      '--gal-accent': normalized,
+      '--gal-accent-soft': `${normalized}2e`
+    }
+  }
+  return {}
 })
+
+watch(
+  () => messages.value.filter(m => m.role === 'assistant' && m.content).length,
+  (count) => {
+    if (skipBounceOnce) {
+      assistantLineCount = count
+      skipBounceOnce = false
+      return
+    }
+    if (count > assistantLineCount) {
+      bounceCharacterBg()
+    }
+    assistantLineCount = count
+  }
+)
+
+function bounceCharacterBg() {
+  const el = galBgRef.value
+  if (!el) return
+  bounceTween?.kill()
+  bounceTween = gsap.fromTo(
+    el,
+    { scale: 1.018, y: -4 },
+    { scale: 1, y: 0, duration: 0.55, ease: 'elastic.out(1, 0.75)' }
+  )
+}
 
 onMounted(async () => {
   await providersStore.fetchVaults()
   if (userStore.isLoggedIn) {
     await userStore.fetchProfile().catch(() => {})
   }
-  characters.value = (await listCharacters().catch(() => [])) || []
+  await charactersStore.fetchList().catch(() => [])
 
   currentProvider.value = PLATFORM_PROVIDER
   currentModel.value = PLATFORM_MODEL
@@ -229,19 +321,25 @@ onMounted(async () => {
 
   const convId = route.params.id
   if (convId) {
+    skipBounceOnce = true
     await loadConversation(Number(convId))
   }
   startConversationPolling()
+  setActiveChatRefreshHandler(refreshActiveChatMessages)
 })
 
 watch(() => route.params.id, async (id) => {
   if (id) {
+    skipBounceOnce = true
     await loadConversation(Number(id))
   }
 })
 
 onUnmounted(() => {
+  setActiveChatConversationId(null)
+  setActiveChatRefreshHandler(null)
   stopConversationPolling()
+  bounceTween?.kill()
 })
 
 watch(currentProvider, (p) => {
@@ -256,11 +354,12 @@ watch(currentProvider, (p) => {
   loadModels(p)
 })
 
-watch(currentConvId, () => {
-  if (currentConvId.value) {
+watch(currentConvId, (id) => {
+  setActiveChatConversationId(id)
+  if (id) {
     pollCurrentConversationMessages(true)
   }
-})
+}, { immediate: true })
 
 async function loadModels(provider) {
   try {
@@ -270,7 +369,20 @@ async function loadModels(provider) {
 }
 
 function goBack() {
-  router.push('/characters')
+  if (isCompact.value) {
+    getElectronAPI()?.closeQuickChat?.()
+    return
+  }
+  router.push('/app/characters')
+}
+
+async function loadEmotionState() {
+  if (!activeCharacter.value?.id) return
+  try {
+    emotionState.value = await getCharacterState(activeCharacter.value.id, { silent: true })
+  } catch {
+    emotionState.value = null
+  }
 }
 
 async function loadAllMessages(convId) {
@@ -301,9 +413,18 @@ async function loadConversation(convId) {
   } catch {
     messages.value = []
     activeCharacter.value = null
+    awaitingOpening.value = false
+    stopFastPolling()
   }
   await nextTick()
   scrollToBottom()
+  syncAwaitingOpening()
+  if (awaitingOpening.value) {
+    startFastPolling()
+    scheduleOpeningPollBurst()
+  } else {
+    stopFastPolling()
+  }
 }
 
 async function resolveActiveCharacter(charId, conv) {
@@ -311,7 +432,7 @@ async function resolveActiveCharacter(charId, conv) {
     activeCharacter.value = null
     return
   }
-  let char = characters.value.find(c => c.id === charId)
+  let char = charactersStore.list.find(c => c.id === charId)
   if (!char) {
     try {
       const { getCharacter } = await import('@/api/character')
@@ -332,16 +453,60 @@ async function resolveActiveCharacter(charId, conv) {
   if (char?.id && backgroundKey) {
     settingsStore.setChatBackground(char.id, backgroundKey)
   }
+  loadEmotionState()
+}
+
+function refreshActiveChatMessages() {
+  void pollCurrentConversationMessages(true)
+}
+
+function syncAwaitingOpening() {
+  awaitingOpening.value =
+    !!currentConvId.value &&
+    !waitingReply.value &&
+    !messages.value.some(m => m.role === 'assistant' && m.content)
+}
+
+function scheduleOpeningPollBurst() {
+  window.setTimeout(() => pollCurrentConversationMessages(true), 600)
+  window.setTimeout(() => pollCurrentConversationMessages(true), 1500)
+  window.setTimeout(() => pollCurrentConversationMessages(true), 3500)
+}
+
+function startFastPolling() {
+  stopFastPolling()
+  fastPollStartedAt = Date.now()
+  fastPollTimer = window.setInterval(() => {
+    if (Date.now() - fastPollStartedAt > FAST_POLL_MAX_MS) {
+      stopFastPolling()
+      syncAwaitingOpening()
+      return
+    }
+    if (messages.value.some(m => m.role === 'assistant' && m.content) || waitingReply.value) {
+      stopFastPolling()
+      syncAwaitingOpening()
+      return
+    }
+    pollCurrentConversationMessages(false)
+  }, FAST_POLL_MS)
+}
+
+function stopFastPolling() {
+  if (fastPollTimer) {
+    clearInterval(fastPollTimer)
+    fastPollTimer = null
+  }
 }
 
 function startConversationPolling() {
   stopConversationPolling()
-  conversationPollTimer = setInterval(() => {
+  conversationPollTimer = window.setInterval(() => {
     pollCurrentConversationMessages(false)
-  }, 10000)
+  }, NORMAL_POLL_MS)
 }
 
 function stopConversationPolling() {
+  stopFastPolling()
   if (conversationPollTimer) {
     clearInterval(conversationPollTimer)
     conversationPollTimer = null
@@ -354,7 +519,7 @@ async function pollCurrentConversationMessages(force) {
     return
   }
   try {
-    const page = await getMessages(convId, { limit: 50 })
+    const page = await getMessages(convId, { limit: 50 }, { silent: true })
     const serverMessages = page?.records || []
     const normalized = serverMessages.map(normalizeMessageRole)
     const changed =
@@ -362,8 +527,13 @@ async function pollCurrentConversationMessages(force) {
       normalized.length !== messages.value.length ||
       normalized.at(-1)?.id !== messages.value.at(-1)?.id
     if (changed) {
+      skipBounceOnce = true
       messages.value = normalized
       notificationsStore.markConversationRead(convId)
+      syncAwaitingOpening()
+      if (!awaitingOpening.value) {
+        stopFastPolling()
+      }
       await nextTick()
       scrollToBottom()
     }
@@ -400,6 +570,8 @@ async function handleSend() {
   scrollToBottom()
 
   waitingReply.value = true
+  const streamGroupId = 'stream-' + Date.now()
+  const streamCreatedAt = new Date().toISOString()
 
   try {
     const sendConvId = currentConvId.value
@@ -411,37 +583,45 @@ async function handleSend() {
     })
 
     if (!response.ok) {
-      let errMsg = '消息发送失败'
+      let errMsg = '消息发送失败，请稍后再试'
       try {
         const errBody = await response.json()
-        errMsg = errBody.message || errBody.msg || errMsg
+        errMsg = humanizeError(errBody.message || errBody.msg, errMsg)
       } catch { /* ignore */ }
       throw new Error(errMsg)
     }
 
-    await drainAssistantStream(response)
+    await drainAssistantStream(response, fullContent => {
+      if (currentConvId.value !== sendConvId) return
+      syncStreamingAssistantBubbles(fullContent, streamGroupId, streamCreatedAt)
+      void nextTick(() => scrollToBottom())
+    })
 
     if (currentConvId.value === sendConvId) {
+      skipBounceOnce = true
       await pollCurrentConversationMessages(true)
     }
   } catch (err) {
-    ElMessage.error(err.message || '消息发送失败')
-    messages.value = messages.value.filter(m => m._tempId !== userMsg._tempId)
+    ElMessage.error(humanizeError(err, '消息发送失败，请稍后再试'))
+    messages.value = messages.value.filter(
+      m => m._tempId !== userMsg._tempId && m._streamGroupId !== streamGroupId
+    )
   } finally {
     waitingReply.value = false
     await nextTick()
     scrollToBottom()
+    loadEmotionState()
   }
 }
 
-/** 静默消费 SSE，完整回复落库后再由 poll 拉取展示 */
-async function drainAssistantStream(response) {
+async function drainAssistantStream(response, onContentUpdate) {
   const reader = response.body?.getReader()
   if (!reader) {
     throw new Error('无法读取回复流')
   }
   const decoder = new TextDecoder()
   let buffer = ''
+  let fullContent = ''
 
   while (true) {
     const { done, value } = await reader.read()
@@ -460,12 +640,17 @@ async function drainAssistantStream(response) {
         if (payload.error) {
           throw new Error(payload.error)
         }
+        if (payload.content) {
+          fullContent += payload.content
+          onContentUpdate?.(fullContent)
+        }
       } catch (e) {
         if (e instanceof SyntaxError) continue
         throw e
       }
     }
   }
+  return fullContent
 }
 
 function triggerImageSelect() {
@@ -495,7 +680,7 @@ async function handleImageSelect(event) {
       throw new Error(t('chat.imageUploadFailed'))
     }
   } catch (err) {
-    ElMessage.error(err.message || t('chat.imageUploadFailed'))
+    ElMessage.error(humanizeError(err, t('chat.imageUploadFailed')))
     clearPendingImage()
   } finally {
     uploadingImage.value = false
@@ -507,6 +692,24 @@ async function handleImageSelect(event) {
 
 function scrollToBottom() {
   scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' })
+}
+
+function syncStreamingAssistantBubbles(fullContent, streamGroupId, createdAt) {
+  const maxReplies = resolveMaxRepliesPerTurn(activeCharacter.value)
+  const pieces = splitAssistantReply(fullContent, maxReplies)
+  const rest = messages.value.filter(m => m._streamGroupId !== streamGroupId)
+  if (pieces.length === 0) {
+    messages.value = rest
+    return
+  }
+  const streamMsgs = pieces.map((content, i) => ({
+    _tempId: `${streamGroupId}-${i}`,
+    _streamGroupId: streamGroupId,
+    role: 'assistant',
+    content,
+    createdAt
+  }))
+  messages.value = [...rest, ...streamMsgs]
 }
 
 function normalizeMessageRole(msg) {
@@ -527,207 +730,297 @@ function formatTime(ts) {
 
 <style lang="scss" scoped>
 .chat-page {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - #{$header-height} - #{$space-6} * 2);
-  margin: -$space-6;
-  margin-left: -$space-8;
-  margin-right: -$space-8;
-  max-width: 900px;
-}
-
-.chat-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: rgba($color-bg-primary, 0.3);
-  border-radius: $radius-lg;
+  height: 100vh;
+  max-width: none;
   overflow: hidden;
-  border: 1px solid rgba($color-pink-rgb, 0.06);
 }
 
-.chat-header {
+.gal-scene {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a12;
+}
+
+.gal-bg-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gal-bg {
+  position: absolute;
+  inset: -2%;
+  transform-origin: center center;
+  will-change: transform;
+
+  &__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: var(--gal-bg-pos, center center);
+    filter: saturate(1.02);
+  }
+
+  &__ambient {
+    width: 100%;
+    height: 100%;
+    background:
+      radial-gradient(ellipse 85% 55% at 50% 18%, var(--gal-accent-soft, rgba($color-pink-rgb, 0.14)), transparent 62%),
+      radial-gradient(ellipse 50% 35% at 82% 72%, rgba($color-pink-rgb, 0.07), transparent 58%),
+      radial-gradient(ellipse 40% 30% at 12% 65%, rgba(120, 140, 200, 0.06), transparent 55%),
+      linear-gradient(180deg, #14141f 0%, #0a0a12 52%, #07070e 100%);
+  }
+}
+
+.gal-bg-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 22%, transparent 0%, rgba(8, 8, 14, 0.35) 55%, rgba(8, 8, 14, 0.82) 100%),
+    linear-gradient(180deg, rgba(8, 8, 14, 0.15) 0%, rgba(8, 8, 14, 0.55) 52%, rgba(8, 8, 14, 0.92) 100%);
+}
+
+.gal-bg-floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
+  background: linear-gradient(180deg, transparent, rgba(8, 8, 14, 0.75));
+}
+
+.gal-header {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: $space-3;
-  padding: $space-3 $space-4;
-  border-bottom: 1px solid rgba($color-pink-rgb, 0.06);
-  flex-shrink: 0;
+  padding: calc(#{$space-3} + env(safe-area-inset-top, 0px)) $space-4 $space-3;
+  background: linear-gradient(180deg, rgba(8, 8, 14, 0.72), transparent);
 }
 
-.chat-header-center {
-  display: flex;
-  align-items: center;
-  gap: $space-3;
-  min-width: 0;
-}
-
-.header-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: $radius-md;
-  overflow: hidden;
-  background: rgba($color-pink-rgb, 0.08);
+.gal-header__back {
+  width: 36px;
+  height: 36px;
+  border-radius: $radius-full;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: $color-text-primary;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
-  color: $color-pink-primary;
-
-  img { width: 100%; height: 100%; object-fit: cover; }
 }
 
-.header-name {
+.gal-header__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gal-header__name {
+  margin: 0;
   font-size: $font-size-lg;
   font-weight: $font-weight-semibold;
   color: $color-text-primary;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.45);
 
-.chat-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: $color-text-muted;
-
-  .empty-icon {
-    width: 80px; height: 80px;
-    border-radius: $radius-xl;
-    background: rgba($color-pink-rgb, 0.06);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: $space-6;
-    color: $color-pink-primary;
+  &.is-typing {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $color-text-muted;
   }
-
-  h3 { color: $color-text-primary; margin-bottom: $space-2; }
-  p { font-size: $font-size-sm; }
 }
 
 .blocked-banner {
-  margin: $space-4 $space-6 0;
+  position: relative;
+  z-index: 3;
+  margin: 0 $space-4;
   padding: $space-3 $space-4;
   border-radius: $radius-md;
-  background: rgba($color-error, 0.12);
-  border: 1px solid rgba($color-error, 0.18);
+  background: rgba($color-error, 0.16);
+  border: 1px solid rgba($color-error, 0.22);
   color: $color-text-primary;
   font-size: $font-size-sm;
 }
 
-.message-list {
+.gal-log {
+  position: relative;
+  z-index: 2;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: $space-4 $space-6;
+  padding: $space-2 $space-4 $space-4;
   display: flex;
   flex-direction: column;
-  gap: $space-3;
+  gap: $space-4;
+  mask-image: linear-gradient(180deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
 }
 
-.message-row {
+.gal-log__item {
   display: flex;
-  gap: $space-2;
-  max-width: 80%;
+  align-items: flex-end;
+  gap: $space-3;
+  width: 100%;
 }
 
-.msg-user {
-  align-self: flex-end;
+.gal-log__item--user {
   flex-direction: row;
-  justify-content: flex-end;
 }
 
-.msg-assistant { align-self: flex-start; }
+.gal-log__item--hero {
+  flex-direction: row;
+}
 
-.msg-avatar {
-  width: 30px; height: 30px;
+.gal-log__avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   border-radius: 50%;
   overflow: hidden;
-  background: rgba($color-pink-rgb, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  color: $color-pink-primary;
-  align-self: flex-end;
   margin-bottom: 2px;
+  background: rgba($color-pink-rgb, 0.1);
+  border: 1px solid rgba($color-pink-rgb, 0.2);
+  color: $color-pink-primary;
 
-  img { width: 100%; height: 100%; object-fit: cover; }
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &--user {
+    background: rgba($color-pink-rgb, 0.16);
+  }
 }
 
-.msg-avatar-user {
-  margin-left: $space-2;
-  margin-right: 0;
-}
-
-.msg-avatar-other {
-  margin-right: $space-2;
-  margin-left: 0;
-}
-
-.msg-bubble {
-  padding: $space-3 $space-4;
+.gal-user-choice {
+  flex: 1;
+  min-width: 0;
+  padding: $space-3 $space-5;
   border-radius: $radius-lg;
+  background: linear-gradient(
+    180deg,
+    rgba($color-pink-rgb, 0.14) 0%,
+    rgba($color-pink-rgb, 0.08) 100%
+  );
+  border: 1px solid rgba($color-pink-rgb, 0.24);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
 
-  &.bubble-user {
-    background: $color-pink-primary;
-    color: $color-text-inverse;
-    border-bottom-right-radius: $radius-sm;
+  &__text {
+    margin: 0;
+    font-size: $font-size-base;
+    line-height: $line-height-relaxed;
+    color: $color-text-primary;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
-  &.bubble-assistant {
-    background: rgba($color-bg-surface, 0.9);
-    border: 1px solid rgba($color-pink-rgb, 0.12);
-    border-bottom-left-radius: $radius-sm;
+  &__image img {
+    display: block;
+    max-width: min(100%, 220px);
+    max-height: 220px;
+    border-radius: $radius-md;
+    margin-bottom: $space-3;
+  }
+
+  &__time {
+    display: block;
+    margin-top: $space-2;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.45);
+    text-align: right;
   }
 }
 
-.msg-content {
-  font-size: $font-size-sm;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
+.gal-dialogue {
+  flex: 1;
+  min-width: 0;
+  padding: $space-4 $space-5 $space-5;
+  border-radius: $radius-lg;
+  background: linear-gradient(
+    180deg,
+    rgba(12, 12, 20, 0.72) 0%,
+    rgba(12, 12, 20, 0.88) 100%
+  );
+  border: 1px solid rgba($color-pink-rgb, 0.22);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  animation: galLineIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
 
-  .bubble-user & { color: $color-text-inverse; }
-  .bubble-assistant & { color: $color-text-primary; }
+  &__nameplate {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: $space-3;
+    margin-bottom: $space-3;
+    padding-bottom: $space-2;
+    border-bottom: 1px solid rgba($color-pink-rgb, 0.15);
+  }
+
+  &__name {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-semibold;
+    letter-spacing: 0.08em;
+    color: $color-pink-light;
+  }
+
+  &__time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.38);
+  }
+
+  &__text {
+    margin: 0;
+    font-size: $font-size-base;
+    line-height: $line-height-relaxed;
+    color: rgba(255, 255, 255, 0.92);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  &__image img {
+    display: block;
+    max-width: 100%;
+    max-height: 220px;
+    border-radius: $radius-md;
+    margin-bottom: $space-3;
+    object-fit: cover;
+  }
 }
 
-.msg-image-wrap {
-  margin-bottom: $space-2;
+@keyframes galLineIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.msg-image {
-  display: block;
-  max-width: 220px;
-  max-height: 220px;
-  border-radius: $radius-md;
-  object-fit: cover;
-}
-
-.msg-meta {
-  display: flex;
-  gap: $space-3;
-  margin-top: $space-1;
-}
-
-.msg-time, .msg-tokens {
-  font-size: $font-size-xs;
-  opacity: 0.6;
-
-  .bubble-user & { color: rgba($color-text-inverse, 0.7); }
-  .bubble-assistant & { color: $color-text-muted; }
-}
-
-// --- Message Input ---
-.message-input-area {
-  padding: $space-3 $space-4;
-  border-top: 1px solid rgba($color-pink-rgb, 0.06);
-  background: rgba($color-bg-secondary, 0.4);
+.gal-input {
+  position: relative;
+  z-index: 3;
+  flex-shrink: 0;
+  padding: $space-3 $space-4 calc(#{$space-3} + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba($color-pink-rgb, 0.12);
+  background: rgba(10, 10, 16, 0.82) !important;
 }
 
 .input-row {
@@ -771,19 +1064,58 @@ function formatTime(ts) {
   align-items: center;
 }
 
-.no-provider-hint {
+.chat-empty-scene {
+  height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: $space-1;
-  font-size: $font-size-xs;
-  color: $color-warning;
-  white-space: nowrap;
+  justify-content: center;
+  color: $color-text-muted;
 
-  a {
+  .empty-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: $radius-xl;
+    background: rgba($color-pink-rgb, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: $space-6;
     color: $color-pink-primary;
-    text-decoration: underline;
-    &:hover { color: $color-pink-light; }
+  }
+
+  p {
+    font-size: $font-size-sm;
+    margin-bottom: $space-4;
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .gal-bg {
+    transition: none !important;
+  }
+
+  .gal-dialogue {
+    animation: none;
+  }
+}
+
+.gal-chat--compact {
+  .gal-scene {
+    min-height: 100%;
+  }
+
+  .gal-log {
+    padding: 8px 10px 4px;
+  }
+
+  .gal-input {
+    padding: 8px 10px 10px;
+  }
+
+  .gal-user-choice,
+  .gal-dialogue {
+    max-width: 100%;
+  }
+}
 </style>

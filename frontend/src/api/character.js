@@ -1,7 +1,9 @@
 import http from './index'
 
-export function listCharacters() {
-  return http.get('/character')
+export function listCharacters(options = {}) {
+  return http.get('/character', {
+    skipGlobalError: options.silent === true
+  })
 }
 
 export function getCharacter(id) {
@@ -37,5 +39,5 @@ export function uploadChatBackground(id, file) {
 }
 
 export function generateCharacter(data) {
-  return http.post('/character/generate', data)
+  return http.post('/character/generate', data, { timeout: 120000 })
 }

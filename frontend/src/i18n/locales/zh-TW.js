@@ -11,13 +11,17 @@ export default {
   },
   nav: {
     home: '首頁',
-    characterSquare: '角色廣場',
-    characters: '角色',
+    characterSquare: '廣場',
+    characters: '羈絆',
     groupChat: '群聊',
-    moments: '朋友圈',
+    moments: '動態',
+    diary: '日記',
     memory: '記憶',
-    profile: '個人資料',
-    settings: '設定'
+    profile: '我的',
+    settings: '設定',
+    more: '更多',
+    menuHub: '星盤導航',
+    menuClose: '收起'
   },
   routes: {
     home: '首頁',
@@ -27,6 +31,7 @@ export default {
     chat: '對話',
     groupChat: '群聊',
     moments: '朋友圈',
+    diary: '日記',
     memory: '記憶',
     profile: '個人資料',
     settings: '設定'
@@ -50,7 +55,28 @@ export default {
     commentSent: '評論已傳送，角色們可能會回覆',
     reply: '回覆',
     replyingTo: '回覆 {name}',
-    you: '你'
+    you: '你',
+    activeCharacters: '動態裡的她',
+    recentDiary: '最近日記'
+  },
+  feed: {
+    eyebrow: '陪伴時光',
+    today: '今天',
+    yesterdayLabel: '昨天',
+    yesterday: '昨天 {time}',
+    commentCount: '{n} 則評論',
+    moreComments: '還有 {n} 則評論',
+    addComment: '寫評論',
+    hideComments: '收起評論',
+    typeDiary: '日記',
+    typeMoment: '動態'
+  },
+  diary: {
+    title: '角色日記',
+    desc: '深夜寫下的內心獨白，只屬於你',
+    badge: '日記',
+    empty: '還沒有日記',
+    emptyDesc: '和角色多聊聊，她們會在每天深夜寫下心裡話'
   },
   header: {
     notifications: '通知',
@@ -61,6 +87,14 @@ export default {
     enableBrowserNotify: '啟用系統通知',
     pushOff: '關閉離線推送',
     pushOn: '開啟離線推送',
+    pushHint: '離線推送已預設開啟，點鈴鐺可管理或關閉',
+    pushEnabledSuccess: '離線推送已開啟',
+    pushEnabledDesktop: '離線推送已開啟，應用在背景或最小化時也會通知你',
+    pushDisabledSuccess: '已關閉離線推送',
+    pushPermissionDenied: '請先允許系統通知權限',
+    pushUnsupported: '目前環境不支援 Web Push，請使用桌面用戶端',
+    pushNoPublicKey: '伺服器尚未設定推送金鑰',
+    pushSubscribeFailed: '推送訂閱失敗，請稍後再試',
     logout: '登出',
     profile: '個人資料'
   },
@@ -71,6 +105,15 @@ export default {
     bgCool: '背景 · 偏冷',
     btnWarm: '按鈕 · 偏暖',
     reset: '恢復預設'
+  },
+  onboarding: {
+    themeHint: '點這裡可以切換主題配色',
+    squareHint: '如果不知道想要什麼角色，可以來廣場看看',
+    groupMentionHint: '點此處可以選擇 @ 某位角色'
+  },
+  launcher: {
+    newMessageHint: '{name}給你發訊息了哦',
+    defaultCharacterName: '她'
   },
   common: {
     loading: '載入中...',
@@ -104,7 +147,20 @@ export default {
     goCharacters: '前往角色管理',
     statCharacters: '角色',
     statConversations: '會話',
-    statTodayMessages: '今日訊息'
+    statTodayMessages: '今日訊息',
+    emotionHint: '今天{name}{emotion}',
+    eyebrow: '今日陪伴',
+    moodSection: '此刻心情',
+    exploreSquare: '逛逛廣場',
+    discoverSection: '去發現',
+    feedSection: '最新動態',
+    feedViewAll: '查看全部',
+    feedEmpty: '還沒有新動態，去和她們聊聊吧',
+    atmosphereEyebrow: '此刻陪伴',
+    atmosphereContinue: '和她聊聊',
+    atmosphereFallbackQuote: '想對你說點什麼，卻又不知從何說起……',
+    atmosphereEmptyTitle: '還沒有羈絆',
+    atmosphereEmptyDesc: '去廣場遇見第一位角色，讓右側也亮起她的身影。'
   },
   auth: {
     brandLogin: '與心之所向，促膝長談',
@@ -128,6 +184,9 @@ export default {
     title: '角色廣場',
     desc: '挑選預設二次元角色，一鍵加入我的角色',
     allTags: '全部',
+    searchPlaceholder: '搜尋角色名稱',
+    searchEmptyTitle: '未找到該角色',
+    searchEmptyDesc: '該角色暫未添加，可聯繫開發團隊添加',
     add: '加入我的角色',
     added: '已添加',
     preview: '預覽',
@@ -139,6 +198,11 @@ export default {
     goCharacters: '前往角色管理',
     chatNow: '立即開聊',
     alreadyAdded: '你已經添加過該角色了哦',
+    cityPromptTitle: '填寫所在城市',
+    cityPromptMessage: '為方便精確計算當地時間與天氣，請填寫你所在的城市。',
+    cityPlaceholder: '如 上海、北京、廣州',
+    cityRequired: '請填寫城市',
+    confirmAdd: '確認加入',
     emptyTitle: '暫無角色',
     emptyDesc: '請稍後再來或聯繫管理員'
   },
@@ -150,6 +214,10 @@ export default {
     emptyDesc: '建立你的第一個 AI 角色，賦予它獨特的性格和說話風格',
     noPrompt: '未設定性格提示詞',
     noMessagesYet: '還沒有訊息',
+    noCharacterLineYet: '她還沒有開口，去和她聊聊吧',
+    hoverHint: '懸停左側角色卡片，看看她最近說了什麼',
+    lastLineEyebrow: '她最近說',
+    continueChat: '繼續對話',
     chatDetail: '聊天詳情',
     deleteConfirm: '確定刪除角色「{name}」嗎？此操作無法復原。',
     dialogCreate: '建立角色',
@@ -168,10 +236,10 @@ export default {
     create: '建立群聊',
     join: '加入群聊',
     members: '成員',
-    placeholder: '輸入訊息，@ 可提及角色',
-    placeholderDetailed: '輸入訊息...（可 @角色）(Enter 傳送)',
-    mentionTitle: '@ 提及角色',
-    mention: '@ 提及',
+    placeholder: "輸入訊息，{'@'} 可提及角色",
+    placeholderDetailed: "輸入訊息...（可 {'@'}角色）(Enter 傳送)",
+    mentionTitle: "{'@'} 提及角色",
+    mention: "{'@'} 提及",
     connecting: '連線中...',
     connected: '已連線',
     disconnected: '未連線',

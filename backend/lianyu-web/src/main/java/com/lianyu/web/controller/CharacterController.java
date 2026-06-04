@@ -2,11 +2,12 @@ package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.Result;
-import com.lianyu.service.AiChatService;
-import com.lianyu.service.CharacterService;
-import com.lianyu.service.CharacterSquareService;
-import com.lianyu.service.FileStorageService;
+import com.lianyu.service.ai.AiChatService;
+import com.lianyu.service.character.CharacterService;
+import com.lianyu.service.square.CharacterSquareService;
+import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.dto.CharacterResponse;
+import com.lianyu.service.dto.AddCharacterFromSquareRequest;
 import com.lianyu.service.dto.CreateCharacterRequest;
 import com.lianyu.service.dto.GenerateCharacterRequest;
 import com.lianyu.service.dto.CharacterSquarePageResponse;
@@ -54,20 +55,23 @@ public class CharacterController {
             HttpServletRequest request,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(required = false) Integer size,
-            @RequestParam(required = false) String tag) {
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String keyword) {
         long userId = StpUtil.getLoginIdAsLong();
         String uiLang = request.getHeader(CharacterSquareService.HEADER_UI_LANGUAGE);
         int pageSize = size != null ? size : CharacterSquareService.SQUARE_PAGE_SIZE_DEFAULT;
-        return Result.ok(characterSquareService.listTemplatesPage(userId, uiLang, tag, page, pageSize));
+        return Result.ok(characterSquareService.listTemplatesPage(userId, uiLang, tag, keyword, page, pageSize));
     }
 
     @Operation(summary = "从角色广场加入我的角色")
     @PostMapping("/square/{templateId}/add")
     public Result<CharacterResponse> addFromSquare(@PathVariable("templateId") Long templateId,
+                                                   @Valid @RequestBody AddCharacterFromSquareRequest body,
                                                    HttpServletRequest request) {
         long userId = StpUtil.getLoginIdAsLong();
         String uiLang = request.getHeader(CharacterSquareService.HEADER_UI_LANGUAGE);
-        return Result.ok(characterSquareService.addTemplateToMyCharacters(userId, templateId, uiLang));
+        return Result.ok(characterSquareService.addTemplateToMyCharacters(
+                userId, templateId, uiLang, body.getCity()));
     }
 
     @Operation(summary = "获取角色")

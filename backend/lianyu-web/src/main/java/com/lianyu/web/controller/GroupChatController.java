@@ -2,7 +2,7 @@ package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.Result;
-import com.lianyu.service.GroupChatService;
+import com.lianyu.service.conversation.GroupChatService;
 import com.lianyu.service.dto.CharacterResponse;
 import com.lianyu.service.dto.ConversationResponse;
 import com.lianyu.service.dto.CreateGroupConversationRequest;

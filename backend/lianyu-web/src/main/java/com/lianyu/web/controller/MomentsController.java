@@ -2,8 +2,8 @@ package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.Result;
-import com.lianyu.service.MomentsCommentService;
-import com.lianyu.service.MomentsService;
+import com.lianyu.service.moments.MomentsCommentService;
+import com.lianyu.service.moments.MomentsService;
 import com.lianyu.service.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

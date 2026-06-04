@@ -11,14 +11,16 @@ if (-not (Test-Path $keysFile)) {
     exit 1
 }
 
-$keyLines = Get-Content $keysFile | Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*#' }
+$keyLines = @(Get-Content $keysFile | Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*#' })
 if ($keyLines.Count -lt 1) {
     Write-Host "No API keys in $keysFile"
     exit 1
 }
-if ($keyLines.Count -ne 10) {
-    Write-Host "WARN: expected 10 keys for DEFAULT pool, got $($keyLines.Count). Proceeding with first 10 ids."
+if ($keyLines.Count -gt 10) {
+    Write-Host "ERROR: at most 10 keys for DEFAULT pool, got $($keyLines.Count)"
+    exit 1
 }
+Write-Host "DEFAULT pool: $($keyLines.Count) active key(s), slots $($keyLines.Count + 1)-10 will be disabled."
 
 # Load LIANYU_MASTER_KEY from .env
 $envPath = Join-Path $repoRoot '.env'
@@ -33,6 +35,10 @@ if (-not $env:LIANYU_MASTER_KEY) {
     Write-Host 'LIANYU_MASTER_KEY not set in environment or .env'
     exit 2
 }
+
+# 与 platform-keys.txt 中 Key 来源一致（官方 Key 用 api.deepseek.com，中转 Key 用对应网关）
+$env:PLATFORM_VAULT_BASE_URL = 'https://api.deepseek.com'
+$env:PLATFORM_VAULT_MODEL = 'deepseek-chat'
 
 Push-Location $backend
 mvn -q -pl lianyu-security compile -DskipTests
@@ -51,6 +57,11 @@ if (Test-Path $envPath) {
         if ($_ -match '^\s*MYSQL_PASSWORD=(.+)\s*$') { $mysqlPass = $Matches[1].Trim() }
     }
 }
-Get-Content $sqlFile -Raw | docker exec -i lianyu-mysql mysql -u$mysqlUser -p$mysqlPass lianyu
+$sqlContent = Get-Content $sqlFile -Raw
+$sqlContent | docker exec -i lianyu-mysql mysql "-u$mysqlUser" "-p$mysqlPass" lianyu
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: mysql apply failed (exit $LASTEXITCODE). Is lianyu-mysql running?"
+    exit $LASTEXITCODE
+}
 Remove-Item $sqlFile -Force
 Write-Host 'DEFAULT vault pool reseeded. Restart backend and retry chat.'

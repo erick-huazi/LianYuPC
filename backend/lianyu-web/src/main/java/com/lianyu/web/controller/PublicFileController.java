@@ -1,6 +1,6 @@
 package com.lianyu.web.controller;
 
-import com.lianyu.service.FileStorageService;
+import com.lianyu.service.storage.FileStorageService;
 import io.minio.GetObjectResponse;
 import io.minio.StatObjectResponse;
 import io.swagger.v3.oas.annotations.Operation;

@@ -28,6 +28,31 @@ const routes = [
     meta: { guest: true }
   },
   {
+    path: '/launcher',
+    name: 'Launcher',
+    component: () => import('@/pages/LauncherPage.vue'),
+    meta: { public: true, chromeless: true }
+  },
+  {
+    path: '/launcher/pick',
+    name: 'LauncherPick',
+    component: () => import('@/pages/LauncherPickPage.vue'),
+    meta: { requiresAuth: true, chromeless: true }
+  },
+  {
+    path: '/quick',
+    component: () => import('@/layouts/QuickChatLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: 'chat/:id',
+        name: 'QuickChat',
+        component: () => import('@/pages/ChatPage.vue'),
+        meta: { compact: true, immersive: true, hideDock: true }
+      }
+    ]
+  },
+  {
     path: '/app',
     component: () => import('@/layouts/DefaultLayout.vue'),
     meta: { requiresAuth: true },
@@ -54,13 +79,13 @@ const routes = [
         path: 'characters/:id/detail',
         name: 'CharacterChatDetail',
         component: () => import('@/pages/CharacterChatDetailPage.vue'),
-        meta: { titleKey: 'routes.characterDetail' }
+        meta: { titleKey: 'routes.characterDetail', immersive: true }
       },
       {
         path: 'chat/:id',
         name: 'Chat',
         component: () => import('@/pages/ChatPage.vue'),
-        meta: { titleKey: 'routes.chat' }
+        meta: { titleKey: 'routes.chat', immersive: true }
       },
       {
         path: 'group-chat',
@@ -73,6 +98,12 @@ const routes = [
         name: 'Memory',
         component: () => import('@/pages/MemoryPage.vue'),
         meta: { titleKey: 'routes.memory' }
+      },
+      {
+        path: 'diary',
+        name: 'Diary',
+        component: () => import('@/pages/DiaryPage.vue'),
+        meta: { titleKey: 'routes.diary' }
       },
       {
         path: 'moments',
@@ -121,7 +152,9 @@ router.beforeEach((to, from, next) => {
     if (to.name === 'Landing' && token) {
       return next('/app')
     }
-    // Encounter 等公开页：已登录用户也可访问
+    if (to.meta.chromeless) {
+      return next()
+    }
     return next()
   }
 

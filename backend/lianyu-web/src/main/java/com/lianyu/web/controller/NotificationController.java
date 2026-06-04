@@ -2,7 +2,7 @@ package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.lianyu.common.base.Result;
-import com.lianyu.service.NotificationService;
+import com.lianyu.service.notification.NotificationService;
 import com.lianyu.service.dto.MarkNotificationReadRequest;
 import com.lianyu.service.dto.NotificationResponse;
 import com.lianyu.service.dto.PushSubscriptionRequest;

@@ -4,6 +4,7 @@ import {
   login as loginApi,
   register as registerApi,
   logout as logoutApi,
+  changePassword as changePasswordApi,
   getProfile,
   updateProfile as updateProfileApi,
   uploadProfileAvatar as uploadProfileAvatarApi
@@ -55,7 +56,9 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function register(data) {
-    await registerApi(data)
+    const res = await registerApi(data)
+    setAuth(res.token, res.tokenName, res)
+    return res
   }
 
   async function logout() {
@@ -87,9 +90,13 @@ export const useUserStore = defineStore('user', () => {
     return res
   }
 
+  async function changePassword(data) {
+    await changePasswordApi(data)
+  }
+
   return {
     token, tokenName, userId, username, nickname, avatarUrl,
     isLoggedIn, displayName,
-    setAuth, applyProfile, clearAuth, login, register, logout, fetchProfile, updateProfile, uploadAvatar
+    setAuth, applyProfile, clearAuth, login, register, logout, fetchProfile, updateProfile, uploadAvatar, changePassword
   }
 })

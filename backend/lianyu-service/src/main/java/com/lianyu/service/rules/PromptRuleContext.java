@@ -1,6 +1,6 @@
 package com.lianyu.service.rules;
 
-import com.lianyu.service.CharacterChatBehavior;
+import com.lianyu.service.character.CharacterChatBehavior;
 
 public record PromptRuleContext(
         String outputLanguage,

@@ -9,8 +9,17 @@ import router from './router'
 import { i18n } from './i18n'
 import './styles/theme.scss'
 import './styles/global.scss'
+import './styles/app-shell.scss'
 
 document.documentElement.classList.add('dark')
+
+const isElectronRuntime = typeof window !== 'undefined' && (
+  window.electronAPI?.isElectron === true
+  || /Electron/i.test(window.navigator.userAgent)
+)
+if (isElectronRuntime) {
+  document.documentElement.classList.add('is-electron')
+}
 
 const app = createApp(App)
 const pinia = createPinia()

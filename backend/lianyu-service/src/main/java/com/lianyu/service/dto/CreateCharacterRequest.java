@@ -1,8 +1,8 @@
 package com.lianyu.service.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
 import java.util.Map;
+import lombok.Data;
 
 @Data
 public class CreateCharacterRequest {

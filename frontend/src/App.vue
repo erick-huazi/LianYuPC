@@ -23,8 +23,8 @@ const elementLocaleMap = { zh: zhCn, ja, en }
 const elementLocale = computed(() => elementLocaleMap[settingsStore.uiLanguage] || zhCn)
 
 function viewKey(route) {
-  if (route?.name === 'Chat') {
-    return 'ChatPage'
+  if (route?.name === 'Chat' || route?.name === 'QuickChat') {
+    return `ChatPage-${route.params.id || ''}`
   }
   return route.path
 }

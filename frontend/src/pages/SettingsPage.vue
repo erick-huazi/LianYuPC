@@ -5,6 +5,39 @@
       <p class="page-desc">{{ t('settings.desc') }}</p>
     </header>
 
+    <!-- Desktop quick entry -->
+    <section v-if="isElectron" class="section stagger-item desktop-section">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">桌面快捷入口</h2>
+          <p class="section-desc">关闭主窗口后保留托盘与桌面 Logo，随时快速开聊</p>
+        </div>
+      </div>
+      <div class="desktop-settings glass">
+        <div class="desktop-settings__row">
+          <div>
+            <div class="desktop-settings__label">关闭主窗口时保留快捷入口</div>
+            <div class="desktop-settings__hint">关闭后最小化到托盘，不会彻底退出</div>
+          </div>
+          <el-switch v-model="desktopForm.closeToTray" @change="onDesktopChange" />
+        </div>
+        <div class="desktop-settings__row">
+          <div>
+            <div class="desktop-settings__label">显示桌面快捷 Logo</div>
+            <div class="desktop-settings__hint">在桌面显示可点击的 LianYu 图标</div>
+          </div>
+          <el-switch v-model="desktopForm.showLauncherLogo" @change="onDesktopChange" />
+        </div>
+        <div class="desktop-settings__row">
+          <div>
+            <div class="desktop-settings__label">开机自动启动</div>
+            <div class="desktop-settings__hint">登录 Windows 后自动在后台启动 LianYu</div>
+          </div>
+          <el-switch v-model="desktopForm.launchAtLogin" @change="onDesktopChange" />
+        </div>
+      </div>
+    </section>
+
     <!-- Provider Section -->
     <section class="section stagger-item">
       <div class="section-header">
@@ -115,6 +148,8 @@
           <el-input
             v-model="form.provider"
             placeholder="留空将自动命名为 Provider+编号，例如 Provider3"
+            maxlength="32"
+            show-word-limit
             :disabled="!!editingVault"
           />
           <p class="field-hint">
@@ -164,12 +199,21 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useProvidersStore } from '@/stores/providers'
+import { useDesktopStore } from '@/stores/desktop'
+import { isElectronApp } from '@/utils/electron'
 
 const { t } = useI18n()
 import { Plus, Edit, Delete, RefreshRight, Loading, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const providersStore = useProvidersStore()
+const desktopStore = useDesktopStore()
+const isElectron = isElectronApp()
+const desktopForm = reactive({
+  closeToTray: true,
+  showLauncherLogo: true,
+  launchAtLogin: false,
+})
 const dialogVisible = ref(false)
 const editingVault = ref(null)
 const submitting = ref(false)
@@ -224,9 +268,23 @@ const formRules = computed(() => ({
       : []
 }))
 
-onMounted(() => {
+onMounted(async () => {
   providersStore.fetchVaults()
+  if (isElectron) {
+    await desktopStore.syncFromMain()
+    desktopForm.closeToTray = desktopStore.closeToTray
+    desktopForm.showLauncherLogo = desktopStore.showLauncherLogo
+    desktopForm.launchAtLogin = desktopStore.launchAtLogin
+  }
 })
+
+async function onDesktopChange() {
+  await desktopStore.persist({
+    closeToTray: desktopForm.closeToTray,
+    showLauncherLogo: desktopForm.showLauncherLogo,
+    launchAtLogin: desktopForm.launchAtLogin,
+  })
+}
 
 function showAddDialog() {
   editingVault.value = null
@@ -389,6 +447,37 @@ async function handleFetchModels(provider) {
   color: $color-text-muted;
   font-size: $font-size-sm;
   margin-bottom: $space-6;
+}
+
+.desktop-section {
+  margin-bottom: $space-8;
+}
+
+.desktop-settings {
+  border-radius: $radius-lg;
+  padding: $space-4 $space-5;
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.desktop-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+}
+
+.desktop-settings__label {
+  color: $color-text-primary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+}
+
+.desktop-settings__hint {
+  color: $color-text-muted;
+  font-size: $font-size-xs;
+  margin-top: 2px;
 }
 
 // Provider grid

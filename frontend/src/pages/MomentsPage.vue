@@ -1,148 +1,302 @@
 <template>
-  <div class="moments-page stagger-container">
-    <header class="page-header">
-      <h1 class="page-title">{{ t('moments.title') }}</h1>
-      <p class="page-desc">{{ t('moments.desc') }}</p>
+  <div class="moments-page companion-page companion-feed stagger-container">
+    <header class="companion-hero stagger-item">
+      <span class="companion-eyebrow">{{ t('feed.eyebrow') }}</span>
+      <h1 class="companion-title">{{ t('moments.title') }}</h1>
+      <p class="companion-lead">{{ t('moments.desc') }}</p>
     </header>
 
-    <div class="filter-row stagger-item">
-      <el-select
-        v-model="filterCharId"
-        :placeholder="t('moments.allCharacters')"
-        clearable
-        style="width: 200px"
-        @change="reloadFeed"
-      >
-        <el-option
-          v-for="c in characters"
-          :key="c.id"
-          :label="c.name"
-          :value="c.id"
-        />
-      </el-select>
-      <el-button :icon="RefreshRight" :loading="loading" @click="reloadFeed">
-        {{ t('moments.refresh') }}
-      </el-button>
-    </div>
-
-    <div v-if="loading && posts.length === 0" class="loading-state">
-      <el-icon class="is-loading" :size="24"><Loading /></el-icon>
-      <span>{{ t('common.loading') }}</span>
-    </div>
-
-    <div v-else-if="posts.length === 0" class="empty-state glass stagger-item">
-      <div class="empty-icon">
-        <el-icon :size="40"><PictureRounded /></el-icon>
-      </div>
-      <h3>{{ t('moments.empty') }}</h3>
-      <p>{{ t('moments.emptyDesc') }}</p>
-    </div>
-
-    <div v-else class="moments-feed">
-      <article
-        v-for="(post, idx) in posts"
-        :key="post.id"
-        class="moment-card glass stagger-item"
-        :style="{ animationDelay: `${idx * 0.04}s` }"
-      >
-        <div class="moment-card__head">
-          <div class="moment-card__avatar">
-            <img v-if="post.characterAvatarUrl" :src="resolveMediaUrl(post.characterAvatarUrl)" :alt="post.characterName" />
-            <el-icon v-else :size="18"><User /></el-icon>
-          </div>
-          <div class="moment-card__meta">
-            <span class="moment-card__name">{{ post.characterName }}</span>
-            <span class="moment-card__time">{{ formatTime(post.createdAt) }}</span>
-          </div>
-          <span class="moment-card__tag" :class="`moment-card__tag--${post.postType?.toLowerCase()}`">
-            {{ typeLabel(post.postType) }}
-          </span>
-        </div>
-        <p class="moment-card__content">{{ post.content }}</p>
-
-        <section class="moment-comments">
-          <div class="moment-comments__head">
-            <span>{{ t('moments.commentsTitle') }}</span>
-            <span class="moment-comments__count">{{ commentCount(post) }}</span>
-          </div>
-
-          <div v-if="commentsLoading[post.id]" class="comments-loading">
-            <el-icon class="is-loading" :size="16"><Loading /></el-icon>
-          </div>
-
-          <ul v-else-if="getComments(post.id).length" class="comment-list">
-            <li
-              v-for="c in getComments(post.id)"
-              :key="c.id"
-              class="comment-item"
-              :class="{ 'comment-item--reply': c.parentId }"
+    <div class="moments-layout">
+      <div class="moments-main">
+        <div class="feed-toolbar stagger-item">
+          <div class="feed-chip-bar">
+            <button
+              type="button"
+              class="feed-chip"
+              :class="{ active: !filterCharId }"
+              @click="setFilter(null)"
             >
-              <div class="comment-item__avatar">
-                <img v-if="c.characterAvatarUrl" :src="resolveMediaUrl(c.characterAvatarUrl)" />
-                <el-icon v-else :size="14"><User /></el-icon>
-              </div>
-              <div class="comment-item__body">
-                <div class="comment-item__meta">
-                  <span class="comment-item__name">{{ c.characterName || t('moments.you') }}</span>
-                  <span class="comment-item__time">{{ formatTime(c.createdAt) }}</span>
+              {{ t('moments.allCharacters') }}
+            </button>
+            <button
+              v-for="c in charactersStore.list"
+              :key="c.id"
+              type="button"
+              class="feed-chip"
+              :class="{ active: filterCharId === c.id }"
+              @click="setFilter(c.id)"
+            >
+              {{ c.name }}
+            </button>
+          </div>
+          <button
+            type="button"
+            class="feed-icon-btn"
+            :class="{ spinning: loading }"
+            :aria-label="t('moments.refresh')"
+            @click="reloadFeed"
+          >
+            <el-icon :size="16"><RefreshRight /></el-icon>
+          </button>
+        </div>
+
+        <div v-if="loading && posts.length === 0" class="feed-empty glass stagger-item">
+          <el-icon class="is-loading" :size="28"><Loading /></el-icon>
+          <p>{{ t('common.loading') }}</p>
+        </div>
+
+        <div v-else-if="posts.length === 0" class="feed-empty glass stagger-item">
+          <div class="empty-icon">
+            <el-icon :size="40"><PictureRounded /></el-icon>
+          </div>
+          <h3>{{ t('moments.empty') }}</h3>
+          <p>{{ t('moments.emptyDesc') }}</p>
+        </div>
+
+        <div v-else class="social-feed">
+          <template v-for="item in feedTimeline" :key="item.key">
+            <div v-if="item.kind === 'divider'" class="feed-date-divider">
+              {{ item.label }}
+            </div>
+
+            <article
+              v-else
+              class="feed-card glass stagger-item"
+              :class="[
+                postTypeClass(item.post.postType),
+                { 'feed-hero-card': item.isHero }
+              ]"
+              :style="{ animationDelay: `${item.idx * 0.04}s` }"
+            >
+              <div class="feed-card__head">
+                <div class="feed-card__avatar">
+                  <img
+                    v-if="item.post.characterAvatarUrl"
+                    :src="resolveMediaUrl(item.post.characterAvatarUrl)"
+                    :alt="item.post.characterName"
+                  />
+                  <el-icon v-else :size="18"><User /></el-icon>
                 </div>
-                <p class="comment-item__text">{{ c.content }}</p>
-                <button type="button" class="comment-reply-btn" @click="setReplyTarget(post, c)">
-                  {{ t('moments.reply') }}
+                <div class="feed-card__meta">
+                  <span class="feed-card__name">{{ item.post.characterName }}</span>
+                  <span class="feed-card__time">{{ formatTime(item.post.createdAt) }}</span>
+                </div>
+                <span
+                  class="feed-card__badge"
+                  :class="`feed-card__badge--${item.post.postType?.toLowerCase()}`"
+                >
+                  {{ typeLabel(item.post.postType) }}
+                </span>
+              </div>
+
+              <p class="feed-card__body">{{ item.post.content }}</p>
+
+              <div
+                v-if="!expandedComments[item.post.id] && commentStripHtml(item.post)"
+                class="feed-comment-strip"
+                @click="toggleComments(item.post, true)"
+              >
+                <el-icon :size="14"><ChatDotRound /></el-icon>
+                <p v-html="commentStripHtml(item.post)" />
+              </div>
+
+              <div class="feed-card__actions">
+                <button
+                  type="button"
+                  class="feed-action-btn"
+                  :class="{ active: expandedComments[item.post.id] }"
+                  @click="toggleComments(item.post)"
+                >
+                  {{ commentActionLabel(item.post) }}
+                </button>
+                <button
+                  v-if="item.post.conversationId"
+                  type="button"
+                  class="feed-action-btn"
+                  @click="goChat(item.post)"
+                >
+                  {{ t('moments.goChat') }}
                 </button>
               </div>
-            </li>
-          </ul>
 
-          <p v-else class="comments-empty">{{ t('moments.noComments') }}</p>
+              <div v-if="expandedComments[item.post.id]" class="feed-comment-zone">
+                <div v-if="commentsLoading[item.post.id]" class="feed-comment-preview">
+                  <el-icon class="is-loading" :size="14"><Loading /></el-icon>
+                </div>
 
-          <div class="comment-compose">
-            <p v-if="replyTarget[post.id]" class="reply-hint">
-              {{ t('moments.replyingTo', { name: replyTarget[post.id].name }) }}
-              <button type="button" class="link-btn" @click="clearReply(post.id)">{{ t('common.cancel') }}</button>
-            </p>
-            <div class="comment-compose__row">
-              <el-input
-                v-model="draftByPost[post.id]"
-                type="textarea"
-                :rows="2"
-                :placeholder="t('moments.commentPlaceholder')"
-                resize="none"
-                @keydown.enter.exact.prevent="submitComment(post)"
-              />
-              <el-button
-                type="primary"
-                :loading="sending[post.id]"
-                :disabled="!draftByPost[post.id]?.trim()"
-                @click="submitComment(post)"
-              >
-                {{ t('moments.sendComment') }}
-              </el-button>
+                <ul v-else-if="getComments(item.post.id).length" class="feed-comment-list">
+                  <li
+                    v-for="c in getComments(item.post.id)"
+                    :key="c.id"
+                    class="feed-comment-item"
+                    :class="{ 'feed-comment-item--reply': c.parentId }"
+                  >
+                    <span class="feed-comment-item__name">{{ c.characterName || t('moments.you') }}</span>
+                    <span>{{ c.content }}</span>
+                    <button type="button" class="feed-comment-item__reply" @click="setReplyTarget(item.post, c)">
+                      {{ t('moments.reply') }}
+                    </button>
+                  </li>
+                </ul>
+
+                <p v-else class="feed-comment-preview">{{ t('moments.noComments') }}</p>
+
+                <div class="feed-compose">
+                  <div class="feed-compose__input">
+                    <p v-if="replyTarget[item.post.id]" class="reply-hint">
+                      {{ t('moments.replyingTo', { name: replyTarget[item.post.id].name }) }}
+                      <button type="button" class="link-btn" @click="clearReply(item.post.id)">
+                        {{ t('common.cancel') }}
+                      </button>
+                    </p>
+                    <el-input
+                      v-model="draftByPost[item.post.id]"
+                      type="textarea"
+                      :rows="1"
+                      :autosize="{ minRows: 1, maxRows: 4 }"
+                      :placeholder="t('moments.commentPlaceholder')"
+                      resize="none"
+                      @keydown.enter.exact.prevent="submitComment(item.post)"
+                    />
+                  </div>
+                  <el-button
+                    type="primary"
+                    circle
+                    :loading="sending[item.post.id]"
+                    :disabled="!draftByPost[item.post.id]?.trim()"
+                    @click="submitComment(item.post)"
+                  >
+                    <el-icon><Promotion /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+            </article>
+          </template>
+
+          <div v-if="hasMore" class="feed-load-more">
+            <button type="button" class="feed-chip" :disabled="loadingMore" @click="loadMore">
+              {{ loadingMore ? t('common.loading') : t('moments.loadMore') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="moments-atmosphere stagger-item" aria-label="companion spotlight">
+        <div
+          v-if="sidebarCompanion"
+          class="atmosphere-panel glass"
+          @click="goToCharacterChat(sidebarCompanion.characterId)"
+        >
+          <div class="atmosphere-panel__glow" aria-hidden="true" />
+          <div class="atmosphere-panel__orb atmosphere-panel__orb--a" aria-hidden="true" />
+          <div class="atmosphere-panel__orb atmosphere-panel__orb--b" aria-hidden="true" />
+
+          <div class="atmosphere-panel__portrait">
+            <img
+              v-if="sidebarCompanion.avatarUrl"
+              :src="resolveMediaUrl(sidebarCompanion.avatarUrl)"
+              :alt="sidebarCompanion.name"
+              class="atmosphere-panel__img"
+            />
+            <div v-else class="atmosphere-panel__fallback">
+              <el-icon :size="48"><User /></el-icon>
             </div>
+            <div class="atmosphere-panel__vignette" aria-hidden="true" />
+          </div>
+
+          <div class="atmosphere-panel__body">
+            <span class="atmosphere-panel__eyebrow">{{ t('home.atmosphereEyebrow') }}</span>
+            <h3 class="atmosphere-panel__name">{{ sidebarCompanion.name }}</h3>
+            <div v-if="sidebarCompanion.emotion" class="atmosphere-panel__mood">
+              <EmotionBadge
+                :current-emotion="sidebarCompanion.emotion.currentEmotion"
+                :emotion-intensity="sidebarCompanion.emotion.emotionIntensity"
+                :status-text="sidebarCompanion.emotion.statusText"
+              />
+            </div>
+            <blockquote class="atmosphere-panel__quote">
+              <p>{{ sidebarQuote }}</p>
+            </blockquote>
+            <el-button
+              type="primary"
+              class="atmosphere-panel__cta"
+              @click.stop="goToCharacterChat(sidebarCompanion.characterId)"
+            >
+              {{ t('home.atmosphereContinue') }}
+            </el-button>
+          </div>
+        </div>
+
+        <div v-else class="atmosphere-panel atmosphere-panel--empty glass">
+          <p class="atmosphere-panel__empty-title">{{ t('home.atmosphereEmptyTitle') }}</p>
+          <p class="atmosphere-panel__empty-desc">{{ t('home.atmosphereEmptyDesc') }}</p>
+          <el-button type="primary" class="atmosphere-panel__cta" @click="$router.push('/app/character-square')">
+            {{ t('home.exploreSquare') }}
+          </el-button>
+        </div>
+
+        <section v-if="activeInFeed.length > 1 && !filterCharId" class="moments-sidebar-section glass">
+          <div class="moments-sidebar-section__head">
+            <h4 class="moments-sidebar-section__title">{{ t('moments.activeCharacters') }}</h4>
+          </div>
+          <div class="moments-active-row">
+            <button
+              v-for="c in activeInFeed"
+              :key="c.id"
+              type="button"
+              class="moments-active-chip"
+              @click="setFilter(c.id)"
+            >
+              <img v-if="c.avatarUrl" :src="resolveMediaUrl(c.avatarUrl)" :alt="c.name" />
+              <span>{{ c.name }}</span>
+            </button>
           </div>
         </section>
 
-        <div v-if="post.conversationId" class="moment-card__foot">
-          <el-button text size="small" @click="goChat(post)">
-            {{ t('moments.goChat') }}
-          </el-button>
-        </div>
-      </article>
-
-      <div v-if="hasMore" class="load-more">
-        <el-button :loading="loadingMore" @click="loadMore">{{ t('moments.loadMore') }}</el-button>
-      </div>
+        <section v-if="recentDiaries.length" class="moments-sidebar-section glass">
+          <div class="moments-sidebar-section__head">
+            <h4 class="moments-sidebar-section__title">{{ t('moments.recentDiary') }}</h4>
+            <router-link to="/app/diary" class="moments-sidebar-section__link">
+              {{ t('home.feedViewAll') }}
+            </router-link>
+          </div>
+          <ul class="moments-diary-list">
+            <li
+              v-for="entry in recentDiaries"
+              :key="entry.id"
+              class="moments-diary-item"
+              @click="$router.push('/app/diary')"
+            >
+              <div class="moments-diary-item__meta">
+                <span class="moments-diary-item__name">{{ entry.characterName }}</span>
+                <span class="moments-diary-item__time">{{ formatTime(entry.createdAt) }}</span>
+              </div>
+              <p class="moments-diary-item__text">{{ entry.title || entry.content }}</p>
+            </li>
+          </ul>
+        </section>
+      </aside>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Loading, PictureRounded, RefreshRight, User } from '@element-plus/icons-vue'
-import { listCharacters } from '@/api/character'
+import {
+  ChatDotRound,
+  Loading,
+  PictureRounded,
+  Promotion,
+  RefreshRight,
+  User
+} from '@element-plus/icons-vue'
+import { createConversation } from '@/api/conversation'
+import { useCharactersStore } from '@/stores/characters'
+import { useConversationsStore } from '@/stores/conversations'
+import { listAllDiaries, listCharacterStates } from '@/api/characterState'
 import {
   addMomentComment,
   fetchMomentComments,
@@ -150,33 +304,139 @@ import {
   markMomentsSeen
 } from '@/api/moments'
 import { resolveMediaUrl } from '@/utils/media'
+import { feedDateKey, formatFeedDateLabel, formatFeedTime } from '@/utils/feedTime'
+import EmotionBadge from '@/components/EmotionBadge.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 
-const characters = ref([])
+const charactersStore = useCharactersStore()
+const conversationsStore = useConversationsStore()
 const posts = ref([])
 const filterCharId = ref(null)
 const loading = ref(false)
 const loadingMore = ref(false)
 const cursor = ref(null)
 const hasMore = ref(false)
+const emotionStates = ref([])
+const recentDiaries = ref([])
 
 const commentsByPost = ref({})
 const commentsLoading = reactive({})
 const draftByPost = reactive({})
 const replyTarget = reactive({})
 const sending = reactive({})
+const expandedComments = reactive({})
 
 let pollTimer = null
 
+const feedTimeline = computed(() => {
+  const items = []
+  if (!posts.value.length) return items
+
+  let idx = 0
+  const first = posts.value[0]
+  items.push({
+    kind: 'post',
+    post: first,
+    isHero: true,
+    key: `hero-${first.id}`,
+    idx: idx++
+  })
+
+  let lastDateKey = feedDateKey(first.createdAt)
+  for (const post of posts.value.slice(1)) {
+    const dateKey = feedDateKey(post.createdAt)
+    if (dateKey !== lastDateKey) {
+      items.push({
+        kind: 'divider',
+        label: formatFeedDateLabel(post.createdAt, t),
+        key: `date-${dateKey}`
+      })
+      lastDateKey = dateKey
+    }
+    items.push({
+      kind: 'post',
+      post,
+      isHero: false,
+      key: post.id,
+      idx: idx++
+    })
+  }
+
+  return items
+})
+
+const activeInFeed = computed(() => {
+  const ids = new Set(posts.value.map(p => p.characterId))
+  return charactersStore.list.filter(c => ids.has(c.id)).slice(0, 8)
+})
+
+const sidebarCompanion = computed(() => {
+  if (filterCharId.value) {
+    const char = charactersStore.list.find(c => c.id === filterCharId.value)
+    const emotion = emotionStates.value.find(s => s.characterId === filterCharId.value)
+    const latestPost = posts.value.find(p => p.characterId === filterCharId.value)
+    if (!char && !latestPost && !emotion) return null
+    return {
+      characterId: filterCharId.value,
+      name: char?.name || latestPost?.characterName || emotion?.characterName,
+      avatarUrl: char?.avatarUrl || latestPost?.characterAvatarUrl || emotion?.avatarUrl,
+      emotion
+    }
+  }
+
+  const first = posts.value[0]
+  if (first?.characterId) {
+    const emotion = emotionStates.value.find(s => s.characterId === first.characterId)
+    return {
+      characterId: first.characterId,
+      name: first.characterName,
+      avatarUrl: first.characterAvatarUrl,
+      emotion
+    }
+  }
+
+  const state = emotionStates.value[0]
+  if (state) {
+    const char = charactersStore.list.find(c => c.id === state.characterId)
+    return {
+      characterId: state.characterId,
+      name: state.characterName,
+      avatarUrl: state.avatarUrl || char?.avatarUrl,
+      emotion: state
+    }
+  }
+
+  return null
+})
+
+const sidebarQuote = computed(() => {
+  if (filterCharId.value) {
+    const post = posts.value.find(p => p.characterId === filterCharId.value)
+    if (post?.content) return truncateText(post.content, 140)
+    const emotion = emotionStates.value.find(s => s.characterId === filterCharId.value)
+    if (emotion?.statusText) return emotion.statusText
+  }
+
+  if (posts.value[0]?.content) return truncateText(posts.value[0].content, 140)
+
+  const emotion = sidebarCompanion.value?.emotion
+  if (emotion?.statusText) return emotion.statusText
+
+  return t('home.atmosphereFallbackQuote')
+})
+
 onMounted(async () => {
   try {
-    characters.value = await listCharacters() || []
+    await charactersStore.fetchList()
   } catch {
-    characters.value = []
+    charactersStore.invalidate()
   }
-  await reloadFeed()
+  await Promise.all([
+    reloadFeed(),
+    loadSidebarData()
+  ])
   try {
     await markMomentsSeen()
   } catch {
@@ -189,11 +449,29 @@ onUnmounted(() => {
   stopCommentPolling()
 })
 
+async function loadSidebarData() {
+  await conversationsStore.fetchList().catch(() => [])
+  try {
+    const states = await listCharacterStates({ silent: true })
+    emotionStates.value = Array.isArray(states) ? states : []
+  } catch {
+    emotionStates.value = []
+  }
+  try {
+    const diaries = await listAllDiaries({ page: 1, size: 3 }, { silent: true })
+    recentDiaries.value = Array.isArray(diaries) ? diaries.slice(0, 3) : []
+  } catch {
+    recentDiaries.value = []
+  }
+}
+
 function startCommentPolling() {
   stopCommentPolling()
   pollTimer = setInterval(() => {
     for (const post of posts.value) {
-      loadComments(post.id, true)
+      if (expandedComments[post.id]) {
+        loadComments(post.id, true)
+      }
     }
   }, 4000)
 }
@@ -205,11 +483,18 @@ function stopCommentPolling() {
   }
 }
 
+function setFilter(id) {
+  if (filterCharId.value === id) return
+  filterCharId.value = id
+  reloadFeed()
+}
+
 async function reloadFeed() {
   loading.value = true
   cursor.value = null
   posts.value = []
   commentsByPost.value = {}
+  Object.keys(expandedComments).forEach(k => delete expandedComments[k])
   try {
     const data = await fetchMomentsFeed({
       characterId: filterCharId.value || undefined,
@@ -220,7 +505,7 @@ async function reloadFeed() {
     hasMore.value = !!data?.hasMore
     for (const post of posts.value) {
       if (draftByPost[post.id] === undefined) draftByPost[post.id] = ''
-      await loadComments(post.id, false)
+      await loadComments(post.id, true)
     }
   } finally {
     loading.value = false
@@ -242,7 +527,7 @@ async function loadMore() {
     hasMore.value = !!data?.hasMore
     for (const post of items) {
       if (draftByPost[post.id] === undefined) draftByPost[post.id] = ''
-      await loadComments(post.id, false)
+      await loadComments(post.id, true)
     }
   } finally {
     loadingMore.value = false
@@ -275,7 +560,51 @@ function commentCount(post) {
   return post.commentCount ?? 0
 }
 
+function commentActionLabel(post) {
+  const n = commentCount(post)
+  if (expandedComments[post.id]) return t('feed.hideComments')
+  if (n > 0) return t('feed.commentCount', { n })
+  return t('feed.addComment')
+}
+
+function commentStripHtml(post) {
+  const comments = getComments(post.id)
+  const count = commentCount(post)
+  if (count === 0) return ''
+
+  if (comments.length === 0) {
+    return escapeHtml(t('feed.commentCount', { n: count }))
+  }
+
+  const latest = comments[comments.length - 1]
+  const name = latest.characterName || t('moments.you')
+  const text = latest.content.length > 56 ? `${latest.content.slice(0, 56)}…` : latest.content
+  let html = `<strong>${escapeHtml(name)}</strong> ${escapeHtml(text)}`
+
+  if (count > 1) {
+    html += ` · ${escapeHtml(t('feed.moreComments', { n: count - 1 }))}`
+  }
+  return html
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+async function toggleComments(post, open = null) {
+  const next = open ?? !expandedComments[post.id]
+  expandedComments[post.id] = next
+  if (next && !getComments(post.id).length) {
+    await loadComments(post.id, false)
+  }
+}
+
 function setReplyTarget(post, comment) {
+  expandedComments[post.id] = true
   replyTarget[post.id] = {
     commentId: comment.id,
     name: comment.characterName || t('moments.you')
@@ -301,6 +630,7 @@ async function submitComment(post) {
     draftByPost[post.id] = ''
     clearReply(post.id)
     ElMessage.success(t('moments.commentSent'))
+    expandedComments[post.id] = true
     await loadComments(post.id, true)
     setTimeout(() => loadComments(post.id, true), 2500)
     setTimeout(() => loadComments(post.id, true), 6000)
@@ -309,6 +639,14 @@ async function submitComment(post) {
   } finally {
     sending[post.id] = false
   }
+}
+
+function postTypeClass(type) {
+  const key = type?.toLowerCase()
+  if (key === 'mood' || key === 'reflection' || key === 'system') {
+    return `feed-card--${key}`
+  }
+  return ''
 }
 
 function typeLabel(type) {
@@ -321,309 +659,64 @@ function typeLabel(type) {
 }
 
 function formatTime(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const now = new Date()
-  const sameDay = d.toDateString() === now.toDateString()
-  if (sameDay) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatFeedTime(iso, t)
+}
+
+function truncateText(text, maxLen) {
+  if (!text) return ''
+  const trimmed = text.trim()
+  if (trimmed.length <= maxLen) return trimmed
+  return `${trimmed.slice(0, maxLen)}…`
 }
 
 function goChat(post) {
   if (!post.conversationId) return
   router.push(`/app/chat/${post.conversationId}`)
 }
+
+async function goToCharacterChat(characterId) {
+  if (!characterId) return
+  try {
+    const convs = await conversationsStore.fetchList()
+    const existing = (convs || []).find(c => c.mode === 'SINGLE' && c.characterId === characterId)
+    if (existing) {
+      router.push({ path: `/app/chat/${existing.id}` })
+      return
+    }
+    const created = await createConversation({ characterId, mode: 'SINGLE' })
+    router.push({ path: `/app/chat/${created.id}` })
+  } catch {
+    router.push('/app/characters')
+  }
+}
 </script>
 
 <style lang="scss" scoped>
-.moments-page {
-  max-width: 720px;
+.empty-icon {
+  width: 72px;
+  height: 72px;
   margin: 0 auto;
-  padding: 24px 20px 48px;
-}
-
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-title {
-  margin: 0 0 8px;
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.page-desc {
-  margin: 0;
-  font-size: 0.88rem;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.filter-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.loading-state,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 48px 24px;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.empty-state h3 {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 0.85rem;
-  max-width: 320px;
-}
-
-.moments-feed {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.moment-card {
-  padding: 16px 18px;
   border-radius: $radius-lg;
-}
-
-.moment-card__head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.moment-card__avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba($color-pink-rgb, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-}
-
-.moment-card__meta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.moment-card__name {
-  font-weight: 600;
-  font-size: 0.92rem;
-}
-
-.moment-card__time {
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.moment-card__tag {
-  flex-shrink: 0;
-  font-size: 0.68rem;
-  padding: 4px 10px;
-  border-radius: $radius-pill;
-  letter-spacing: 0.04em;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
-
-  &--mood {
-    background: rgba(244, 166, 181, 0.15);
-    color: #f4a6b5;
-  }
-
-  &--reflection {
-    background: rgba(147, 197, 253, 0.12);
-    color: #93c5fd;
-  }
-
-  &--system {
-    background: rgba(167, 139, 250, 0.12);
-    color: #c4b5fd;
-  }
-}
-
-.moment-card__content {
-  margin: 0 0 12px;
-  line-height: 1.65;
-  font-size: 0.92rem;
-  color: rgba(255, 255, 255, 0.88);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.moment-comments {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.moment-comments__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.moment-comments__count {
-  font-size: 0.72rem;
-  padding: 2px 8px;
-  border-radius: $radius-pill;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.comments-loading {
-  padding: 8px 0;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.comments-empty {
-  margin: 0 0 10px;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.comment-list {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.comment-item {
-  display: flex;
-  gap: 10px;
-
-  &--reply {
-    margin-left: 20px;
-  }
-}
-
-.comment-item__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-}
-
-.comment-item__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.comment-item__meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.comment-item__name {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.comment-item__time {
-  font-size: 0.68rem;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.comment-item__text {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.comment-reply-btn {
-  margin-top: 4px;
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: 0.72rem;
-  color: rgba(244, 166, 181, 0.85);
-  cursor: pointer;
-}
-
-.comment-compose {
-  margin-top: 8px;
+  color: $color-pink-primary;
 }
 
 .reply-hint {
-  margin: 0 0 6px;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 $space-2;
+  font-size: $font-size-xs;
+  color: $color-text-muted;
 }
 
 .link-btn {
-  margin-left: 8px;
+  margin-left: $space-2;
   padding: 0;
   border: none;
   background: none;
-  color: rgba(244, 166, 181, 0.9);
+  color: $color-pink-primary;
   cursor: pointer;
   font-size: inherit;
-}
-
-.comment-compose__row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.moment-card__foot {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.load-more {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 24px;
 }
 </style>

@@ -1,11 +1,15 @@
 import http from './index'
 
-export function fetchMomentsFeed(params = {}) {
-  return http.get('/moments', { params })
+function requestConfig(options = {}) {
+  return options.silent === true ? { skipGlobalError: true } : {}
 }
 
-export function fetchMomentsUnreadCount() {
-  return http.get('/moments/unread-count')
+export function fetchMomentsFeed(params = {}, options = {}) {
+  return http.get('/moments', { params, ...requestConfig(options) })
+}
+
+export function fetchMomentsUnreadCount(options = {}) {
+  return http.get('/moments/unread-count', requestConfig(options))
 }
 
 export function markMomentsSeen() {

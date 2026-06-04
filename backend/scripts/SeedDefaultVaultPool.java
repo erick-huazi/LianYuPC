@@ -41,10 +41,18 @@ public class SeedDefaultVaultPool {
                     .append(esc(baseUrl))
                     .append("', model_default='")
                     .append(esc(model))
+                    .append("', remark='default-pool-")
+                    .append(id)
                     .append("' WHERE id=")
                     .append(id)
                     .append(" AND vault_scope='DEFAULT';\n");
             id++;
+        }
+        // 池中未灌入的槽位禁用，避免轮询到旧 key
+        for (int disableId = id; disableId <= 10; disableId++) {
+            sql.append("UPDATE api_key_vault SET enabled=0, remark='pool-slot-disabled' WHERE id=")
+                    .append(disableId)
+                    .append(" AND vault_scope='DEFAULT';\n");
         }
         Files.writeString(Path.of(args[1]), sql.toString());
         System.out.println("keys=" + keys.size() + " sql=" + args[1]);

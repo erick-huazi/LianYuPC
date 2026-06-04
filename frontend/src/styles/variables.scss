@@ -85,6 +85,9 @@ $transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
 // --- Layout ---
 $header-height: 64px;
+$app-dock-height: 72px;
+$app-dock-wheel-clearance: 96px;
+$app-dock-offset: calc(#{$app-dock-height} + #{$app-dock-wheel-clearance} + #{$space-4});
 $sidebar-width: 260px;
 $sidebar-collapsed: 72px;
 $max-content-width: 1200px;

@@ -8,7 +8,10 @@
         <span aria-hidden="true">←</span>
         返回首页
       </button>
-      <span class="encounter-nav__brand">恋语 · 邂逅</span>
+      <span class="encounter-nav__brand">
+        <img :src="APP_LOGO" alt="" class="encounter-nav__logo" aria-hidden="true" />
+        恋语 · 邂逅
+      </span>
       <div class="encounter-nav__actions">
         <button type="button" class="btn btn-ghost" @click="goLogin">登录</button>
         <button type="button" class="btn btn-solid" @click="goRegister">注册</button>
@@ -44,6 +47,7 @@
 <script setup>
 import { onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { APP_LOGO } from '@/constants/brand.js'
 import LandingCastShowcase from '@/components/landing/LandingCastShowcase.vue'
 import {
   ENCOUNTER_ROLES,
@@ -135,10 +139,20 @@ function goRegister() {
 }
 
 .encounter-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--landing-font-display);
   font-size: 0.9rem;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.encounter-nav__logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .encounter-nav__actions {

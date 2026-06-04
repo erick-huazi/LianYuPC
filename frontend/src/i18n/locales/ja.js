@@ -10,13 +10,17 @@ export default {
   },
   nav: {
     home: 'ホーム',
-    characterSquare: 'キャラ広場',
-    characters: 'キャラ',
+    characterSquare: '広場',
+    characters: '絆',
     groupChat: 'グループ',
-    moments: 'モーメンツ',
+    moments: 'フィード',
+    diary: '日記',
     memory: '記憶',
-    profile: 'プロフィール',
-    settings: '設定'
+    profile: 'マイ',
+    settings: '設定',
+    more: 'その他',
+    menuHub: 'ナビ',
+    menuClose: '閉じる'
   },
   routes: {
     home: 'ホーム',
@@ -26,6 +30,7 @@ export default {
     chat: 'チャット',
     groupChat: 'グループ',
     moments: 'モーメンツ',
+    diary: '日記',
     memory: '記憶',
     profile: 'プロフィール',
     settings: '設定'
@@ -39,6 +44,14 @@ export default {
     enableBrowserNotify: 'システム通知を許可',
     pushOff: 'オフラインプッシュをオフ',
     pushOn: 'オフラインプッシュをオン',
+    pushHint: 'オフラインプッシュは既定でオンです。ベルから管理またはオフにできます',
+    pushEnabledSuccess: 'オフラインプッシュを有効にしました',
+    pushEnabledDesktop: 'オフラインプッシュを有効にしました。バックグラウンドでも通知されます',
+    pushDisabledSuccess: 'オフラインプッシュを無効にしました',
+    pushPermissionDenied: '先にシステム通知の許可をしてください',
+    pushUnsupported: 'この環境では Web Push に対応していません。デスクトップ版をご利用ください',
+    pushNoPublicKey: 'サーバー側でプッシュが設定されていません',
+    pushSubscribeFailed: 'プッシュ登録に失敗しました。しばらくしてから再試行してください',
     logout: 'ログアウト',
     profile: 'プロフィール'
   },
@@ -49,6 +62,15 @@ export default {
     bgCool: '背景 · 寒色',
     btnWarm: 'ボタン · 暖色',
     reset: 'デフォルトに戻す'
+  },
+  onboarding: {
+    themeHint: 'ここをタップしてテーマ配色を変更',
+    squareHint: 'どのキャラにしようか迷ったら、広場を見てみて',
+    groupMentionHint: 'ここをタップして @ でキャラを指定'
+  },
+  launcher: {
+    newMessageHint: '{name}からメッセージが届いたよ',
+    defaultCharacterName: '彼女'
   },
   common: {
     loading: '読み込み中...',
@@ -82,7 +104,18 @@ export default {
     goCharacters: 'キャラ管理へ',
     statCharacters: 'キャラ',
     statConversations: '会話',
-    statTodayMessages: '今日のメッセージ'
+    statTodayMessages: '今日のメッセージ',
+    feedEmpty: 'まだ新着はありません。会話を始めましょう',
+    atmosphereEyebrow: 'いま、そばに',
+    atmosphereContinue: '話しかける',
+    atmosphereFallbackQuote: 'あなたに伝えたいことがあるのに、言葉が見つからない……',
+    atmosphereEmptyTitle: 'まだ絆がありません',
+    atmosphereEmptyDesc: '広場で最初のキャラに出会うと、ここに彼女の姿が映ります。',
+    moodSection: '今の気分',
+    exploreSquare: '広場を見る',
+    discoverSection: '発見',
+    feedSection: '最新',
+    feedViewAll: 'すべて見る'
   },
   auth: {
     brandLogin: '心のままに、語り合おう',
@@ -106,6 +139,9 @@ export default {
     title: 'キャラ広場',
     desc: 'プリセットキャラを選んでマイキャラに追加',
     allTags: 'すべて',
+    searchPlaceholder: 'キャラ名で検索',
+    searchEmptyTitle: 'キャラが見つかりません',
+    searchEmptyDesc: 'このキャラはまだ追加されていません。開発チームへの追加依頼をお願いします。',
     add: 'マイキャラに追加',
     added: '追加済み',
     preview: 'プレビュー',
@@ -117,6 +153,11 @@ export default {
     goCharacters: 'キャラ管理へ',
     chatNow: '今すぐチャット',
     alreadyAdded: 'このキャラは既に追加済みです',
+    cityPromptTitle: 'お住まいの都市',
+    cityPromptMessage: '現地の時刻と天気を正確に反映するため、都市名を入力してください。',
+    cityPlaceholder: '例：上海、北京、広州',
+    cityRequired: '都市を入力してください',
+    confirmAdd: '追加する',
     emptyTitle: 'キャラがありません',
     emptyDesc: '後でもう一度お試しください'
   },
@@ -128,6 +169,10 @@ export default {
     emptyDesc: '最初の AI キャラを作成し、性格と話し方を設定しましょう',
     noPrompt: '性格プロンプト未設定',
     noMessagesYet: 'まだメッセージがありません',
+    noCharacterLineYet: 'まだ彼女からの言葉はありません。話しかけてみましょう',
+    hoverHint: '左のカードにカーソルを合わせると、最近の一言が表示されます',
+    lastLineEyebrow: '最近の一言',
+    continueChat: '会話を続ける',
     chatDetail: 'チャット詳細',
     deleteConfirm: 'キャラ「{name}」を削除しますか？元に戻せません。',
     dialogCreate: 'キャラ作成',
@@ -146,10 +191,10 @@ export default {
     create: 'グループ作成',
     join: 'グループに参加',
     members: 'メンバー',
-    placeholder: 'メッセージ入力。@ でキャラに言及',
-    placeholderDetailed: 'メッセージ入力…（@で言及、Enterで送信）',
-    mentionTitle: '@ キャラに言及',
-    mention: '@ 言及',
+    placeholder: "メッセージ入力。{'@'} でキャラに言及",
+    placeholderDetailed: "メッセージ入力…（{'@'}で言及、Enterで送信）",
+    mentionTitle: "{'@'} キャラに言及",
+    mention: "{'@'} 言及",
     connecting: '接続中...',
     connected: '接続済み',
     disconnected: '未接続',
@@ -208,7 +253,28 @@ export default {
     commentSent: 'コメントを送信しました。キャラが返信するかもしれません',
     reply: '返信',
     replyingTo: '{name} に返信',
-    you: 'あなた'
+    you: 'あなた',
+    activeCharacters: 'フィードのキャラ',
+    recentDiary: '最近の日記'
+  },
+  feed: {
+    eyebrow: '陪伴の時間',
+    today: '今日',
+    yesterdayLabel: '昨日',
+    yesterday: '昨日 {time}',
+    commentCount: 'コメント {n}件',
+    moreComments: '他 {n}件',
+    addComment: 'コメント',
+    hideComments: 'コメントを閉じる',
+    typeDiary: '日記',
+    typeMoment: 'モーメント'
+  },
+  diary: {
+    title: 'キャラ日記',
+    desc: '深夜に綴られた心の独白。あなただけに',
+    badge: '日記',
+    empty: '日記はまだありません',
+    emptyDesc: 'もっと会話すると、毎晩日記を書いてくれます'
   },
   settings: {
     title: '設定',
