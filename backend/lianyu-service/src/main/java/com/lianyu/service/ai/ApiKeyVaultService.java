@@ -260,7 +260,7 @@ public class ApiKeyVaultService {
                 .userId(vault.getUserId())
                 .vaultScope(vault.getVaultScope())
                 .provider(vault.getProvider())
-                .apiKey(decrypted)
+                .apiKey(maskApiKey(decrypted))
                 .baseUrl(vault.getBaseUrl())
                 .modelDefault(vault.getModelDefault())
                 .enabled(vault.getEnabled())
@@ -269,6 +269,18 @@ public class ApiKeyVaultService {
                 .createdAt(vault.getCreatedAt())
                 .updatedAt(vault.getUpdatedAt())
                 .build();
+    }
+
+    /**
+     * 仅供内部聊天连接用，返回明文 API Key。
+     * 不得将此返回值存入 DTO 或序列化到日志。
+     */
+    public String decryptKeyForChat(Long vaultId) {
+        ApiKeyVault vault = vaultMapper.selectById(vaultId);
+        if (vault == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "Vault 配置不存在");
+        }
+        return decryptApiKeyOrThrow(vault.getApiKeyEncrypted());
     }
 
     /**

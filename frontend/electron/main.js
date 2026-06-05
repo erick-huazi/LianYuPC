@@ -44,7 +44,7 @@ const SHARED_WEB_PREFS = {
   preload: path.join(__dirname, 'preload.cjs'),
   contextIsolation: true,
   nodeIntegration: false,
-  sandbox: false,
+    sandbox: true,
   partition: 'persist:lianyu',
 }
 
@@ -743,10 +743,12 @@ app.whenReady().then(() => {
   createMainWindow()
   ensureTray()
 
-  globalShortcut.register('F12', () => {
-    const win = BrowserWindow.getFocusedWindow()
-    win?.webContents.toggleDevTools()
-  })
+    if (isDebug) {
+      globalShortcut.register('F12', () => {
+        const win = BrowserWindow.getFocusedWindow()
+        win?.webContents.toggleDevTools()
+      })
+    }
 
   app.on('activate', () => {
     showMainWindow()

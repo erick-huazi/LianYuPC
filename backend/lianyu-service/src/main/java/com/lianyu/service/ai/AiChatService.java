@@ -134,7 +134,7 @@ public class AiChatService {
         VaultEntryResponse vault = resolveVault(userId, request.getProvider());
         String model = resolveModel(request, vault);
         logChatVaultUsage(userId, request.getProvider(), vault, model, "stream");
-        ChatModel chatModel = buildChatModel(vault, model);
+        ChatModel chatModel = buildChatModel(vault, model, vaultService.decryptKeyForChat(vault.getId()));
 
         SseEmitter emitter = new SseEmitter(300_000L);
         StringBuilder contentBuffer = new StringBuilder();
@@ -191,7 +191,7 @@ public class AiChatService {
                                     circuitBreaker.executeCallable(() -> {
                                         VaultEntryResponse vault = resolveVault(userId, request.getProvider());
                                         String model = resolveModel(request, vault);
-                                        ChatModel chatModel = buildChatModel(vault, model);
+                                        ChatModel chatModel = buildChatModel(vault, model, vaultService.decryptKeyForChat(vault.getId()));
 
                                         return withChatToolScope(userId, request, () -> {
                                         List<Message> messages = toSpringMessages(request.getMessages());
@@ -286,7 +286,7 @@ public class AiChatService {
 
     private Map<String, Object> generateCharacterWithVault(VaultEntryResponse vault, String description) {
         String model = resolveGenerationModel(vault);
-        ChatModel chatModel = buildChatModel(vault, model);
+        ChatModel chatModel = buildChatModel(vault, model, vaultService.decryptKeyForChat(vault.getId()));
 
         String sysPrompt = """
                 你是“虚拟恋人角色设定助手”。任务是根据用户提供的动漫/游戏/小说角色信息，生成可直接用于AI角色扮演的设定。
@@ -317,7 +317,7 @@ public class AiChatService {
                 String fallbackModel = "deepseek-chat";
                 log.warn("Character generation retry with fallback model={}, provider={}",
                         fallbackModel, vault.getProvider());
-                response = buildChatModel(vault, fallbackModel)
+                response = buildChatModel(vault, fallbackModel, vaultService.decryptKeyForChat(vault.getId()))
                         .call(buildGenerationPrompt(vault, fallbackModel, messages));
                 model = fallbackModel;
             } else {
@@ -450,7 +450,7 @@ public class AiChatService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "图片识别功能未启用");
         }
         VaultEntryResponse visionVault = buildVisionVault();
-        ChatModel chatModel = buildChatModel(visionVault, visionModel);
+        ChatModel chatModel = buildChatModel(visionVault, visionModel, visionVault.getApiKey());
 
         MessageDto imageDto = new MessageDto();
         imageDto.setRole("user");
@@ -782,9 +782,8 @@ public class AiChatService {
         return msg != null && !msg.isBlank() ? msg : "AI 服务调用失败";
     }
 
-    private ChatModel buildChatModel(VaultEntryResponse vault, String model) {
+    private ChatModel buildChatModel(VaultEntryResponse vault, String model, String apiKey) {
         String baseUrl = vault.getBaseUrl();
-        String apiKey = vault.getApiKey();
         if (!ApiKeyVaultService.isOllamaEndpoint(baseUrl)) {
             String resolved = baseUrl != null && !baseUrl.isBlank() ? baseUrl : platformBaseUrl;
             OutboundUrlValidator.validateAndNormalize(resolved, false);

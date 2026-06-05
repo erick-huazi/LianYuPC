@@ -50,8 +50,9 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MILVUS_HOST: milvus
       SERVER_PORT: 8080
+    # 仅绑定本机，避免公网明文 HTTP 绕过 Nginx TLS（云端经 frontend:443 反代 backend:8080）
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy
@@ -93,7 +94,7 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${MYSQL_PORT:-3307}:3306"
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -108,7 +109,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -125,8 +126,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "15672:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -144,8 +145,8 @@ services:
       ETCD_USE_EMBED: "true"
       COMMON_STORAGETYPE: local
     ports:
-      - "${MILVUS_PORT:-19530}:19530"
-      - "9091:9091"
+      - "127.0.0.1:${MILVUS_PORT:-19530}:19530"
+      - "127.0.0.1:9091:9091"
     volumes:
       - milvus_data:/var/lib/milvus
     healthcheck:
@@ -164,8 +165,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:

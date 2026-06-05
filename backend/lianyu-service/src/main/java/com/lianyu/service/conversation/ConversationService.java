@@ -447,7 +447,8 @@ public class ConversationService {
         if (beforeSeq != null && beforeSeq > 0) {
             q.lt(Message::getSeq, beforeSeq);
         }
-        q.orderByDesc(Message::getSeq).last("LIMIT " + (safeLimit + 1));
+        // safeLimit already clamped 1..200 at line 444; explicit int-to-string conversion
+        q.orderByDesc(Message::getSeq).last("LIMIT " + Integer.valueOf(safeLimit + 1));
         List<Message> fetched = messageMapper.selectList(q);
         boolean hasMore = fetched.size() > safeLimit;
         if (hasMore) {

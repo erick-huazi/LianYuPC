@@ -1,7 +1,10 @@
 package com.lianyu.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.lianyu.common.base.ErrorCode;
 import com.lianyu.common.base.Result;
+import com.lianyu.common.exception.BusinessException;
+import com.lianyu.service.auth.AuthRateLimiter;
 import com.lianyu.service.conversation.ConversationService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.dto.*;
@@ -9,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,6 +29,9 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final FileStorageService fileStorageService;
+    private final AuthRateLimiter authRateLimiter;
+    @Value("${lianyu.auth.rate-limit.messages-per-user-per-minute:60}")
+    private int messagesPerUserPerMinute;
 
     @Operation(summary = "创建会话")
     @PostMapping
@@ -59,6 +66,9 @@ public class ConversationController {
     @PostMapping("/chat-image")
     public Result<Map<String, String>> uploadChatImage(@RequestParam("file") MultipartFile file) {
         StpUtil.checkLogin();
+        long userId = StpUtil.getLoginIdAsLong();
+        authRateLimiter.checkRateLimit("rate:msg:", String.valueOf(userId),
+                messagesPerUserPerMinute, java.time.Duration.ofMinutes(1), "发送消息过于频繁，请稍后再试");
         String imageUrl = fileStorageService.uploadChatImage(file);
         return Result.ok(Map.of("imageUrl", imageUrl));
     }
@@ -68,6 +78,8 @@ public class ConversationController {
     public Result<MessageResponse> sendMessage(@PathVariable("id") Long id,
                                                @Valid @RequestBody SendMessageRequest request) {
         long userId = StpUtil.getLoginIdAsLong();
+        authRateLimiter.checkRateLimit("rate:msg:", String.valueOf(userId),
+                messagesPerUserPerMinute, java.time.Duration.ofMinutes(1), "发送消息过于频繁，请稍后再试");
         return Result.ok(conversationService.sendMessage(userId, id, request));
     }
 
@@ -76,6 +88,8 @@ public class ConversationController {
     public SseEmitter sendMessageStream(@PathVariable("id") Long id,
                                          @Valid @RequestBody SendMessageRequest request) {
         long userId = StpUtil.getLoginIdAsLong();
+        authRateLimiter.checkRateLimit("rate:msg:", String.valueOf(userId),
+                messagesPerUserPerMinute, java.time.Duration.ofMinutes(1), "发送消息过于频繁，请稍后再试");
         return conversationService.sendMessageStream(userId, id, request);
     }
 

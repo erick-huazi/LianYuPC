@@ -56,7 +56,7 @@ public class FileStorageService {
         } catch (Exception e) {
             log.error("Avatar upload failed", e);
             throw new com.lianyu.common.exception.BusinessException(
-                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "头像上传失败: " + e.getMessage());
+                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "头像上传失败，请稍后再试");
         }
     }
 
@@ -80,7 +80,7 @@ public class FileStorageService {
         } catch (Exception e) {
             log.error("Chat background upload failed", e);
             throw new com.lianyu.common.exception.BusinessException(
-                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "聊天背景上传失败: " + e.getMessage());
+                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "聊天背景上传失败，请稍后再试");
         }
     }
 
@@ -150,7 +150,7 @@ public class FileStorageService {
         } catch (Exception e) {
             log.error("Square avatar upload failed: slug={}", slug, e);
             throw new com.lianyu.common.exception.BusinessException(
-                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "广场头像上传失败: " + e.getMessage());
+                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "广场头像上传失败，请稍后再试");
         }
     }
 
@@ -178,7 +178,7 @@ public class FileStorageService {
         } catch (Exception e) {
             log.error("Chat image upload failed", e);
             throw new com.lianyu.common.exception.BusinessException(
-                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "图片上传失败: " + e.getMessage());
+                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "图片上传失败，请稍后再试");
         }
     }
 

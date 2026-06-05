@@ -43,4 +43,17 @@ public class AuthRateLimiter {
             throw new BusinessException(ErrorCode.AUTH_RATE_LIMITED, message);
         }
     }
+
+    /**
+     * 通用限流：指定 key、最大次数、窗口时间。
+     * @param rateKey Redis key 前缀
+     * @param identity 限流对象标识（user ID / IP）
+     * @param max 窗口内最大请求数
+     * @param ttl 窗口时长
+     * @param message 超出时的提示语
+     */
+    public void checkRateLimit(String rateKey, String identity, int max, Duration ttl, String message) {
+        if (identity == null || identity.isBlank()) return;
+        incrementOrThrow(rateKey + identity.trim(), max, ttl, message);
+    }
 }
