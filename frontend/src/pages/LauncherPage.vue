@@ -152,7 +152,7 @@ body:has(.pet-root),
 .pet-body {
   width: 192px;
   height: 208px;
-  background-image: url('/pet/kurumi_pixel_sprite.webp');
+  background-image: url('/pet/raiden_spritesheet.webp');
   background-size: 1536px 208px;
   background-repeat: no-repeat;
   background-position: 0 0;
