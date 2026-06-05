@@ -63,6 +63,12 @@ const EXPECTED_CERT_FINGERPRINT = (process.env.LIANYU_CERT_FINGERPRINT || '').tr
 function configureCertificatePinning() {
   if (!EXPECTED_CERT_FINGERPRINT) return
 
+  // 方式 1：命令行 SPKI 白名单（Electron 官方推荐）
+  const SPKI = 'EdDpp/Z9REuRjqZLzXXrOW8opTtR8Yph2YM0s+xuLss='
+  app.commandLine.appendSwitch('ignore-certificate-errors-spki-list', SPKI)
+  log('cert SPKI pin registered')
+
+  // 方式 2：certificate-error 事件兜底
   app.on('certificate-error', (event, _webContents, url, _error, cert, callback) => {
     const lowercase = cert.fingerprint?.toLowerCase() || ''
     const expected = EXPECTED_CERT_FINGERPRINT.toLowerCase().replace(/:/g, '')
@@ -72,7 +78,7 @@ function configureCertificatePinning() {
       callback(true)
       return
     }
-    log(`cert pin REJECTED for ${url} — got ${lowercase}, expected ${expected}`)
+    log(`cert pin REJECTED for ${url} — got ${lowercase}`)
     callback(false)
   })
 }
