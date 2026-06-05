@@ -1,35 +1,38 @@
 <template>
-  <div class="launcher-page" @contextmenu.prevent="onContextMenu">
-    <transition name="launcher-toast-fade">
-      <div v-if="toastText" class="launcher-page__toast" role="status">
+  <div ref="containerRef" class="pet-root" @contextmenu.prevent="onContextMenu">
+    <transition name="pet-toast-fade">
+      <div v-if="toastText" class="pet-toast" role="status">
         {{ toastText }}
       </div>
     </transition>
-    <button
-      type="button"
-      class="launcher-page__logo"
+    <div
+      class="pet-body"
       :class="{ 'is-shaking': shaking }"
       title="点击快速聊天，按住拖动"
       @pointerdown.prevent="onPointerDown"
     >
-      <img :src="APP_LOGO" alt="LianYu" draggable="false" />
-    </button>
+      <img :src="PET_IMAGE" alt="Tokisaki Kurumi" draggable="false" class="pet-img" />
+      <div class="pet-shadow"></div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { APP_LOGO } from '@/constants/brand.js'
+import { gsap } from 'gsap'
+import { PET_IMAGE } from '@/constants/brand.js'
 import { getElectronAPI } from '@/utils/electron'
 
 const { t } = useI18n()
+const containerRef = ref(null)
 const pointerState = ref(null)
 const shaking = ref(false)
 const toastText = ref('')
 let shakeTimer = null
 let toastTimer = null
 let unsubscribeLauncherMessage = null
+let gsapCtx = null
 
 function onPointerDown(e) {
   if (e.button !== 0) return
@@ -91,6 +94,18 @@ function showNewMessageHint(payload = {}) {
 }
 
 onMounted(() => {
+  if (containerRef.value) {
+    gsapCtx = gsap.context(() => {
+      gsap.to('.pet-body', {
+        y: -4,
+        duration: 2.2,
+        ease: 'sine.inOut',
+        yoyo: true,
+        repeat: -1,
+        force3D: false,
+      })
+    }, containerRef.value)
+  }
   unsubscribeLauncherMessage = getElectronAPI()?.onLauncherNewMessage?.(showNewMessageHint)
 })
 
@@ -98,91 +113,116 @@ onUnmounted(() => {
   clearTimeout(shakeTimer)
   clearTimeout(toastTimer)
   unsubscribeLauncherMessage?.()
+  gsapCtx?.revert()
 })
 </script>
 
 <style lang="scss">
-html:has(.launcher-page),
-body:has(.launcher-page),
-#app:has(.launcher-page) {
+html:has(.pet-root),
+body:has(.pet-root),
+#app:has(.pet-root) {
   background: transparent !important;
   overflow: hidden;
 }
 </style>
 
 <style lang="scss" scoped>
-.launcher-page {
+.pet-root {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   justify-content: flex-end;
-  padding: 6px;
   box-sizing: border-box;
+  user-select: none;
 }
 
-.launcher-page__toast {
-  align-self: stretch;
+.pet-toast {
+  max-width: 100%;
   margin-bottom: 6px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 12px;
-  background: rgba(14, 14, 22, 0.94);
+  background: rgba(14, 14, 22, 0.92);
   border: 1px solid rgba(236, 72, 153, 0.28);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   color: #f5f5f7;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.4;
   text-align: center;
+  word-break: break-all;
 }
 
-.launcher-page__logo {
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border: none;
-  border-radius: 16px;
-  background: rgba(10, 10, 16, 0.82);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+.pet-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   cursor: pointer;
   touch-action: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  flex-shrink: 0;
+  will-change: transform;
+}
 
-  img {
-    width: 100%;
-    height: 100%;
-    border-radius: 16px;
-    object-fit: cover;
-    display: block;
-    pointer-events: none;
+.pet-img {
+  width: 90px;
+  height: 128px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+  animation: pet-breathe 3.2s ease-in-out infinite alternate;
+}
+
+.pet-shadow {
+  width: 44px;
+  height: 8px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.35) 0%, transparent 70%);
+  animation: pet-shadow-pulse 3.2s ease-in-out infinite alternate;
+}
+
+@keyframes pet-breathe {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
   }
-
-  &:hover {
-    transform: scale(1.05);
-    box-shadow: 0 10px 28px rgba(236, 72, 153, 0.25);
-  }
-
-  &.is-shaking {
-    animation: launcher-shake 0.55s ease-in-out 2;
+  100% {
+    transform: scale(1.04);
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.4));
   }
 }
 
-@keyframes launcher-shake {
+@keyframes pet-shadow-pulse {
+  0% {
+    transform: scaleX(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scaleX(0.75);
+    opacity: 0.35;
+  }
+}
+
+.pet-body.is-shaking {
+  animation: pet-shake 0.55s ease-in-out 2;
+}
+
+@keyframes pet-shake {
   0%, 100% { transform: translateX(0) rotate(0deg); }
-  20% { transform: translateX(-3px) rotate(-4deg); }
-  40% { transform: translateX(3px) rotate(4deg); }
-  60% { transform: translateX(-2px) rotate(-3deg); }
-  80% { transform: translateX(2px) rotate(3deg); }
+  20% { transform: translateX(-4px) rotate(-5deg); }
+  40% { transform: translateX(4px) rotate(5deg); }
+  60% { transform: translateX(-3px) rotate(-4deg); }
+  80% { transform: translateX(3px) rotate(4deg); }
 }
 
-.launcher-toast-fade-enter-active,
-.launcher-toast-fade-leave-active {
+.pet-toast-fade-enter-active,
+.pet-toast-fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.launcher-toast-fade-enter-from,
-.launcher-toast-fade-leave-to {
+.pet-toast-fade-enter-from,
+.pet-toast-fade-leave-to {
   opacity: 0;
   transform: translateY(6px);
 }
