@@ -39,13 +39,20 @@ let isQuitting = false
 let pendingHideAfterHint = false
 let pickerBlurTimer = null
 let pickerOpeningUntil = 0
+let launcherIsDragging = false
 
 const SHARED_WEB_PREFS = {
   preload: path.join(__dirname, 'preload.cjs'),
   contextIsolation: true,
   nodeIntegration: false,
-    sandbox: true,
+  sandbox: true,
   partition: 'persist:lianyu',
+}
+
+/** 透明桌宠窗口：Windows 上 sandbox 会破坏透明合成，需单独关闭 */
+const LAUNCHER_WEB_PREFS = {
+  ...SHARED_WEB_PREFS,
+  sandbox: false,
 }
 
 const DEFAULT_API_ORIGIN = 'http://localhost:8080'
@@ -204,7 +211,7 @@ function resetLauncherCompactSize() {
 }
 
 function clampLauncherToWorkArea() {
-  if (!launcherWindow || launcherWindow.isDestroyed()) return
+  if (!launcherWindow || launcherWindow.isDestroyed() || launcherIsDragging) return
   const bounds = launcherWindow.getBounds()
   const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y })
   const area = display.workArea
@@ -280,6 +287,7 @@ function shouldPulseLauncherForMessage() {
 
 function expandLauncherForToast() {
   if (!launcherWindow || launcherWindow.isDestroyed() || !launcherWindow.isVisible()) return
+  if (launcherIsDragging) return
   const b = launcherWindow.getBounds()
   launcherWindow.setBounds({
     x: b.x - (LAUNCHER_EXPANDED.width - LAUNCHER_COMPACT.width),
@@ -421,12 +429,13 @@ function createLauncherWindow() {
     y: saved.y,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
     hasShadow: false,
-    webPreferences: { ...SHARED_WEB_PREFS },
+    webPreferences: { ...LAUNCHER_WEB_PREFS },
   })
   win.lianyuKind = 'launcher'
   attachWindowLogging(win, 'launcher')
@@ -443,10 +452,11 @@ function createLauncherWindow() {
 
   let moveTimer = null
   win.on('moved', () => {
-    if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()) {
+    if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible() && !launcherIsDragging) {
       repositionPickerNearLauncher()
     }
     if (moveTimer) clearTimeout(moveTimer)
+    if (launcherIsDragging) return
     moveTimer = setTimeout(() => {
       const bounds = win.getBounds()
       writeLauncherPosition(bounds.x, bounds.y)
@@ -723,12 +733,21 @@ function registerIpcHandlers() {
   ipcMain.handle('desktop:set-launcher-screen-position', (_event, { x, y }) => {
     if (!launcherWindow || launcherWindow.isDestroyed()) return
     if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    launcherIsDragging = true
     launcherWindow.setPosition(Math.round(x), Math.round(y))
     writeLauncherPosition(Math.round(x), Math.round(y))
-    repositionPickerNearLauncher()
+  })
+
+  ipcMain.handle('desktop:set-launcher-dragging', (_event, dragging) => {
+    launcherIsDragging = !!dragging
+    if (!launcherIsDragging) {
+      clampLauncherToWorkArea()
+      repositionPickerNearLauncher()
+    }
   })
 
   ipcMain.handle('desktop:clamp-launcher-position', () => {
+    launcherIsDragging = false
     clampLauncherToWorkArea()
     repositionPickerNearLauncher()
   })

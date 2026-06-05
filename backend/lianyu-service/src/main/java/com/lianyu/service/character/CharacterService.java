@@ -3,6 +3,7 @@ package com.lianyu.service.character;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lianyu.common.base.ErrorCode;
 import com.lianyu.common.exception.BusinessException;
+import com.lianyu.common.util.CharacterSettingsUtils;
 import com.lianyu.dao.entity.Character;
 import com.lianyu.dao.entity.CharacterDiary;
 import com.lianyu.dao.entity.CharacterState;
@@ -243,7 +244,7 @@ public class CharacterService {
                 .ownerUserId(entity.getOwnerUserId())
                 .name(entity.getName())
                 .avatarUrl(fileStorageService.resolvePublicUrl(entity.getAvatarUrl()))
-                .settings(entity.getSettings())
+                .settings(CharacterSettingsUtils.sanitizeSettingsForResponse(entity.getSettings()))
                 .promptTemplate(entity.getPromptTemplate())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())

@@ -261,7 +261,7 @@ public class AiChatService {
             List<ModelEntryDto> models;
             models = ApiKeyVaultService.isOllamaEndpoint(vault.getBaseUrl())
                     ? fetchOllamaModels(vault)
-                    : fetchOpenAiCompatibleModels(vault);
+                    : fetchOpenAiCompatibleModels(vault, resolveApiKeyForProvider(vault));
             cacheModels(cacheKey, models);
 
             return models;
@@ -367,14 +367,21 @@ public class AiChatService {
         return models;
     }
 
-    private List<ModelEntryDto> fetchOpenAiCompatibleModels(VaultEntryResponse vault) {
+    private String resolveApiKeyForProvider(VaultEntryResponse vault) {
+        if (vault.getId() != null) {
+            return vaultService.decryptKeyForChat(vault.getId());
+        }
+        return vault.getApiKey();
+    }
+
+    private List<ModelEntryDto> fetchOpenAiCompatibleModels(VaultEntryResponse vault, String apiKey) {
         String base = normalizeOpenAiBaseUrl(vault.getBaseUrl() != null ? vault.getBaseUrl() : platformBaseUrl);
         String url = base + "/v1/models";
 
         RestClient client = RestClient.create();
         String body = client.get()
                 .uri(url)
-                .header("Authorization", "Bearer " + vault.getApiKey())
+                .header("Authorization", "Bearer " + apiKey)
                 .retrieve()
                 .body(String.class);
 

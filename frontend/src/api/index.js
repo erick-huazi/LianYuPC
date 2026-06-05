@@ -35,7 +35,9 @@ http.interceptors.response.use(
         return Promise.reject(new Error('登录已过期，请重新登录'))
       }
       const msg = humanizeError(body.message, '请求失败，请稍后再试')
-      ElMessage.error(msg)
+      if (response.config?.skipGlobalError !== true) {
+        ElMessage.error(msg)
+      }
       return Promise.reject(new Error(msg))
     }
     // Non-Result response

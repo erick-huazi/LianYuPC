@@ -270,6 +270,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { Plus, Delete, User, Loading, ChatDotRound, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
+import { fixUtf8Mojibake } from '@/utils/textEncoding'
 import { listCharacterStates } from '@/api/characterState'
 import { getSavedUserCity, saveUserCity } from '@/utils/userCity'
 
@@ -566,10 +567,10 @@ async function confirmDelete(char) {
 function getCharMetaFields(char) {
   const s = char.settings || {}
   const fields = []
-  if (s.city) fields.push({ key: 'city', label: s.city })
-  if (s.age) fields.push({ key: 'age', label: `${s.age}岁` })
-  if (s.gender) fields.push({ key: 'gender', label: s.gender })
-  if (s.speakingStyle) fields.push({ key: 'speakingStyle', label: s.speakingStyle })
+  if (s.city) fields.push({ key: 'city', label: fixUtf8Mojibake(s.city) })
+  if (s.age) fields.push({ key: 'age', label: `${fixUtf8Mojibake(String(s.age))}岁` })
+  if (s.gender) fields.push({ key: 'gender', label: fixUtf8Mojibake(s.gender) })
+  if (s.speakingStyle) fields.push({ key: 'speakingStyle', label: fixUtf8Mojibake(s.speakingStyle) })
   return fields
 }
 

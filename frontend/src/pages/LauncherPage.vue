@@ -116,6 +116,7 @@ function onPointerMove(e) {
   if (!state.moved && (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5)) {
     state.moved = true
     dragging.value = true
+    getElectronAPI()?.setLauncherDragging?.(true)
     playAnim(totalDx >= 0 ? 'run-right' : 'run-left', { loop: true })
   }
   if (state.moved) {
@@ -139,6 +140,7 @@ function onPointerUp(e) {
     getElectronAPI()?.toggleCharacterPicker?.()
   } else {
     playAnim('idle')
+    getElectronAPI()?.setLauncherDragging?.(false)
     getElectronAPI()?.clampLauncherPosition?.()
   }
   pointerState.value = null

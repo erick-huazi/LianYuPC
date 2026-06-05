@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveLauncherPosition: (x, y) => ipcRenderer.invoke('desktop:save-launcher-position', { x, y }),
   moveLauncherByDelta: (dx, dy) => ipcRenderer.invoke('desktop:move-launcher-by-delta', { dx, dy }),
   setLauncherScreenPosition: (x, y) => ipcRenderer.invoke('desktop:set-launcher-screen-position', { x, y }),
+  setLauncherDragging: (dragging) => ipcRenderer.invoke('desktop:set-launcher-dragging', dragging),
   clampLauncherPosition: () => ipcRenderer.invoke('desktop:clamp-launcher-position'),
   setLauncherMousePassthrough: (ignore) => ipcRenderer.invoke('desktop:set-launcher-mouse-passthrough', ignore),
   notifyLauncherNewMessage: (payload) => ipcRenderer.invoke('desktop:notify-launcher-new-message', payload),

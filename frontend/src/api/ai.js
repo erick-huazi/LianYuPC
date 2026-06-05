@@ -1,7 +1,7 @@
 import http from './index'
 
 export function fetchModels(provider) {
-  return http.get('/ai/models', { params: { provider } })
+  return http.get('/ai/models', { params: { provider }, skipGlobalError: true })
 }
 
 export function chatStream(data) {
