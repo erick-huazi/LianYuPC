@@ -231,8 +231,8 @@ function buildTrayMenu() {
   ])
 }
 
-const LAUNCHER_COMPACT = { width: 100, height: 128 }
-const LAUNCHER_EXPANDED = { width: 260, height: 200 }
+const LAUNCHER_COMPACT = { width: 192, height: 208 }
+const LAUNCHER_EXPANDED = { width: 320, height: 280 }
 let launcherSizeRestoreTimer = null
 
 function shouldPulseLauncherForMessage() {

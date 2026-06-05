@@ -6,14 +6,12 @@
       </div>
     </transition>
     <div
+      ref="petRef"
       class="pet-body"
       :class="{ 'is-shaking': shaking }"
       title="点击快速聊天，按住拖动"
       @pointerdown.prevent="onPointerDown"
-    >
-      <img :src="PET_IMAGE" alt="Tokisaki Kurumi" draggable="false" class="pet-img" />
-      <div class="pet-shadow"></div>
-    </div>
+    />
   </div>
 </template>
 
@@ -21,11 +19,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { gsap } from 'gsap'
-import { PET_IMAGE } from '@/constants/brand.js'
 import { getElectronAPI } from '@/utils/electron'
 
 const { t } = useI18n()
 const containerRef = ref(null)
+const petRef = ref(null)
 const pointerState = ref(null)
 const shaking = ref(false)
 const toastText = ref('')
@@ -50,13 +48,11 @@ function onPointerDown(e) {
 function onPointerMove(e) {
   const state = pointerState.value
   if (!state) return
-
   const totalDx = e.screenX - state.startX
   const totalDy = e.screenY - state.startY
   if (!state.moved && (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5)) {
     state.moved = true
   }
-
   if (state.moved) {
     const dx = e.screenX - state.lastX
     const dy = e.screenY - state.lastY
@@ -96,9 +92,9 @@ function showNewMessageHint(payload = {}) {
 onMounted(() => {
   if (containerRef.value) {
     gsapCtx = gsap.context(() => {
-      gsap.to('.pet-body', {
+      gsap.to(petRef.value, {
         y: -4,
-        duration: 2.2,
+        duration: 2.4,
         ease: 'sine.inOut',
         yoyo: true,
         repeat: -1,
@@ -140,9 +136,9 @@ body:has(.pet-root),
 
 .pet-toast {
   max-width: 100%;
-  margin-bottom: 6px;
-  padding: 6px 10px;
-  border-radius: 12px;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  border-radius: 10px;
   background: rgba(14, 14, 22, 0.92);
   border: 1px solid rgba(236, 72, 153, 0.28);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
@@ -154,66 +150,40 @@ body:has(.pet-root),
 }
 
 .pet-body {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: 192px;
+  height: 208px;
+  background-image: url('/pet/kurumi_sprite_idle.webp');
+  background-size: 1536px 208px;
+  background-repeat: no-repeat;
+  background-position: 0 0;
   cursor: pointer;
   touch-action: none;
   will-change: transform;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25));
+  animation: pet-idle 1.2s step-end infinite;
 }
 
-.pet-img {
-  width: 90px;
-  height: 128px;
-  object-fit: contain;
-  display: block;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
-  animation: pet-breathe 3.2s ease-in-out infinite alternate;
-}
-
-.pet-shadow {
-  width: 44px;
-  height: 8px;
-  margin-top: -2px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.35) 0%, transparent 70%);
-  animation: pet-shadow-pulse 3.2s ease-in-out infinite alternate;
-}
-
-@keyframes pet-breathe {
-  0% {
-    transform: scale(1);
-    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
-  }
-  100% {
-    transform: scale(1.04);
-    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.4));
-  }
-}
-
-@keyframes pet-shadow-pulse {
-  0% {
-    transform: scaleX(1);
-    opacity: 0.6;
-  }
-  100% {
-    transform: scaleX(0.75);
-    opacity: 0.35;
-  }
+@keyframes pet-idle {
+  0%   { background-position: 0 0; }
+  14.28% { background-position: -192px 0; }
+  28.57% { background-position: -384px 0; }
+  42.85% { background-position: -576px 0; }
+  57.14% { background-position: -768px 0; }
+  71.42% { background-position: -960px 0; }
+  85.71% { background-position: -1152px 0; }
+  100% { background-position: -1344px 0; }
 }
 
 .pet-body.is-shaking {
-  animation: pet-shake 0.55s ease-in-out 2;
+  animation: pet-shake 0.55s ease-in-out 2, pet-idle 1.2s steps(1) infinite !important;
 }
 
 @keyframes pet-shake {
   0%, 100% { transform: translateX(0) rotate(0deg); }
-  20% { transform: translateX(-4px) rotate(-5deg); }
-  40% { transform: translateX(4px) rotate(5deg); }
-  60% { transform: translateX(-3px) rotate(-4deg); }
-  80% { transform: translateX(3px) rotate(4deg); }
+  20% { transform: translateX(-5px) rotate(-5deg); }
+  40% { transform: translateX(5px) rotate(5deg); }
+  60% { transform: translateX(-4px) rotate(-4deg); }
+  80% { transform: translateX(4px) rotate(4deg); }
 }
 
 .pet-toast-fade-enter-active,
