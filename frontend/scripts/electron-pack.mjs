@@ -25,6 +25,7 @@ function loadEnvFile(filePath) {
 
 loadEnvFile(path.join(root, '.env.production.cloud'))
 process.env.LIANYU_API_ORIGIN = process.env.VITE_LIANYU_API_ORIGIN || 'http://localhost:8080'
+process.env.LIANYU_CERT_FINGERPRINT = process.env.VITE_LIANYU_CERT_FINGERPRINT || ''
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 const outDir = path.join('release', `v${pkg.version}`)

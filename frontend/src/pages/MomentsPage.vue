@@ -97,7 +97,7 @@
                 @click="toggleComments(item.post, true)"
               >
                 <el-icon :size="14"><ChatDotRound /></el-icon>
-                <p v-html="commentStripHtml(item.post)" />
+                <p v-html="sanitizeHtml(commentStripHtml(item.post))" />
               </div>
 
               <div class="feed-card__actions">
@@ -304,6 +304,7 @@ import {
   markMomentsSeen
 } from '@/api/moments'
 import { resolveMediaUrl } from '@/utils/media'
+import { sanitizeHtml } from '@/utils/sanitize'
 import { feedDateKey, formatFeedDateLabel, formatFeedTime } from '@/utils/feedTime'
 import EmotionBadge from '@/components/EmotionBadge.vue'
 

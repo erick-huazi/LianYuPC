@@ -8,9 +8,11 @@ import {
   ipcMain,
   screen,
   session,
+  net,
 } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import {
   readDesktopSettings,
@@ -53,6 +55,45 @@ function resolveApiOrigin() {
   const configured = process.env.LIANYU_API_ORIGIN || process.env.VITE_LIANYU_API_ORIGIN
   const trimmed = configured && String(configured).trim()
   return (trimmed || DEFAULT_API_ORIGIN).replace(/\/$/, '')
+}
+
+/** 服务器证书 SHA-256 指纹（构建时注入），用于自签名证书固定 */
+const EXPECTED_CERT_FINGERPRINT = (process.env.LIANYU_CERT_FINGERPRINT || '').trim()
+
+function configureCertificatePinning() {
+  if (!EXPECTED_CERT_FINGERPRINT) return
+
+  app.on('certificate-error', (event, _webContents, url, _error, cert, callback) => {
+    const lowercase = cert.fingerprint?.toLowerCase() || ''
+    const expected = EXPECTED_CERT_FINGERPRINT.toLowerCase().replace(/:/g, '')
+    if (lowercase === expected) {
+      log(`cert pin OK for ${url}`)
+      event.preventDefault()
+      callback(true)
+      return
+    }
+    log(`cert pin REJECTED for ${url} — got ${lowercase}, expected ${expected}`)
+    callback(false)
+  })
+}
+
+function injectCspHeaders() {
+  const ses = session.fromPartition(SHARED_WEB_PREFS.partition)
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src https: wss:; media-src 'self';",
+        ],
+      },
+    })
+  })
+}
+
+function configureSecurity() {
+  configureCertificatePinning()
+  injectCspHeaders()
 }
 
 function resolveWsUrlPrefix(httpOrigin) {
@@ -607,6 +648,7 @@ function registerIpcHandlers() {
 
 app.whenReady().then(() => {
   log('app ready')
+  configureSecurity()
   patchDesktopRequestOrigin()
   applyLaunchAtLogin(readDesktopSettings().launchAtLogin)
   registerIpcHandlers()

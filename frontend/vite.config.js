@@ -6,6 +6,7 @@ import { resolve } from 'path'
 /** 仅 electron:dev / electron:build 时启用；普通 npm run dev 走浏览器，无需下载 Electron */
 const enableElectron = process.env.ELECTRON_DEV === '1' || process.env.ELECTRON_BUILD === '1'
 const electronApiOrigin = process.env.VITE_LIANYU_API_ORIGIN || 'http://localhost:8080'
+const certFingerprint = process.env.VITE_LIANYU_CERT_FINGERPRINT || ''
 
 export default defineConfig({
   // Electron 用 file:// 加载，必须相对路径且不能带 crossorigin
@@ -19,6 +20,7 @@ export default defineConfig({
     ? {
         'process.env.LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
         'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
+        'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
       }
     : undefined,
   envDir: '.',
@@ -35,6 +37,13 @@ export default defineConfig({
           electron({
             main: {
               entry: 'electron/main.js',
+              vite: {
+                define: {
+                  'process.env.LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
+                  'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
+                  'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
+                },
+              },
             },
             preload: {
               input: 'electron/preload.js',

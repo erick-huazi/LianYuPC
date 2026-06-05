@@ -76,6 +76,9 @@ services:
     restart: unless-stopped
     ports:
       - "${LIANYU_FRONTEND_PORT:-80}:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_started
