@@ -196,8 +196,8 @@ function attachWindowLogging(win, label) {
 function defaultLauncherPosition() {
   const area = screen.getPrimaryDisplay().workArea
   return {
-    x: area.x + area.width - 72,
-    y: area.y + area.height - 72,
+    x: area.x + area.width - LAUNCHER_COMPACT.width - 8,
+    y: area.y + area.height - LAUNCHER_COMPACT.height - 8,
   }
 }
 
@@ -364,8 +364,8 @@ function createLauncherWindow() {
 
   const saved = readLauncherPosition() || defaultLauncherPosition()
   const win = new BrowserWindow({
-    width: 64,
-    height: 64,
+    width: LAUNCHER_COMPACT.width,
+    height: LAUNCHER_COMPACT.height,
     x: saved.x,
     y: saved.y,
     frame: false,
