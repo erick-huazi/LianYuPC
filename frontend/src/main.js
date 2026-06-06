@@ -33,4 +33,10 @@ const settingsStore = useSettingsStore(pinia)
 settingsStore.initLanguage()
 settingsStore.initTheme()
 
+// 通知 Electron 主进程当前登录状态（已登录用户在启动时恢复 session）
+const storedToken = localStorage.getItem('lianyu-token')
+if (window.electronAPI?.setLoginState) {
+  window.electronAPI.setLoginState(!!storedToken)
+}
+
 app.mount('#app')

@@ -129,6 +129,7 @@
         <div class="input-row">
           <el-input
             v-model="groupInput"
+            ref="groupInputRef"
             :placeholder="t('group.placeholderDetailed')"
             :disabled="wsStatus !== 'connected'"
             @keydown.enter.exact="sendGroupMessage"
@@ -330,6 +331,7 @@ const activeGroup = ref(null)
 const groupMembers = ref([])
 const groupMessages = ref([])
 const groupInput = ref('')
+const groupInputRef = ref(null)
 const mentionPopoverVisible = ref(false)
 const speakingCharId = ref(null)
 const streamingChar = ref(null)
@@ -504,6 +506,11 @@ async function sendGroupMessage() {
   })
 
   groupInput.value = ''
+  await nextTick()
+  // 发送后自动恢复输入焦点
+  const ta = groupInputRef.value?.$el?.querySelector('textarea')
+    || groupInputRef.value?.$el?.getElementsByTagName('textarea')?.[0]
+  if (ta) ta.focus()
   nextTick(() => scrollGroupBottom())
 }
 

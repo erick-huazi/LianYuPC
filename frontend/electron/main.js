@@ -42,6 +42,8 @@ let pickerBlurTimer = null
 let pickerOpeningUntil = 0
 let launcherIsDragging = false
 let launcherSuppressMoveSave = false
+/** 桌宠是否允许显示（用户已登录后才允许） */
+let launcherLoggedIn = false
 
 const SHARED_WEB_PREFS = {
   preload: path.join(__dirname, 'preload.cjs'),
@@ -359,6 +361,7 @@ function hideLauncherWindow() {
 
 function showLauncherWindow(options = {}) {
   const { center = false, force = false } = options
+  if (!launcherLoggedIn) return
   const settings = readDesktopSettings()
   if (!settings.showLauncherLogo) return
   if (!force && isMainWindowOccupyingDesktop()) return
@@ -518,11 +521,7 @@ function createLauncherWindow() {
   win.once('ready-to-show', () => {
     win.setBackgroundColor('#00000000')
     clampLauncherToWorkArea()
-    resetLauncherInteraction()
-    if (!isMainWindowOccupyingDesktop()) {
-      win.show()
-      win.moveTop()
-    }
+    // 不在此处自动 show —— 桌宠仅在主窗口最小化/关闭且已登录时通过 showLauncherWindow() 显示
   })
 
   win.webContents.on('did-finish-load', () => {
@@ -774,6 +773,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('desktop:get-caption-height', () => CAPTION_BAR_HEIGHT)
 
+  ipcMain.handle('desktop:set-login-state', (_event, loggedIn) => {
+    launcherLoggedIn = !!loggedIn
+    if (!launcherLoggedIn) {
+      hideLauncherWindow()
+      closeCharacterPicker()
+    }
+  })
+
   ipcMain.handle('desktop:hide-launcher', () => {
     hideLauncherWindow()
   })
@@ -894,8 +901,7 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createMainWindow()
   ensureTray()
-  // 预创建桌宠窗口（隐藏），首次最小化/关闭时可瞬间显示
-  prewarmLauncherWindow()
+  // 桌宠仅在用户登录 + 主窗口最小化/关闭后才出现，不在启动时预创建
 
     if (isDebug) {
       globalShortcut.register('F12', () => {

@@ -3,8 +3,6 @@ package com.lianyu.service.tools;
 import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lianyu.common.util.CharacterSettingsUtils;
-import java.util.Map;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -34,7 +32,7 @@ public class WeatherTool {
     @Value("${lianyu.tools.weather.cache-minutes:15}")
     private int cacheMinutes;
 
-    @Value("${lianyu.tools.default-city:上海}")
+    @Value("${lianyu.tools.default-city:}")
     private String defaultCity;
 
     @Tool(name = "get_weather", description = """
@@ -121,8 +119,14 @@ public class WeatherTool {
     }
 
     private String resolveCityForRequest(String requestedCity) {
+        if (requestedCity != null && !requestedCity.isBlank()) {
+            return requestedCity.trim();
+        }
         ChatToolContext.Scope scope = ChatToolContext.current();
-        Map<String, Object> settings = scope != null ? scope.characterSettings() : null;
-        return CharacterSettingsUtils.resolveCity(requestedCity, settings, defaultCity);
+        if (scope != null) {
+            String effective = scope.effectiveCity();
+            if (effective != null && !effective.isBlank()) return effective;
+        }
+        return defaultCity;
     }
 }

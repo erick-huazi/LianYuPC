@@ -68,7 +68,7 @@ onUnmounted(() => {
   width: 100%;
   max-width: $max-content-width;
   margin: 0 auto;
-  padding: $space-5 $space-5 calc(#{$app-dock-offset} + env(safe-area-inset-bottom, 0px));
+  padding: $space-5 $space-5 $space-5;
 }
 
 .app-layout--immersive .app-content {

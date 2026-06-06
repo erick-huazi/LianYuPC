@@ -123,9 +123,10 @@
       v-model="dialogVisible"
       class="character-dialog"
       title="创建角色"
-      width="560px"
+      :width="dialogWidth"
       destroy-on-close
       align-center
+      top="5vh"
     >
       <el-form
         ref="formRef"
@@ -142,6 +143,18 @@
           <el-input v-model="form.city" placeholder="如 上海、北京、广州" />
           <div class="field-hint">
             用于精确计算当地时间与天气，角色主动问候和天气相关对话会参考此城市。
+          </div>
+        </el-form-item>
+
+        <el-form-item>
+          <el-checkbox v-model="form.useFictionalCity">
+            角色有自己的虚构城市（如动漫中的城市）
+          </el-checkbox>
+        </el-form-item>
+        <el-form-item v-if="form.useFictionalCity" label="角色虚构城市" prop="fictionalCity">
+          <el-input v-model="form.fictionalCity" placeholder="如 天宫市、冬木市、学园都市" />
+          <div class="field-hint">
+            角色对话中提到城市时，会优先使用此虚构城市；否则使用你的所在城市。
           </div>
         </el-form-item>
 
@@ -281,6 +294,7 @@ const charactersStore = useCharactersStore()
 const characterSquareStore = useCharacterSquareStore()
 const conversationsStore = useConversationsStore()
 const { list: characters, loading: storeLoading } = storeToRefs(charactersStore)
+const dialogWidth = computed(() => window.innerWidth < 600 ? 'calc(100vw - 24px)' : '560px')
 const loading = computed({
   get: () => storeLoading.value,
   set: (v) => { storeLoading.value = v }
@@ -314,7 +328,9 @@ const initialForm = () => ({
   avatarUrl: '',
   age: '',
   gender: '',
-  speakingStyle: ''
+  speakingStyle: '',
+  useFictionalCity: false,
+  fictionalCity: ''
 })
 
 const form = reactive(initialForm())
@@ -496,6 +512,9 @@ async function handleSubmit() {
     if (form.city?.trim()) {
       settings.city = form.city.trim()
       saveUserCity(settings.city)
+    }
+    if (form.useFictionalCity && form.fictionalCity?.trim()) {
+      settings.fictional_city = form.fictionalCity.trim()
     }
     if (form.age) settings.age = form.age
     if (form.gender) settings.gender = form.gender
@@ -914,6 +933,12 @@ async function startChat(char) {
   gap: $space-4;
 }
 
+@media (max-width: 480px) {
+  .form-row-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .generate-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1024,6 +1049,18 @@ async function startChat(char) {
 
 <style lang="scss">
 .character-dialog {
+  .el-dialog {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .el-dialog__body {
+    flex: 1;
+    overflow-y: auto;
+    max-height: calc(90vh - 96px);
+    padding: var(--el-dialog-body-padding);
+  }
   .el-form-item__label {
     color: $color-text-secondary !important;
   }

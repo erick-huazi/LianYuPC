@@ -62,18 +62,6 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
-server:
-  compression:
-    enabled: true
-    mime-types: application/json,application/xml,text/html,text/xml,text/plain,text/css,application/javascript
-    min-response-size: 1024
-
-  tomcat:
-    threads:
-      max: 50
-      min-spare: 8
-    connection-timeout: 20000
-
   ai:
     openai:
       # 密钥勿写死入仓；优先 api_key_vault DEFAULT 池，见 .env.example
@@ -93,6 +81,19 @@ server:
         options:
           model: ${OLLAMA_CHAT_MODEL:llama3}
           temperature: 0.8
+
+server:
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,text/css,application/javascript
+    min-response-size: 1024
+
+  tomcat:
+    threads:
+      max: 50
+      min-spare: 8
+    connection-timeout: 20000
+  port: ${SERVER_PORT:8080}
 
 mybatis-plus:
   global-config:
@@ -369,9 +370,6 @@ knife4j:
   enable: ${lianyu.api-docs.enabled:true}
   setting:
     language: zh_cn
-
-server:
-  port: ${SERVER_PORT:8080}   # HTTP 端口，默认 8080
 
 # AI 调用限流 / 熔断（实例名 ai-chat）
 resilience4j:

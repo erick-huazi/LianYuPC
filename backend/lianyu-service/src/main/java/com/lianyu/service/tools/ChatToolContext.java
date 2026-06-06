@@ -14,15 +14,28 @@ public final class ChatToolContext {
     private ChatToolContext() {
     }
 
-    public record Scope(Long userId, Long characterId, Map<String, Object> characterSettings) {
+    public record Scope(Long userId, Long characterId, Map<String, Object> characterSettings, String userCity) {
+        public String effectiveCity() {
+            if (characterSettings != null) {
+                String fc = characterSettings.get("fictional_city") instanceof String s && !s.isBlank() ? s : null;
+                if (fc != null) return fc;
+                String city = characterSettings.get("city") instanceof String s && !s.isBlank() ? s : null;
+                if (city != null) return city;
+            }
+            return userCity;
+        }
     }
 
     public static void set(Long userId, Long characterId, Map<String, Object> characterSettings) {
+        set(userId, characterId, characterSettings, null);
+    }
+
+    public static void set(Long userId, Long characterId, Map<String, Object> characterSettings, String userCity) {
         if (userId == null || characterId == null) {
             clear();
             return;
         }
-        CURRENT.set(new Scope(userId, characterId, characterSettings));
+        CURRENT.set(new Scope(userId, characterId, characterSettings, userCity));
     }
 
     public static Scope current() {

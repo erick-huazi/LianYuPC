@@ -1,9 +1,11 @@
 <template>
   <nav
     class="dock-wheel"
-    :class="{ 'is-open': isOpen, 'is-touch': !hoverCapable }"
+    :class="{ 'is-open': isOpen, 'is-touch': !hoverCapable, 'is-hidden': !dockVisible }"
     aria-label="Main"
     @keydown.escape="close"
+    @mouseenter="onDockEnter"
+    @mouseleave="onDockLeave"
   >
     <div
       v-if="isOpen && !hoverCapable"
@@ -103,7 +105,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Compass } from '@element-plus/icons-vue'
+import { Compass, HomeFilled, ChatLineRound, Grid, PictureRounded, ChatDotRound, Notebook, Collection, UserFilled, Setting } from '@element-plus/icons-vue'
 import OnboardingHintBubble from '@/components/OnboardingHintBubble.vue'
 import { useOnboardingHint } from '@/composables/useOnboardingHint'
 
@@ -116,25 +118,27 @@ const { t } = useI18n()
 const { visible: showSquareHint, dismiss: dismissSquareHint } = useOnboardingHint('character-square')
 const isOpen = ref(false)
 const hoverCapable = ref(true)
+const dockVisible = ref(true)
 
 let closeTimer = null
+let dockHideTimer = null
 
 const primaryLeft = computed(() => [
-  { path: '/app', label: t('nav.home'), icon: 'HomeFilled' },
-  { path: '/app/characters', label: t('nav.characters'), icon: 'ChatLineRound' }
+  { path: '/app', label: t('nav.home'), icon: HomeFilled },
+  { path: '/app/characters', label: t('nav.characters'), icon: ChatLineRound }
 ])
 
 const primaryRight = computed(() => [
-  { path: '/app/character-square', label: t('nav.characterSquare'), icon: 'Grid' },
-  { path: '/app/moments', label: t('nav.moments'), icon: 'PictureRounded' }
+  { path: '/app/character-square', label: t('nav.characterSquare'), icon: Grid },
+  { path: '/app/moments', label: t('nav.moments'), icon: PictureRounded }
 ])
 
 const wheelItems = computed(() => [
-  { path: '/app/group-chat', label: t('nav.groupChat'), icon: 'ChatDotRound' },
-  { path: '/app/diary', label: t('nav.diary'), icon: 'Notebook' },
-  { path: '/app/memory', label: t('nav.memory'), icon: 'Collection' },
-  { path: '/app/profile', label: t('nav.profile'), icon: 'UserFilled' },
-  { path: '/app/settings', label: t('nav.settings'), icon: 'Setting' }
+  { path: '/app/group-chat', label: t('nav.groupChat'), icon: ChatDotRound },
+  { path: '/app/diary', label: t('nav.diary'), icon: Notebook },
+  { path: '/app/memory', label: t('nav.memory'), icon: Collection },
+  { path: '/app/profile', label: t('nav.profile'), icon: UserFilled },
+  { path: '/app/settings', label: t('nav.settings'), icon: Setting }
 ])
 
 const wheelPaths = computed(() => wheelItems.value.map(i => i.path))
@@ -178,6 +182,35 @@ function onWrapLeave() {
   closeTimer = setTimeout(close, 300)
 }
 
+/** 鼠标移到屏幕底部边缘时显示 dock，离开后延迟隐藏 */
+function onGlobalMouseMove(e) {
+  const threshold = Math.min(window.innerHeight - 80, window.innerHeight - window.innerHeight * 0.1)
+  if (e.clientY > threshold) {
+    clearTimeout(dockHideTimer)
+    dockVisible.value = true
+  } else {
+    if (!dockHideTimer) {
+      dockHideTimer = setTimeout(() => {
+        dockVisible.value = false
+        close()
+        dockHideTimer = null
+      }, 800)
+    }
+  }
+}
+
+function onDockEnter() {
+  clearTimeout(dockHideTimer)
+  dockVisible.value = true
+}
+
+function onDockLeave() {
+  dockHideTimer = setTimeout(() => {
+    dockVisible.value = false
+    dockHideTimer = null
+  }, 600)
+}
+
 function onHubEnter() {
   if (hoverCapable.value) open()
 }
@@ -202,10 +235,13 @@ watch(() => route.path, close)
 
 onMounted(() => {
   hoverCapable.value = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  window.addEventListener('mousemove', onGlobalMouseMove, { passive: true })
 })
 
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
+  clearTimeout(dockHideTimer)
+  window.removeEventListener('mousemove', onGlobalMouseMove)
 })
 </script>
 
@@ -217,6 +253,14 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   z-index: $z-header;
   pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  opacity: 1;
+
+  &.is-hidden {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
+    pointer-events: none;
+  }
 
   &.is-touch.is-open {
     inset: 0;

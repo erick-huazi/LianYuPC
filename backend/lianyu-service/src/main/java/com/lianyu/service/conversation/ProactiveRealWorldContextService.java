@@ -1,10 +1,10 @@
 package com.lianyu.service.conversation;
 
 import cn.hutool.core.util.StrUtil;
-import com.lianyu.common.util.CharacterSettingsUtils;
 import com.lianyu.dao.entity.Character;
 import com.lianyu.service.tools.TimeTool;
 import com.lianyu.service.tools.WeatherTool;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +21,7 @@ public class ProactiveRealWorldContextService {
     private final TimeTool timeTool;
     private final WeatherTool weatherTool;
 
-    @Value("${lianyu.tools.default-city:上海}")
+    @Value("${lianyu.tools.default-city:}")
     private String defaultCity;
 
     @Value("${lianyu.chat.proactive.prefetch-realworld-context:true}")
@@ -34,10 +34,10 @@ public class ProactiveRealWorldContextService {
         if (!prefetchEnabled) {
             return "";
         }
+        Map<String, Object> settings = character != null ? character.getSettings() : null;
+        String city = resolveProactiveCity(settings);
         String timeFact = timeTool.readCurrentTimeFact();
-        String city = CharacterSettingsUtils.resolveCity(
-                character != null ? character.getSettings() : null, defaultCity);
-        String weatherFact = weatherTool.readCurrentWeatherFact(city);
+        String weatherFact = StrUtil.isNotBlank(city) ? weatherTool.readCurrentWeatherFact(city) : "";
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n=== 当前真实环境（主动开口前已由系统查询，请自然融入问候，勿逐条朗读） ===\n");
@@ -53,5 +53,18 @@ public class ProactiveRealWorldContextService {
                 语气仍须完全符合角色设定；不要像播报员念数据，也不要编造与上述不符的时间或天气。\
                 主动开口也要像日常私聊：可关心用户今天过得怎样、累不累、吃了没，不要自顾自讲设定剧情或推进世界观故事。""");
         return sb.toString();
+    }
+
+    /**
+     * 优先角色虚构城市 > 角色设定 city > 用户城市 > 空。
+     */
+    private String resolveProactiveCity(Map<String, Object> settings) {
+        if (settings != null) {
+            Object fc = settings.get("fictional_city");
+            if (fc instanceof String s && !s.isBlank()) return s.trim();
+            Object city = settings.get("city");
+            if (city instanceof String s && !s.isBlank()) return s.trim();
+        }
+        return defaultCity;
     }
 }

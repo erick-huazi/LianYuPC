@@ -29,6 +29,7 @@ export const useUserStore = defineStore('user', () => {
     if (user) {
       applyProfile(user)
     }
+    window.electronAPI?.setLoginState(true)
   }
 
   function applyProfile(user) {
@@ -47,6 +48,7 @@ export const useUserStore = defineStore('user', () => {
     avatarUrl.value = ''
     localStorage.removeItem('lianyu-token')
     localStorage.removeItem('lianyu-token-name')
+    window.electronAPI?.setLoginState(false)
   }
 
   async function login(data) {

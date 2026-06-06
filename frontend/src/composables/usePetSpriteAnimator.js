@@ -33,8 +33,8 @@ export function usePetSpriteAnimator(canvasRef) {
   let onCompleteCb = null
   let idleVarietyTimer = null
   let ctx = null
-  /** rAF 调用计数，用于按 FPS 控制帧步进 */
-  let tickCount = 0
+  /** 上次帧切换时的 rAF 时间戳（毫秒），用于时间增量控制帧步进 */
+  let lastFrameTime = 0
 
   function ensureCtx() {
     const canvas = canvasRef.value
@@ -96,17 +96,19 @@ export function usePetSpriteAnimator(canvasRef) {
     currentName = name
     animDef = def
     frame = 0
-    tickCount = 0
+    lastFrameTime = 0
     onCompleteCb = onComplete || null
     const shouldLoop = loop ?? def.loop
     renderFrame()
 
-    /** 每 monitor 刷新帧调用一次，根据目标 fps 决定是否步进动画帧 */
-    function tick() {
-      tickCount += 1
-      const stepsPerSecond = 60 // 以 60fps 基准计算；desynchronized canvas 会让 rAF 机会更宽松
-      const stepInterval = Math.max(1, Math.round(stepsPerSecond / def.fps))
-      if (tickCount % stepInterval === 0) {
+    /** 用 requestAnimationFrame 时间戳做增量判断，不受显示器刷新率影响 */
+    function tick(ts) {
+      if (lastFrameTime === 0) {
+        lastFrameTime = ts
+      }
+      const frameInterval = 1000 / def.fps
+      if (ts - lastFrameTime >= frameInterval) {
+        lastFrameTime = ts - ((ts - lastFrameTime) % frameInterval)
         frame += 1
         if (frame >= def.frames) {
           if (shouldLoop) {

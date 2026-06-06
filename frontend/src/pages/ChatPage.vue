@@ -118,6 +118,7 @@
           />
           <el-input
             v-model="inputText"
+            ref="inputTextRef"
             type="textarea"
             :rows="1"
             :autosize="{ minRows: 1, maxRows: 3 }"
@@ -133,7 +134,7 @@
           />
         </div>
         <div v-if="!isCompact" class="input-toolbar">
-          <el-select v-model="currentProvider" size="small" placeholder="Provider" style="width:160px">
+          <el-select v-model="currentProvider" size="small" placeholder="Provider" class="toolbar-select">
             <el-option :label="PLATFORM_PROVIDER_LABEL" :value="PLATFORM_PROVIDER" />
             <el-option
               v-for="v in providersStore.vaults"
@@ -146,7 +147,7 @@
             v-model="currentModel"
             size="small"
             placeholder="Model"
-            style="width:200px"
+            class="toolbar-select toolbar-select--wide"
             :allow-create="!isPlatformSelected"
             filterable
             :disabled="isPlatformSelected"
@@ -215,8 +216,9 @@ const scrollAnchor = ref(null)
 const fileInputRef = ref(null)
 const galBgRef = ref(null)
 
-const inputText = ref('')
-const pendingImageUrl = ref('')
+    const inputText = ref('')
+    const inputTextRef = ref(null)
+    const pendingImageUrl = ref('')
 const uploadingImage = ref(false)
 const waitingReply = ref(false)
 const awaitingOpening = ref(false)
@@ -557,6 +559,11 @@ async function handleSend() {
 
   inputText.value = ''
   pendingImageUrl.value = ''
+  await nextTick()
+  // 发送后自动恢复输入焦点
+  const ta = inputTextRef.value?.$el?.querySelector('textarea')
+    || inputTextRef.value?.$el?.getElementsByTagName('textarea')?.[0]
+  if (ta) ta.focus()
 
   const userMsg = {
     _tempId: 'u' + Date.now(),
@@ -1062,6 +1069,15 @@ function formatTime(ts) {
   gap: $space-2;
   margin-top: $space-2;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.toolbar-select {
+  width: min(160px, 45vw);
+}
+
+.toolbar-select--wide {
+  width: min(200px, 55vw);
 }
 
 .chat-empty-scene {

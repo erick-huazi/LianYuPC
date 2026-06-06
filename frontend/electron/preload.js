@@ -45,4 +45,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('desktop:launcher-interaction-reset', handler)
     return () => ipcRenderer.removeListener('desktop:launcher-interaction-reset', handler)
   },
+  setLoginState: (loggedIn) => ipcRenderer.invoke('desktop:set-login-state', loggedIn),
 })
