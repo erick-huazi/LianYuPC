@@ -23,6 +23,12 @@ spring:
     username: ${MYSQL_USER:lianyu}
     password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 20000
 
   data:
     redis:
@@ -55,6 +61,18 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+
+server:
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,text/css,application/javascript
+    min-response-size: 1024
+
+  tomcat:
+    threads:
+      max: 50
+      min-spare: 8
+    connection-timeout: 20000
 
   ai:
     openai:

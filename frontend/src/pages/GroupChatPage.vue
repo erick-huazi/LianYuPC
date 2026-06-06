@@ -395,11 +395,10 @@ watch(
 )
 
 watch(
-  () => notificationsStore.latest,
+  () => notificationsStore.latest?.length ?? 0,
   () => {
     refreshUnreadFromApi()
-  },
-  { deep: true }
+  }
 )
 
 watch(activeGroup, (group) => {

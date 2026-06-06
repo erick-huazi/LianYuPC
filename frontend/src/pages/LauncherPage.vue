@@ -44,6 +44,7 @@ let clickTimer = null
 let toastTimer = null
 let unsubscribeLauncherMessage = null
 let unsubscribePetChanged = null
+let unsubscribeInteractionReset = null
 let gsapCtx = null
 let idleFloatTween = null
 
@@ -73,23 +74,21 @@ function resetWrapTransform() {
   if (wrapRef.value) gsap.set(wrapRef.value, { y: 0 })
 }
 
-function syncMousePassthrough(clientX, clientY) {
-  if (dragging.value || pointerState.value) {
-    getElectronAPI()?.setLauncherMousePassthrough?.(false)
-    return
+function resetInteractionState() {
+  if (clickTimer) {
+    clearTimeout(clickTimer)
+    clickTimer = null
   }
-  const target = document.elementFromPoint(clientX, clientY)
-  const hitInteractive = target?.closest?.('.pet-hitbox, .pet-toast')
-  getElectronAPI()?.setLauncherMousePassthrough?.(!hitInteractive)
-}
-
-function onDocumentMouseMove(e) {
-  syncMousePassthrough(e.clientX, e.clientY)
-}
-
-function onDocumentMouseLeave() {
-  if (dragging.value || pointerState.value) return
-  getElectronAPI()?.setLauncherMousePassthrough?.(true)
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerUp)
+  if (pointerState.value) {
+    releasePointerCapture(pointerState.value)
+  }
+  dragging.value = false
+  pointerState.value = null
+  setIdleFloatPaused(false)
+  // 穿透状态由主进程根据 picker 是否打开统一管理
 }
 
 function releasePointerCapture(state) {
@@ -166,7 +165,8 @@ function onPointerMove(e) {
 
 function onPointerUp(e) {
   const state = pointerState.value
-  if (state && e.pointerId !== state.pointerId) return
+  if (state && e?.pointerId != null && e.pointerId !== state.pointerId) return
+  const wasMoved = !!state?.moved
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
   window.removeEventListener('pointercancel', onPointerUp)
@@ -178,13 +178,13 @@ function onPointerUp(e) {
       playAnimOnce('wave')
       getElectronAPI()?.toggleCharacterPicker?.()
     }, 240)
-  } else {
+  } else if (wasMoved) {
     playAnimOnce('running', () => returnToIdle())
     getElectronAPI()?.endLauncherDrag?.()
   }
   setIdleFloatPaused(false)
   pointerState.value = null
-  if (e) syncMousePassthrough(e.clientX, e.clientY)
+  // 穿透状态由主进程根据 picker 是否打开统一管理，不在此处覆盖
 }
 
 function onContextMenu() {
@@ -207,9 +207,7 @@ onMounted(async () => {
   document.body.style.background = 'transparent'
   const appEl = document.getElementById('app')
   if (appEl) appEl.style.background = 'transparent'
-  document.addEventListener('mousemove', onDocumentMouseMove)
-  document.addEventListener('mouseleave', onDocumentMouseLeave)
-  getElectronAPI()?.setLauncherMousePassthrough?.(true)
+  getElectronAPI()?.setLauncherMousePassthrough?.(false)
   const settings = await getElectronAPI()?.getDesktopSettings?.()
   applyPetId(settings?.launcherPetId || DEFAULT_PET_ID)
   if (wrapRef.value) {
@@ -226,15 +224,15 @@ onMounted(async () => {
   }
   unsubscribeLauncherMessage = getElectronAPI()?.onLauncherNewMessage?.(showNewMessageHint)
   unsubscribePetChanged = getElectronAPI()?.onLauncherPetChanged?.(applyPetId)
+  unsubscribeInteractionReset = getElectronAPI()?.onLauncherInteractionReset?.(resetInteractionState)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('mousemove', onDocumentMouseMove)
-  document.removeEventListener('mouseleave', onDocumentMouseLeave)
   clearTimeout(clickTimer)
   clearTimeout(toastTimer)
   unsubscribeLauncherMessage?.()
   unsubscribePetChanged?.()
+  unsubscribeInteractionReset?.()
   gsapCtx?.revert()
 })
 </script>

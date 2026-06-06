@@ -40,4 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('desktop:launcher-pet-changed', handler)
     return () => ipcRenderer.removeListener('desktop:launcher-pet-changed', handler)
   },
+  onLauncherInteractionReset: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on('desktop:launcher-interaction-reset', handler)
+    return () => ipcRenderer.removeListener('desktop:launcher-interaction-reset', handler)
+  },
 })

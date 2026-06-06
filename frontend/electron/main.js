@@ -257,7 +257,7 @@ function centerLauncherOnScreen() {
   const pos = defaultLauncherPosition()
   launcherWindow.setPosition(pos.x, pos.y)
   writeLauncherPosition(pos.x, pos.y)
-  setLauncherMousePassthrough(true)
+  resetLauncherInteraction()
 }
 
 function ensureTray() {
@@ -298,6 +298,16 @@ function setLauncherMousePassthrough(ignore) {
     launcherWindow.setIgnoreMouseEvents(true, { forward: true })
   } else {
     launcherWindow.setIgnoreMouseEvents(false)
+  }
+}
+
+/** 显示/拖拽结束后重置穿透与拖拽状态。若角色选择器正打开则保持穿透，避免拦截其点击。 */
+function resetLauncherInteraction() {
+  launcherIsDragging = false
+  const pickerActive = pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()
+  setLauncherMousePassthrough(pickerActive)
+  if (launcherWindow && !launcherWindow.isDestroyed() && !launcherWindow.webContents.isDestroyed()) {
+    launcherWindow.webContents.send('desktop:launcher-interaction-reset')
   }
 }
 
@@ -363,9 +373,9 @@ function showLauncherWindow(options = {}) {
   const reveal = () => {
     if (!force && isMainWindowOccupyingDesktop()) return
     if (!win || win.isDestroyed()) return
+    resetLauncherInteraction()
     win.show()
     win.moveTop()
-    setLauncherMousePassthrough(true)
   }
   reveal()
   if (win.webContents.isLoading()) {
@@ -447,7 +457,9 @@ function createMainWindow() {
   })
 
   win.on('minimize', () => {
-    showLauncherWindow({ center: true, force: true })
+    setTimeout(() => {
+      showLauncherWindow({ center: true, force: true })
+    }, 50)
   })
 
   win.on('close', (event) => {
@@ -506,15 +518,16 @@ function createLauncherWindow() {
   win.once('ready-to-show', () => {
     win.setBackgroundColor('#00000000')
     clampLauncherToWorkArea()
+    resetLauncherInteraction()
     if (!isMainWindowOccupyingDesktop()) {
       win.show()
+      win.moveTop()
     }
-    setLauncherMousePassthrough(true)
   })
 
   win.webContents.on('did-finish-load', () => {
     win.setBackgroundColor('#00000000')
-    setLauncherMousePassthrough(true)
+    resetLauncherInteraction()
   })
 
   let moveTimer = null
@@ -553,6 +566,12 @@ function ensureLauncherWindow() {
   return createLauncherWindow()
 }
 
+/** 启动时预创建桌宠窗口（不显示），后续最小化/关闭时瞬间展示，消除冷创建延迟 */
+function prewarmLauncherWindow() {
+  if (!readDesktopSettings().showLauncherLogo) return
+  createLauncherWindow()
+}
+
 function repositionPickerNearLauncher() {
   if (!pickerWindow || pickerWindow.isDestroyed() || !launcherWindow || launcherWindow.isDestroyed()) {
     return
@@ -564,7 +583,7 @@ function repositionPickerNearLauncher() {
     y: launcherBounds.y + launcherBounds.height / 2,
   })
   const area = display.workArea
-  const gap = 8
+  const gap = 2
 
   let x = launcherBounds.x + Math.round((launcherBounds.width - pickerBounds.width) / 2)
   let y = launcherBounds.y - pickerBounds.height - gap
@@ -591,6 +610,7 @@ function createPickerWindow() {
     height: 420,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -606,11 +626,16 @@ function createPickerWindow() {
       if (win.isDestroyed() || win.isFocused()) return
       if (Date.now() < pickerOpeningUntil) return
       win.hide()
-    }, 280)
+    }, 600)
+  })
+
+  win.on('hide', () => {
+    setLauncherMousePassthrough(false)
   })
 
   win.on('closed', () => {
     pickerWindow = null
+    setLauncherMousePassthrough(false)
   })
 
   loadRoute(win, '#/launcher/pick')
@@ -623,12 +648,19 @@ function openCharacterPicker(options = {}) {
   ensureLauncherWindow()
   const win = createPickerWindow()
   repositionPickerNearLauncher()
-  pickerOpeningUntil = Date.now() + 450
+  pickerOpeningUntil = Date.now() + 1200
+  // 确保 picker 在桌宠窗口之上，且桌宠窗口穿透不拦截 picker 区域的点击
+  win.setAlwaysOnTop(true, 'floating')
+  if (launcherWindow && !launcherWindow.isDestroyed()) {
+    launcherWindow.setAlwaysOnTop(true, 'normal')
+  }
+  setLauncherMousePassthrough(true)
   if (inactive) {
     win.showInactive()
   } else {
     win.show()
     win.focus()
+    win.moveTop()
   }
   repositionPickerNearLauncher()
 }
@@ -815,6 +847,7 @@ function registerIpcHandlers() {
     launcherIsDragging = true
     const bounds = launcherWindow.getBounds()
     launcherWindow.setPosition(Math.round(bounds.x + dx), Math.round(bounds.y + dy))
+    repositionPickerNearLauncher()
   })
 
   ipcMain.on('desktop:launcher-drag-end', () => {
@@ -827,7 +860,7 @@ function registerIpcHandlers() {
     writeLauncherPosition(bounds.x, bounds.y)
     clampLauncherToWorkArea()
     repositionPickerNearLauncher()
-    setLauncherMousePassthrough(true)
+    resetLauncherInteraction()
   })
 
   ipcMain.handle('desktop:set-launcher-screen-position', (_event, { x, y }) => {
@@ -861,6 +894,8 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createMainWindow()
   ensureTray()
+  // 预创建桌宠窗口（隐藏），首次最小化/关闭时可瞬间显示
+  prewarmLauncherWindow()
 
     if (isDebug) {
       globalShortcut.register('F12', () => {

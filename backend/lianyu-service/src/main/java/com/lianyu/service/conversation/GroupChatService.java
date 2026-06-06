@@ -107,9 +107,12 @@ public class GroupChatService {
         conversation.setTitle(request.getTitle());
         conversationMapper.insert(conversation);
 
+        List<Character> characters = characterMapper.selectBatchIds(characterIds);
+        Map<Long, Character> charMap = characters.stream()
+                .collect(Collectors.toMap(Character::getId, c -> c, (a, b) -> a));
         int order = 0;
         for (Long characterId : characterIds) {
-            Character character = characterMapper.selectById(characterId);
+            Character character = charMap.get(characterId);
             if (character == null || !character.getOwnerUserId().equals(userId)) {
                 throw new BusinessException(ErrorCode.CHARACTER_NOT_FOUND,
                         "角色不存在或不属于你: " + characterId);
@@ -194,7 +197,7 @@ public class GroupChatService {
         String mentionTarget = pickProactiveMentionTarget(character, members);
         String warmHint = (contextHint == null || contextHint.isBlank()) ? "最近群聊" : contextHint.trim();
 
-        Map<Long, String> nameMap = buildMemberNameMap(members);
+        Map<Long, String> nameMap = loadCharacterNameMap(members);
         String memoryCtx = memoryRetriever.retrieveProfileContext(character.getId(), userId);
         CharacterChatBehavior behavior = chatBehaviorResolver.resolve(character);
         int maxPieces = behavior.maxRepliesPerTurn();
@@ -291,14 +294,20 @@ public class GroupChatService {
                         .eq(GroupMember::getConversationId, conversationId)
                         .orderByAsc(GroupMember::getSortOrder));
         List<CharacterResponse> result = new ArrayList<>();
-        for (GroupMember member : members) {
-            Character character = characterMapper.selectById(member.getCharacterId());
-            if (character != null) {
-                result.add(CharacterResponse.builder()
-                        .id(character.getId())
-                        .name(character.getName())
-                        .avatarUrl(fileStorageService.resolvePublicUrl(character.getAvatarUrl()))
-                        .build());
+        List<Long> characterIds = members.stream().map(GroupMember::getCharacterId).toList();
+        if (!characterIds.isEmpty()) {
+            List<Character> characters = characterMapper.selectBatchIds(characterIds);
+            Map<Long, Character> charMap = characters.stream()
+                    .collect(Collectors.toMap(Character::getId, c -> c, (a, b) -> a));
+            for (GroupMember member : members) {
+                Character character = charMap.get(member.getCharacterId());
+                if (character != null) {
+                    result.add(CharacterResponse.builder()
+                            .id(character.getId())
+                            .name(character.getName())
+                            .avatarUrl(fileStorageService.resolvePublicUrl(character.getAvatarUrl()))
+                            .build());
+                }
             }
         }
         return result;
@@ -435,7 +444,7 @@ public class GroupChatService {
                 return null;
             }
 
-            Map<Long, String> nameMap = buildMemberNameMap(members);
+            Map<Long, String> nameMap = loadCharacterNameMap(members);
             String memoryCtx = memoryRetriever.retrieveProfileContext(character.getId(), userId);
             CharacterChatBehavior behavior = chatBehaviorResolver.resolve(character);
             int maxPieces = behavior.maxRepliesPerTurn();
@@ -656,11 +665,15 @@ public class GroupChatService {
     }
 
     private String buildOtherCharactersContext(List<GroupMember> members, Character current, String outputLang) {
+        List<Long> allIds = members.stream().map(GroupMember::getCharacterId).distinct().toList();
+        List<Character> allChars = characterMapper.selectBatchIds(allIds);
+        Map<Long, Character> charMap = allChars.stream()
+                .collect(Collectors.toMap(Character::getId, c -> c, (a, b) -> a));
         StringBuilder sb = new StringBuilder();
         List<Character> others = new ArrayList<>();
         for (GroupMember m : members) {
             if (!m.getCharacterId().equals(current.getId())) {
-                Character c = characterMapper.selectById(m.getCharacterId());
+                Character c = charMap.get(m.getCharacterId());
                 if (c != null) others.add(c);
             }
         }
@@ -685,17 +698,32 @@ public class GroupChatService {
         };
     }
 
+    private Map<Long, String> loadCharacterNameMap(List<GroupMember> members) {
+        Set<Long> ids = members.stream().map(GroupMember::getCharacterId).collect(Collectors.toSet());
+        List<Character> characters = characterMapper.selectBatchIds(ids);
+        Map<Long, String> nameMap = new HashMap<>();
+        for (Character c : characters) {
+            if (c != null) nameMap.put(c.getId(), c.getName());
+        }
+        return nameMap;
+    }
+
+    private String getCharacterName(Long characterId, Map<Long, String> nameMap) {
+        return nameMap.getOrDefault(characterId, "未知角色");
+    }
+
+    // Legacy single-ID lookup — only for code paths that don't have a name map
     private String getCharacterName(Long characterId) {
         Character c = characterMapper.selectById(characterId);
         return c != null ? c.getName() : "未知角色";
     }
 
-    private Map<Long, String> buildMemberNameMap(List<GroupMember> members) {
-        Map<Long, String> nameMap = new HashMap<>();
+    private Map<Long, String> buildMemberNameMap(List<GroupMember> members, Map<Long, String> nameMap) {
+        Map<Long, String> result = new HashMap<>();
         for (GroupMember member : members) {
-            nameMap.put(member.getCharacterId(), getCharacterName(member.getCharacterId()));
+            result.put(member.getCharacterId(), getCharacterName(member.getCharacterId(), nameMap));
         }
-        return nameMap;
+        return result;
     }
 
     private Set<Long> extractMentionedCharacterIds(String content, List<GroupMember> members) {

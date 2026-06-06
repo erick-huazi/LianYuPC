@@ -22,10 +22,10 @@ function pickIdleVariety() {
 }
 
 /**
- * Canvas 逐帧绘制 spritesheet，避免 CSS background 在 Electron 透明窗口出现黑底/晕影。
+ * Canvas 逐帧绘制 spritesheet，使用 requestAnimationFrame 与屏幕刷新同步。
  */
 export function usePetSpriteAnimator(canvasRef) {
-  let timer = null
+  let rafId = null
   let frame = 0
   let currentName = 'idle'
   let animDef = PET_ANIMATIONS.idle
@@ -33,6 +33,8 @@ export function usePetSpriteAnimator(canvasRef) {
   let onCompleteCb = null
   let idleVarietyTimer = null
   let ctx = null
+  /** rAF 调用计数，用于按 FPS 控制帧步进 */
+  let tickCount = 0
 
   function ensureCtx() {
     const canvas = canvasRef.value
@@ -43,10 +45,10 @@ export function usePetSpriteAnimator(canvasRef) {
     return ctx
   }
 
-  function clearTimer() {
-    if (timer) {
-      clearInterval(timer)
-      timer = null
+  function stopRaf() {
+    if (rafId != null) {
+      cancelAnimationFrame(rafId)
+      rafId = null
     }
   }
 
@@ -90,31 +92,41 @@ export function usePetSpriteAnimator(canvasRef) {
   function playAnim(name, { loop, onComplete } = {}) {
     const def = PET_ANIMATIONS[name]
     if (!def) return
-    clearTimer()
+    stopRaf()
     currentName = name
     animDef = def
     frame = 0
+    tickCount = 0
     onCompleteCb = onComplete || null
     const shouldLoop = loop ?? def.loop
     renderFrame()
-    timer = setInterval(() => {
-      frame += 1
-      if (frame >= def.frames) {
-        if (shouldLoop) {
-          frame = 0
-        } else {
-          clearTimer()
-          const cb = onCompleteCb
-          onCompleteCb = null
-          cb?.()
-          if (currentName === name) {
-            playAnim('idle')
+
+    /** 每 monitor 刷新帧调用一次，根据目标 fps 决定是否步进动画帧 */
+    function tick() {
+      tickCount += 1
+      const stepsPerSecond = 60 // 以 60fps 基准计算；desynchronized canvas 会让 rAF 机会更宽松
+      const stepInterval = Math.max(1, Math.round(stepsPerSecond / def.fps))
+      if (tickCount % stepInterval === 0) {
+        frame += 1
+        if (frame >= def.frames) {
+          if (shouldLoop) {
+            frame = 0
+          } else {
+            rafId = null
+            const cb = onCompleteCb
+            onCompleteCb = null
+            cb?.()
+            if (currentName === name) {
+              playAnim('idle')
+            }
+            return
           }
-          return
         }
+        renderFrame()
       }
-      renderFrame()
-    }, 1000 / def.fps)
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
   }
 
   function playAnimOnce(name, onComplete) {
@@ -146,7 +158,7 @@ export function usePetSpriteAnimator(canvasRef) {
   })
 
   onUnmounted(() => {
-    clearTimer()
+    stopRaf()
     clearTimeout(idleVarietyTimer)
     ctx = null
   })
