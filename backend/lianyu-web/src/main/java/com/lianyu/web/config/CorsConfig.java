@@ -37,7 +37,8 @@ public class CorsConfig {
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
+        // 仅 REST /api；/ws 由 WebSocketConfig.setAllowedOriginPatterns 单独处理
+        source.registerCorsConfiguration("/api/**", config);
         return new CorsFilter(source);
     }
 }

@@ -56,15 +56,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                // 浏览器 dev + Electron 桌面端（file:// / null Origin）；CONNECT 仍校验 token
-                .setAllowedOriginPatterns(
-                        "http://localhost:*",
-                        "https://localhost:*",
-                        "http://127.0.0.1:*",
-                        "https://154.219.111.30",
-                        "file://*",
-                        "null"
-                );
+                // Electron file://、浏览器 dev；STOMP CONNECT 仍校验 token
+                .setAllowedOriginPatterns("*");
     }
 
     @Override

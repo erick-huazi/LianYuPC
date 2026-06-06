@@ -136,9 +136,20 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   function connectWebSocket() {
-    if (stompClient) return
     const token = localStorage.getItem('lianyu-token')
-    if (!token) return
+    if (!token) {
+      wsStatus.value = 'disconnected'
+      return
+    }
+    if (stompClient?.connected) {
+      wsStatus.value = 'connected'
+      resubscribeGroupChat()
+      return
+    }
+    if (stompClient) {
+      wsStatus.value = 'connecting'
+      return
+    }
     wsStatus.value = 'connecting'
     stompClient = new Client({
       brokerURL: buildBrokerUrl(),
@@ -168,7 +179,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
       onWebSocketError: () => {
         wsStatus.value = 'disconnected'
       },
-      onStompError: () => {
+      onStompError: (frame) => {
+        console.warn('STOMP error:', frame.headers?.message)
         wsStatus.value = 'disconnected'
       }
     })
