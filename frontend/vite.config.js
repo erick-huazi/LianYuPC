@@ -1,10 +1,28 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron/simple'
+import fs from 'fs'
 import { resolve } from 'path'
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return
+  for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue
+    const eq = trimmed.indexOf('=')
+    const key = trimmed.slice(0, eq).trim()
+    const value = trimmed.slice(eq + 1).trim()
+    if (!process.env[key]) {
+      process.env[key] = value
+    }
+  }
+}
 
 /** 仅 electron:dev / electron:build 时启用；普通 npm run dev 走浏览器，无需下载 Electron */
 const enableElectron = process.env.ELECTRON_DEV === '1' || process.env.ELECTRON_BUILD === '1'
+if (enableElectron) {
+  loadEnvFile(resolve(__dirname, '.env.production.cloud'))
+}
 const electronApiOrigin = process.env.VITE_LIANYU_API_ORIGIN || 'http://localhost:8080'
 const certFingerprint = process.env.VITE_LIANYU_CERT_FINGERPRINT || ''
 

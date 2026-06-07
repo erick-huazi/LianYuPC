@@ -189,6 +189,7 @@ async function refreshCaptcha() {
     captchaExpression.value = res.expression
   } catch {
     captchaExpression.value = '获取失败，点击刷新'
+    ElMessage.error('无法连接服务器，请确认网络正常且后端已启动')
   }
 }
 

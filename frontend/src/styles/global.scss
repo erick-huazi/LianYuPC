@@ -113,6 +113,13 @@ body.electron-app {
   .app-header {
     margin-right: calc(#{$space-4} + var(--electron-caption-controls-width));
   }
+
+  /* ElMessage / ElNotification 需在标题栏下方，且层级高于 ::before 黑条 (9998) */
+  .el-message,
+  .el-notification {
+    top: calc(var(--electron-caption-height) + 16px) !important;
+    z-index: 10001 !important;
+  }
 }
 
 .electron-caption-drag {

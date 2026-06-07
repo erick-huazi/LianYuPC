@@ -1,7 +1,7 @@
 import http from './index'
 
 export function getCaptcha() {
-  return http.get('/auth/captcha')
+  return http.get('/auth/captcha', { skipGlobalError: true })
 }
 
 export function register(data) {

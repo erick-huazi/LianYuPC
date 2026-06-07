@@ -8,11 +8,24 @@ export function isElectronRuntime() {
 
 const DEFAULT_API_ORIGIN = 'http://localhost:8080'
 
-/** Electron 下 API 根地址（VITE_LIANYU_API_ORIGIN 或默认 localhost） */
+function readConfiguredApiOrigin() {
+  const fromImportMeta = import.meta.env.VITE_LIANYU_API_ORIGIN
+  if (fromImportMeta && String(fromImportMeta).trim()) {
+    return String(fromImportMeta).trim()
+  }
+  // electron-pack / vite define 注入（ELECTRON_BUILD=1）
+  if (typeof process !== 'undefined' && process.env) {
+    const fromProcess = process.env.LIANYU_API_ORIGIN || process.env.VITE_LIANYU_API_ORIGIN
+    if (fromProcess && String(fromProcess).trim()) {
+      return String(fromProcess).trim().replace(/\/$/, '')
+    }
+  }
+  return ''
+}
+
+/** Electron 下 API 根地址（云端构建注入 https://154.219.111.30，本地开发默认 localhost） */
 export function resolveApiOrigin() {
-  const configured = import.meta.env.VITE_LIANYU_API_ORIGIN
-  const trimmed = configured && String(configured).trim()
-  return trimmed || DEFAULT_API_ORIGIN
+  return readConfiguredApiOrigin() || DEFAULT_API_ORIGIN
 }
 
 /** HTTP API 根（Electron 直连后端；浏览器走同源 nginx） */
