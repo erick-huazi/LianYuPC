@@ -1,12 +1,13 @@
 package com.lianyu.service.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
 public class AddCharacterFromSquareRequest {
 
-    /** 用户所在城市，用于主动问候与天气/时间工具（写入 settings.city） */
-    @NotBlank(message = "请填写所在城市")
+    /** real | fictional — 现实城市由用户填写，虚构城市由模型推断 */
+    private String cityMode = "real";
+
+    /** 用户所在城市（cityMode=real 时必填，写入 settings.city） */
     private String city;
 }

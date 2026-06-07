@@ -815,7 +815,9 @@ function formatTime(ts) {
 
 <style lang="scss" scoped>
 .chat-page {
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
   max-width: none;
   overflow: hidden;
 }
@@ -879,8 +881,10 @@ function formatTime(ts) {
 }
 
 .gal-header {
-  position: relative;
-  z-index: 3;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: $space-3;

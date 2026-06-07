@@ -191,16 +191,19 @@ async function handleUserMenu(command) {
   position: sticky;
   top: 0;
   z-index: $z-header;
+  --app-header-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: $space-3 $space-5;
-  margin: $space-3 $space-4 0;
-  border-radius: $radius-pill;
+  width: 100%;
+  margin: 0;
+  padding: $space-3 $layout-page-gutter;
+  border-radius: 0;
   background: rgba(var(--ly-bg-surface-rgb), 0.55);
   backdrop-filter: blur(20px) saturate(130%);
-  border: 1px solid rgba($color-pink-rgb, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  border: none;
+  border-bottom: 1px solid rgba($color-pink-rgb, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   overflow: visible;
   -webkit-app-region: drag;
 }

@@ -111,7 +111,18 @@ body.electron-app {
   }
 
   .app-header {
-    margin-right: calc(#{$space-4} + var(--electron-caption-controls-width));
+    padding-right: calc(#{$layout-page-gutter} + var(--electron-caption-controls-width));
+  }
+
+  .gal-header {
+    padding-right: calc(#{$space-4} + var(--electron-caption-controls-width));
+    -webkit-app-region: drag;
+  }
+
+  .gal-header__back,
+  .gal-header__meta,
+  .gal-header__meta * {
+    -webkit-app-region: no-drag;
   }
 
   /* ElMessage / ElNotification 需在标题栏下方，且层级高于 ::before 黑条 (9998) */
@@ -119,6 +130,22 @@ body.electron-app {
   .el-notification {
     top: calc(var(--electron-caption-height) + 16px) !important;
     z-index: 10001 !important;
+  }
+
+  /* Dialog / MessageBox 需高于 electron 黑条与 drag 层，且避开顶栏 */
+  .el-overlay {
+    z-index: 10002 !important;
+  }
+
+  .el-overlay-dialog {
+    align-items: flex-start !important;
+    padding-top: calc(var(--electron-caption-height) + var(--app-header-height, 56px) + 16px);
+    box-sizing: border-box;
+  }
+
+  .el-overlay.is-message-box {
+    align-items: flex-start !important;
+    padding-top: calc(var(--electron-caption-height) + var(--app-header-height, 56px) + 16px);
   }
 }
 
@@ -404,6 +431,17 @@ html.dark {
 }
 
 // Dialog overrides
+.el-overlay-dialog {
+  align-items: flex-start !important;
+  padding-top: calc(var(--app-header-height, 56px) + 24px);
+  box-sizing: border-box;
+}
+
+.el-overlay.is-message-box {
+  align-items: flex-start !important;
+  padding-top: calc(var(--app-header-height, 56px) + 24px);
+}
+
 .el-dialog {
   background: $color-bg-surface !important;
   border: 1px solid rgba($color-pink-rgb, 0.08) !important;

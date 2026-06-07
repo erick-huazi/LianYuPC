@@ -63,6 +63,7 @@ public class CharacterService {
     private final MemoryCacheService memoryCacheService;
     private final StringRedisTemplate redisTemplate;
     private final FileStorageService fileStorageService;
+    private final CharacterCitySettingsService characterCitySettingsService;
 
     @Value("${lianyu.character.max-per-user:80}")
     private int maxCharactersPerUser;
@@ -70,11 +71,17 @@ public class CharacterService {
     @Transactional
     public CharacterResponse create(Long userId, CreateCharacterRequest request) {
         assertCharacterLimit(userId);
+        Map<String, Object> settings = CharacterSettingsUtils.normalizeSettings(request.getSettings());
+        if (settings == null) {
+            settings = new LinkedHashMap<>();
+        }
+        characterCitySettingsService.applyCityMode(userId, request.getName(), request.getPromptTemplate(), settings);
+
         Character entity = new Character();
         entity.setOwnerUserId(userId);
         entity.setName(request.getName());
         entity.setAvatarUrl(request.getAvatarUrl());
-        entity.setSettings(CharacterSettingsUtils.normalizeSettings(request.getSettings()));
+        entity.setSettings(settings);
         entity.setPromptTemplate(request.getPromptTemplate());
         characterMapper.insert(entity);
 

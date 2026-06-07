@@ -125,8 +125,6 @@
       title="创建角色"
       :width="dialogWidth"
       destroy-on-close
-      align-center
-      top="5vh"
     >
       <el-form
         ref="formRef"
@@ -139,24 +137,10 @@
           <el-input v-model="form.name" placeholder="给你的角色起个名字" />
         </el-form-item>
 
-        <el-form-item label="你的所在城市" prop="city">
-          <el-input v-model="form.city" placeholder="如 上海、北京、广州" />
-          <div class="field-hint">
-            用于精确计算当地时间与天气，角色主动问候和天气相关对话会参考此城市。
-          </div>
-        </el-form-item>
-
-        <el-form-item>
-          <el-checkbox v-model="form.useFictionalCity">
-            角色有自己的虚构城市（如动漫中的城市）
-          </el-checkbox>
-        </el-form-item>
-        <el-form-item v-if="form.useFictionalCity" label="角色虚构城市" prop="fictionalCity">
-          <el-input v-model="form.fictionalCity" placeholder="如 天宫市、冬木市、学园都市" />
-          <div class="field-hint">
-            角色对话中提到城市时，会优先使用此虚构城市；否则使用你的所在城市。
-          </div>
-        </el-form-item>
+        <CharacterCityModeForm
+          v-model:city-mode="form.cityMode"
+          v-model:city="form.city"
+        />
 
         <el-form-item label="动漫角色参考（可选）">
           <div class="generate-row">
@@ -287,6 +271,7 @@ import { resolveMediaUrl } from '@/utils/media'
 import { fixUtf8Mojibake } from '@/utils/textEncoding'
 import { listCharacterStates } from '@/api/characterState'
 import { getSavedUserCity, saveUserCity } from '@/utils/userCity'
+import CharacterCityModeForm from '@/components/CharacterCityModeForm.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -324,23 +309,24 @@ const isDragging = ref(false)
 
 const initialForm = () => ({
   name: '',
+  cityMode: 'real',
   city: getSavedUserCity(),
   promptTemplate: '',
   avatarUrl: '',
   age: '',
   gender: '',
-  speakingStyle: '',
-  useFictionalCity: false,
-  fictionalCity: ''
+  speakingStyle: ''
 })
 
 const form = reactive(initialForm())
 
-const formRules = {
+const formRules = computed(() => ({
   name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
-  city: [{ required: true, message: '请填写你的所在城市', trigger: 'blur' }],
+  city: form.cityMode === 'real'
+    ? [{ required: true, message: '请填写你的所在城市', trigger: 'blur' }]
+    : [],
   promptTemplate: [{ required: true, message: '请输入性格设定', trigger: 'blur' }]
-}
+}))
 
 const spotlightCharacter = computed(() => {
   if (!hoveredCharacterId.value) return null
@@ -509,13 +495,10 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const settings = {}
-    if (form.city?.trim()) {
+    const settings = { city_mode: form.cityMode }
+    if (form.cityMode === 'real' && form.city?.trim()) {
       settings.city = form.city.trim()
       saveUserCity(settings.city)
-    }
-    if (form.useFictionalCity && form.fictionalCity?.trim()) {
-      settings.fictional_city = form.fictionalCity.trim()
     }
     if (form.age) settings.age = form.age
     if (form.gender) settings.gender = form.gender
@@ -1051,15 +1034,17 @@ async function startChat(char) {
 <style lang="scss">
 .character-dialog {
   .el-dialog {
-    max-height: 90vh;
+    max-height: min(90vh, calc(100vh - var(--app-header-height, 56px) - 48px));
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    margin-top: 0 !important;
+    margin-bottom: 24px;
   }
   .el-dialog__body {
     flex: 1;
     overflow-y: auto;
-    max-height: calc(90vh - 96px);
+    max-height: calc(min(90vh, 100vh - var(--app-header-height, 56px) - 48px) - 96px);
     padding: var(--el-dialog-body-padding);
   }
   .el-form-item__label {

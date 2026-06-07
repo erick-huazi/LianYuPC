@@ -177,6 +177,31 @@
         </el-button>
       </div>
     </el-drawer>
+
+    <el-dialog
+      v-model="addDialogVisible"
+      class="square-add-dialog"
+      :title="t('characterSquare.addDialogTitle')"
+      width="420px"
+      destroy-on-close
+      @close="cancelAddDialog"
+    >
+      <CharacterCityModeForm
+        v-model:city-mode="addCityMode"
+        v-model:city="addCity"
+      />
+      <template #footer>
+        <el-button @click="cancelAddDialog">{{ t('common.cancel') }}</el-button>
+        <el-button
+          type="primary"
+          class="btn-cta"
+          :loading="addingId != null"
+          @click="confirmAdd"
+        >
+          {{ t('characterSquare.confirmAdd') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -190,6 +215,7 @@ import { useCharacterSquareStore } from '@/stores/characterSquare'
 import { createConversation } from '@/api/conversation'
 import { getSavedUserCity, saveUserCity } from '@/utils/userCity'
 import { resolveMediaUrl } from '@/utils/media'
+import CharacterCityModeForm from '@/components/CharacterCityModeForm.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -208,6 +234,9 @@ const addingId = ref(null)
 const likingId = ref(null)
 const previewVisible = ref(false)
 const previewItem = ref(null)
+const addDialogVisible = ref(false)
+const addCityMode = ref('real')
+const addCity = ref('')
 
 const filteredCatalog = computed(() => {
   let list = catalog.value
@@ -284,37 +313,46 @@ function openPreview(item) {
   previewVisible.value = true
 }
 
-async function promptUserCity() {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      t('characterSquare.cityPromptMessage'),
-      t('characterSquare.cityPromptTitle'),
-      {
-        confirmButtonText: t('characterSquare.confirmAdd'),
-        cancelButtonText: t('common.cancel'),
-        inputValue: getSavedUserCity(),
-        inputPlaceholder: t('characterSquare.cityPlaceholder'),
-        inputValidator: (val) => {
-          if (!val?.trim()) return t('characterSquare.cityRequired')
-          return true
-        }
-      }
-    )
-    const city = value?.trim()
-    if (city) saveUserCity(city)
-    return city || null
-  } catch {
-    return null
+/** @type {((value: object | null) => void) | null} */
+let addDialogResolve = null
+
+async function openAddCityDialog() {
+  addCityMode.value = 'real'
+  addCity.value = getSavedUserCity()
+  addDialogVisible.value = true
+  return new Promise((resolve) => {
+    addDialogResolve = resolve
+  })
+}
+
+function cancelAddDialog() {
+  addDialogVisible.value = false
+  addDialogResolve?.(null)
+  addDialogResolve = null
+}
+
+async function confirmAdd() {
+  if (addCityMode.value === 'real' && !addCity.value?.trim()) {
+    ElMessage.warning(t('characterSquare.cityRequired'))
+    return
   }
+  const payload = {
+    cityMode: addCityMode.value,
+    city: addCityMode.value === 'real' ? addCity.value.trim() : undefined
+  }
+  if (payload.city) saveUserCity(payload.city)
+  addDialogVisible.value = false
+  addDialogResolve?.(payload)
+  addDialogResolve = null
 }
 
 async function handleAdd(item) {
   if (!item || item.added || addingId.value != null) return
-  const city = await promptUserCity()
-  if (!city) return
+  const cityPayload = await openAddCityDialog()
+  if (!cityPayload) return
   addingId.value = item.id
   try {
-    const created = await squareStore.addTemplate(item.id, { city })
+    const created = await squareStore.addTemplate(item.id, cityPayload)
     squareStore.markAddedInCache(item.id, created?.id)
     markAddedLocal(item.id, created?.id)
     item.added = true

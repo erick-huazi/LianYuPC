@@ -164,6 +164,7 @@ export default {
     goCharacters: 'Go to characters',
     chatNow: 'Chat now',
     alreadyAdded: 'You have already added this character',
+    addDialogTitle: 'City setting',
     cityPromptTitle: 'Your city',
     cityPromptMessage: 'Enter your city for accurate local time and weather in proactive greetings.',
     cityPlaceholder: 'e.g. Shanghai, Beijing, Guangzhou',
@@ -190,6 +191,16 @@ export default {
     deleteConfirm: 'Delete character "{name}"? This cannot be undone.',
     dialogCreate: 'New character',
     unread: 'Unread messages'
+  },
+  cityMode: {
+    label: 'City setting',
+    real: 'Use my real-world city',
+    fictional: 'Use the character\'s fictional city',
+    hint: 'Affects proactive greetings and time/weather context in chat.',
+    realCityLabel: 'Your city',
+    realCityPlaceholder: 'e.g. Shanghai, Beijing, Guangzhou',
+    realCityHint: 'Used for local time and weather.',
+    fictionalNote: 'We infer the canonical fictional city from the character name and persona — no manual input needed.'
   },
   chat: {
     placeholder: 'Type a message...',

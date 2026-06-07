@@ -74,7 +74,7 @@ public class CharacterController {
         long userId = StpUtil.getLoginIdAsLong();
         String uiLang = request.getHeader(CharacterSquareService.HEADER_UI_LANGUAGE);
         return Result.ok(characterSquareService.addTemplateToMyCharacters(
-                userId, templateId, uiLang, body.getCity()));
+                userId, templateId, uiLang, body.getCityMode(), body.getCity()));
     }
 
     @Operation(summary = "角色广场点赞/取消点赞")

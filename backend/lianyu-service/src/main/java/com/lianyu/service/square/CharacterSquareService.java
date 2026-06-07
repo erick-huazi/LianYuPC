@@ -8,6 +8,7 @@ import com.lianyu.dao.entity.Character;
 import com.lianyu.dao.entity.CharacterSquareTemplate;
 import com.lianyu.dao.mapper.CharacterMapper;
 import com.lianyu.dao.mapper.CharacterSquareTemplateMapper;
+import com.lianyu.service.character.CharacterCitySettingsService;
 import com.lianyu.service.character.CharacterService;
 import com.lianyu.service.dto.CharacterResponse;
 import com.lianyu.service.dto.CharacterSquarePageResponse;
@@ -44,6 +45,7 @@ public class CharacterSquareService {
     private final CharacterService characterService;
     private final FileStorageService fileStorageService;
     private final OutputLanguageService outputLanguageService;
+    private final CharacterCitySettingsService characterCitySettingsService;
 
     public CharacterSquarePageResponse listTemplatesPage(
             Long userId, String uiLanguageCode, String tag, String keyword, int page, int size) {
@@ -150,7 +152,11 @@ public class CharacterSquareService {
     }
 
     @Transactional
-    public CharacterResponse addTemplateToMyCharacters(Long userId, Long templateId, String uiLanguageCode, String userCity) {
+    public CharacterResponse addTemplateToMyCharacters(Long userId,
+                                                       Long templateId,
+                                                       String uiLanguageCode,
+                                                       String cityMode,
+                                                       String userCity) {
         CharacterSquareTemplate template = templateMapper.selectById(templateId);
         if (template == null || template.getIsEnabled() == null || template.getIsEnabled() != 1) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
@@ -186,12 +192,8 @@ public class CharacterSquareService {
         entity.setAvatarUrl(template.getAvatarUrl());
         entity.setPromptTemplate(promptPack.prompt());
         Map<String, Object> settings = copySettings(template.getSettingsJson());
-        if (userCity != null && !userCity.isBlank()) {
-            if (settings == null) {
-                settings = new LinkedHashMap<>();
-            }
-            settings.put("city", userCity.trim());
-        }
+        characterCitySettingsService.applySquareAddCity(
+                userId, uiPack.name(), promptPack.prompt(), settings, cityMode, userCity);
         entity.setSettings(settings);
 
         try {

@@ -164,6 +164,7 @@ export default {
     goCharacters: '前往角色管理',
     chatNow: '立即开聊',
     alreadyAdded: '你已经添加过该角色了哦',
+    addDialogTitle: '选择城市设定',
     cityPromptTitle: '填写所在城市',
     cityPromptMessage: '为方便精确计算当地时间与天气，请填写你所在的城市。',
     cityPlaceholder: '如 上海、北京、广州',
@@ -190,6 +191,16 @@ export default {
     deleteConfirm: '确定删除角色「{name}」吗？此操作不可恢复。',
     dialogCreate: '创建角色',
     unread: '有未读消息'
+  },
+  cityMode: {
+    label: '城市设定',
+    real: '使用我的现实城市',
+    fictional: '使用角色所在虚构城市',
+    hint: '影响主动问候、时间与天气相关对话所参考的城市。',
+    realCityLabel: '你的所在城市',
+    realCityPlaceholder: '如 上海、北京、广州',
+    realCityHint: '用于精确计算当地时间与天气。',
+    fictionalNote: '系统将依据角色名与人设，自动推断其原作中的虚构城市，无需手动填写。'
   },
   chat: {
     placeholder: '输入消息...',

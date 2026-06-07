@@ -53,6 +53,16 @@ onUnmounted(() => {
   position: relative;
 }
 
+.app-layout--immersive {
+  min-height: calc(100vh - var(--electron-caption-height, 0px));
+  height: calc(100vh - var(--electron-caption-height, 0px));
+}
+
+.app-layout--immersive {
+  min-height: calc(100vh - var(--electron-caption-height, 0px));
+  height: calc(100vh - var(--electron-caption-height, 0px));
+}
+
 .app-main {
   flex: 1;
   display: flex;
@@ -61,6 +71,11 @@ onUnmounted(() => {
   min-height: 0;
   position: relative;
   z-index: 1;
+}
+
+.app-layout--immersive .app-main {
+  flex: 1;
+  min-height: 0;
 }
 
 .app-content {
@@ -78,6 +93,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  flex: 1;
 }
 
 .app-layout--dock-hidden .app-content {

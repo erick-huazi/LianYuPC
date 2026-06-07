@@ -159,6 +159,7 @@ export default {
     goCharacters: 'キャラ管理へ',
     chatNow: '今すぐチャット',
     alreadyAdded: 'このキャラは既に追加済みです',
+    addDialogTitle: '都市設定',
     cityPromptTitle: 'お住まいの都市',
     cityPromptMessage: '現地の時刻と天気を正確に反映するため、都市名を入力してください。',
     cityPlaceholder: '例：上海、北京、広州',
@@ -185,6 +186,16 @@ export default {
     deleteConfirm: 'キャラ「{name}」を削除しますか？元に戻せません。',
     dialogCreate: 'キャラ作成',
     unread: '未読あり'
+  },
+  cityMode: {
+    label: '都市設定',
+    real: '自分の現実の都市を使う',
+    fictional: 'キャラの架空都市を使う',
+    hint: '能動的な挨拶や天気・時間の会話で参照する都市に影響します。',
+    realCityLabel: 'あなたの都市',
+    realCityPlaceholder: '例：東京、大阪、名古屋',
+    realCityHint: '現地時間と天気の計算に使用します。',
+    fictionalNote: 'キャラ名と設定から原作の架空都市を自動推定します。手入力は不要です。'
   },
   chat: {
     placeholder: 'メッセージを入力...',

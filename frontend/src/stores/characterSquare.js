@@ -84,8 +84,12 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
       .map(item => item.id)
   })
 
-  async function addTemplate(templateId, { city } = {}) {
-    const created = await addCharacterFromSquare(templateId, { city })
+  async function addTemplate(templateId, { cityMode = 'real', city } = {}) {
+    const payload = { cityMode }
+    if (cityMode === 'real' && city) {
+      payload.city = city
+    }
+    const created = await addCharacterFromSquare(templateId, payload)
     invalidateAll()
     useCharactersStore().invalidate()
     return created
