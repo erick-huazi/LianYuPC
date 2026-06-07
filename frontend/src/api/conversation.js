@@ -1,5 +1,6 @@
 import http from './index'
 import { apiBasePath } from '@/utils/runtime'
+import { syncToken } from '@/utils/secureToken'
 
 export function listConversations(options = {}) {
   return http.get('/conversation', {
@@ -52,7 +53,7 @@ export function updateGroupTitle(id, title) {
 
 // Non-Axios SSE — fetch API handles streams better
 export function sendMessageStream(id, data) {
-  const token = localStorage.getItem('lianyu-token')
+  const token = syncToken() || localStorage.getItem('lianyu-token')
   return fetch(`${apiBasePath()}/conversation/${id}/messages/stream`, {
     method: 'POST',
     headers: {

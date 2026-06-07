@@ -6,6 +6,8 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
+import { initAntiDebug } from './utils/antiDebug'
+import { readToken } from './utils/secureToken'
 import './styles/theme.scss'
 import './styles/global.scss'
 import './styles/app-shell.scss'
@@ -33,10 +35,15 @@ const settingsStore = useSettingsStore(pinia)
 settingsStore.initLanguage()
 settingsStore.initTheme()
 
+// 反调试（生产环境 Electron 专用）
+initAntiDebug()
+
 // 通知 Electron 主进程当前登录状态（已登录用户在启动时恢复 session）
-const storedToken = localStorage.getItem('lianyu-token')
-if (window.electronAPI?.setLoginState) {
-  window.electronAPI.setLoginState(!!storedToken)
-}
+;(async () => {
+  const token = await readToken()
+  if (window.electronAPI?.setLoginState) {
+    window.electronAPI.setLoginState(!!token)
+  }
+})()
 
 app.mount('#app')

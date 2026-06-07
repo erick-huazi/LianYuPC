@@ -9,9 +9,10 @@ import {
   updateProfile as updateProfileApi,
   uploadProfileAvatar as uploadProfileAvatarApi
 } from '@/api/auth'
+import { storeToken, readToken, clearTokenStorage, syncToken } from '@/utils/secureToken'
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem('lianyu-token') || '')
+  const token = ref(syncToken() || localStorage.getItem('lianyu-token') || '')
   const tokenName = ref(localStorage.getItem('lianyu-token-name') || '')
   const userId = ref(null)
   const username = ref('')
@@ -24,8 +25,10 @@ export const useUserStore = defineStore('user', () => {
   function setAuth(t, tn, user) {
     token.value = t
     tokenName.value = tn
+    // 保留旧 localStorage 兼容 + 新加密存储
     localStorage.setItem('lianyu-token', t)
     localStorage.setItem('lianyu-token-name', tn)
+    storeToken(t)
     if (user) {
       applyProfile(user)
     }
@@ -48,6 +51,7 @@ export const useUserStore = defineStore('user', () => {
     avatarUrl.value = ''
     localStorage.removeItem('lianyu-token')
     localStorage.removeItem('lianyu-token-name')
+    clearTokenStorage()
     window.electronAPI?.setLoginState(false)
   }
 

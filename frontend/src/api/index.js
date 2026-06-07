@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { apiBasePath } from '@/utils/runtime'
 import { extractApiError, humanizeError } from '@/utils/errorMessage'
+import { readToken, clearTokenStorage } from '@/utils/secureToken'
 
 const http = axios.create({
   baseURL: apiBasePath(),
@@ -9,13 +10,13 @@ const http = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
-// Request interceptor — inject Sa-Token
-http.interceptors.request.use(config => {
-  const token = localStorage.getItem('lianyu-token')
+// Request interceptor — async inject encrypted Sa-Token
+http.interceptors.request.use(async config => {
+  const token = await readToken()
   if (token) {
     config.headers['lianyu-token'] = token
   }
-  const traceId = generateTraceId()
+  const traceId = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36)
   config.headers['X-Trace-Id'] = traceId
   return config
 })
@@ -24,14 +25,17 @@ http.interceptors.request.use(config => {
 http.interceptors.response.use(
   response => {
     const body = response.data
-    // If response follows Result<T> format
     if (body && typeof body.code === 'number') {
       if (body.code === 200) {
         return body.data
       }
-      // Token expired
       if (body.code === 401) {
-        clearSessionAndGoLanding()
+        clearTokenStorage()
+        localStorage.removeItem('lianyu-token-name')
+        const hash = window.location.hash || ''
+        if (!hash.includes('#/login') && !hash.includes('#/register')) {
+          window.location.hash = '#/'
+        }
         return Promise.reject(new Error('登录已过期，请重新登录'))
       }
       const msg = humanizeError(body.message, '请求失败，请稍后再试')
@@ -40,15 +44,18 @@ http.interceptors.response.use(
       }
       return Promise.reject(new Error(msg))
     }
-    // Non-Result response
     return body
   },
   error => {
     if (error.response?.status === 401) {
-      clearSessionAndGoLanding()
+      clearTokenStorage()
+      localStorage.removeItem('lianyu-token-name')
+      const hash = window.location.hash || ''
+      if (!hash.includes('#/login') && !hash.includes('#/register')) {
+        window.location.hash = '#/'
+      }
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
-
     const apiErr = extractApiError(error)
     let fallback = '请求失败，请稍后再试'
     if (!error.response) {
@@ -58,7 +65,6 @@ http.interceptors.response.use(
     } else if (!apiErr?.message) {
       fallback = '请求失败，请稍后再试'
     }
-
     const msg = humanizeError(error, fallback)
     const skipToast = error.config?.skipGlobalError === true
     if (!skipToast && error.response?.status !== 401) {
@@ -67,19 +73,5 @@ http.interceptors.response.use(
     return Promise.reject(new Error(msg))
   }
 )
-
-function generateTraceId() {
-  return crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36)
-}
-
-/** 未登录/登录过期：回营销首页，而非强制打开登录页 */
-function clearSessionAndGoLanding() {
-  localStorage.removeItem('lianyu-token')
-  localStorage.removeItem('lianyu-token-name')
-  const hash = window.location.hash || ''
-  if (!hash.includes('#/login') && !hash.includes('#/register')) {
-    window.location.hash = '#/'
-  }
-}
 
 export default http

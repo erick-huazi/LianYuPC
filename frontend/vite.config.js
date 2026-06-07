@@ -33,6 +33,38 @@ export default defineConfig({
     modulePreload: false,
     // file:// 下 Vite 懒加载路由无法 preload 分包 CSS，合并为单文件
     cssCodeSplit: false,
+    // 生产环境禁用 sourcemap（防源码还原）
+    sourcemap: process.env.ELECTRON_BUILD === '1' ? false : undefined,
+    // Terser 高级混淆（名称混淆 + 压缩 + 死代码消除）
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: process.env.ELECTRON_BUILD === '1',
+        drop_debugger: true,
+        pure_funcs: process.env.ELECTRON_BUILD === '1' ? ['console.log', 'console.info', 'console.debug', 'console.warn'] : [],
+        passes: 2,
+      },
+      mangle: {
+        toplevel: true,
+        safari10: false,
+        properties: {
+          regex: /^_[a-z]/,
+        },
+      },
+      format: {
+        comments: false,
+        ecma: 2020,
+      },
+    },
+    rollupOptions: {
+      output: {
+        // 移除 license 注释
+        generatedCode: {
+          preset: 'es2015',
+        },
+        compact: true,
+      },
+    },
   },
   define: enableElectron
     ? {

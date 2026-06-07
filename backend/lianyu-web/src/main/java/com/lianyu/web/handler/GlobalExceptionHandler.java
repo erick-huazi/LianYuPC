@@ -7,7 +7,6 @@ import com.lianyu.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -23,7 +22,7 @@ public class GlobalExceptionHandler {
                                                         HttpServletRequest request,
                                                         HttpServletResponse response) {
         if (shouldSkipJsonErrorBody(request, response)) {
-            log.warn("Business exception during SSE/stream (skip JSON body): {}", e.getMessage());
+            log.warn("Business exception during SSE/stream: {}", e.getMessage());
             return null;
         }
         log.warn("Business exception: code={}, message={}", e.getErrorCode().getCode(), e.getMessage());
@@ -65,10 +64,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleUnknown(Exception e, HttpServletRequest request,
                                                        HttpServletResponse response) {
         if (shouldSkipJsonErrorBody(request, response)) {
-            log.error("Unhandled exception during SSE/async (skip JSON error body): {}", e.getMessage(), e);
+            log.error("Unhandled exception during SSE/async: {}", e.getClass().getSimpleName());
             return null;
         }
-        log.error("Unhandled exception", e);
+        // 生产环境不泄露栈轨迹，仅记录异常类型和消息
+        log.error("Unhandled exception: {} - {}", e.getClass().getSimpleName(), e.getMessage());
         return ResponseEntity.status(500).body(Result.fail(ErrorCode.INTERNAL_ERROR));
     }
 

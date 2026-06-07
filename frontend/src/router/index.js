@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { syncToken } from '@/utils/secureToken'
 
 const routes = [
   {
@@ -138,7 +139,7 @@ const router = createRouter({
 
 // Auth guard
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('lianyu-token')
+  const token = syncToken() || localStorage.getItem('lianyu-token')
 
   if (to.meta.guest) {
     // Already logged in users shouldn't see login/register

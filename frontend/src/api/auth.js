@@ -1,4 +1,5 @@
 import http from './index'
+import { storeToken, readToken, clearTokenStorage } from '@/utils/secureToken'
 
 export function getCaptcha() {
   return http.get('/auth/captcha', { skipGlobalError: true })
@@ -8,12 +9,17 @@ export function register(data) {
   return http.post('/auth/register', data)
 }
 
-export function login(data) {
-  return http.post('/auth/login', data)
+export async function login(data) {
+  const result = await http.post('/auth/login', data)
+  if (result?.token) {
+    await storeToken(result.token)
+  }
+  return result
 }
 
-export function logout() {
-  return http.post('/auth/logout')
+export async function logout() {
+  try { await http.post('/auth/logout') } catch { /* ignore */ }
+  clearTokenStorage()
 }
 
 export function getProfile() {

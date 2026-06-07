@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { Client } from '@stomp/stompjs'
 import { ElNotification } from 'element-plus'
+import { syncToken } from '@/utils/secureToken'
 import {
   getUnreadCount,
   listNotifications,
@@ -156,7 +157,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   function connectWebSocket() {
-    const token = localStorage.getItem('lianyu-token')
+    const token = syncToken() || localStorage.getItem('lianyu-token')
     if (!token) {
       wsStatus.value = 'disconnected'
       return
