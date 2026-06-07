@@ -47,6 +47,9 @@ let unsubscribePetChanged = null
 let unsubscribeInteractionReset = null
 let gsapCtx = null
 let idleFloatTween = null
+let dragRafId = null
+let pendingDx = 0
+let pendingDy = 0
 
 const { playAnim, playAnimOnce, returnToIdle, setSpriteImage } = usePetSpriteAnimator(petRef)
 
@@ -54,6 +57,23 @@ function setIdleFloatPaused(paused) {
   if (!idleFloatTween) return
   if (paused) idleFloatTween.pause()
   else idleFloatTween.play()
+}
+
+function flushDragDelta() {
+  dragRafId = null
+  if (pendingDx === 0 && pendingDy === 0) return
+  try {
+    getElectronAPI()?.moveLauncherDrag?.(pendingDx, pendingDy)
+  } catch {
+    // ignore IPC failures during rapid drag
+  }
+  pendingDx = 0
+  pendingDy = 0
+}
+
+function scheduleDragFlush() {
+  if (dragRafId != null) return
+  dragRafId = requestAnimationFrame(flushDragDelta)
 }
 
 function applyPetId(petId) {
@@ -78,6 +98,20 @@ function resetInteractionState() {
   if (clickTimer) {
     clearTimeout(clickTimer)
     clickTimer = null
+  }
+  if (dragRafId != null) {
+    cancelAnimationFrame(dragRafId)
+    dragRafId = null
+    // flush any remaining delta before resetting
+    if (pendingDx !== 0 || pendingDy !== 0) {
+      try {
+        getElectronAPI()?.moveLauncherDrag?.(pendingDx, pendingDy)
+      } catch {
+        // ignore
+      }
+    }
+    pendingDx = 0
+    pendingDy = 0
   }
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
@@ -140,7 +174,11 @@ function onPointerMove(e) {
   if (!state.moved && (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5)) {
     state.moved = true
     dragging.value = true
-    getElectronAPI()?.beginLauncherDrag?.()
+    try {
+      getElectronAPI()?.beginLauncherDrag?.()
+    } catch {
+      // ignore
+    }
     const runAnim = totalDx >= 0 ? 'run-right' : 'run-left'
     state.runAnim = runAnim
     playAnim(runAnim, { loop: true })
@@ -158,7 +196,9 @@ function onPointerMove(e) {
       }
     }
     if (dx !== 0 || dy !== 0) {
-      getElectronAPI()?.moveLauncherDrag?.(dx, dy)
+      pendingDx += dx
+      pendingDy += dy
+      scheduleDragFlush()
     }
   }
 }
@@ -172,6 +212,19 @@ function onPointerUp(e) {
   window.removeEventListener('pointercancel', onPointerUp)
   releasePointerCapture(state)
   dragging.value = false
+  if (dragRafId != null) {
+    cancelAnimationFrame(dragRafId)
+    dragRafId = null
+  }
+  if (wasMoved && (pendingDx !== 0 || pendingDy !== 0)) {
+    try {
+      getElectronAPI()?.moveLauncherDrag?.(pendingDx, pendingDy)
+    } catch {
+      // ignore
+    }
+  }
+  pendingDx = 0
+  pendingDy = 0
   if (state && !state.moved) {
     clickTimer = setTimeout(() => {
       clickTimer = null
@@ -180,7 +233,11 @@ function onPointerUp(e) {
     }, 240)
   } else if (wasMoved) {
     playAnimOnce('running', () => returnToIdle())
-    getElectronAPI()?.endLauncherDrag?.()
+    try {
+      getElectronAPI()?.endLauncherDrag?.()
+    } catch {
+      // ignore
+    }
   }
   setIdleFloatPaused(false)
   pointerState.value = null
@@ -230,6 +287,10 @@ onMounted(async () => {
 onUnmounted(() => {
   clearTimeout(clickTimer)
   clearTimeout(toastTimer)
+  if (dragRafId != null) {
+    cancelAnimationFrame(dragRafId)
+    dragRafId = null
+  }
   unsubscribeLauncherMessage?.()
   unsubscribePetChanged?.()
   unsubscribeInteractionReset?.()

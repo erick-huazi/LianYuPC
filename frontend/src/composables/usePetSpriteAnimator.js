@@ -40,7 +40,7 @@ export function usePetSpriteAnimator(canvasRef) {
     const canvas = canvasRef.value
     if (!canvas) return null
     if (!ctx) {
-      ctx = canvas.getContext('2d', { alpha: true, desynchronized: true })
+      ctx = canvas.getContext('2d', { alpha: true })
     }
     return ctx
   }
