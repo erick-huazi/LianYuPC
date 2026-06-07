@@ -6,6 +6,7 @@ import com.lianyu.service.conversation.ConversationAccessService;
 import com.lianyu.service.support.OutputLanguageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -56,9 +57,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                // Electron file://、浏览器 dev；STOMP CONNECT 仍校验 token
-                .setAllowedOriginPatterns("*");
+                // 生产环境仅允许云端域名；本地开发/Electron 走 file:// 回退到 "*"
+                .setAllowedOriginPatterns(allowedOriginPatterns.split(","));
     }
+
+    /**
+     * WebSocket 允许的 Origin 模式（逗号分隔）。
+     * 生产环境仅允许云端域名（防 CSWSH）。
+     * 本地开发/Electron file:// 回退到通配符 "*"。
+     */
+    @Value("${ws.allowed-origin-patterns:*}")
+    private String allowedOriginPatterns;
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {

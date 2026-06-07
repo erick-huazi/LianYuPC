@@ -23,7 +23,7 @@ function readConfiguredApiOrigin() {
   return ''
 }
 
-/** Electron 下 API 根地址（云端构建注入 https://154.219.111.30，本地开发默认 localhost） */
+/** Electron 下 API 根地址（云端构建注入，本地开发默认 localhost） */
 export function resolveApiOrigin() {
   return readConfiguredApiOrigin() || DEFAULT_API_ORIGIN
 }
