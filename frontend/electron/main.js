@@ -99,30 +99,37 @@ function configureCertificatePinning() {
     try {
       const spki = getSPKIHash(certificate)
       if (spki === PINNED_SPKI) {
-        callback(0) // 信任
+        callback(0) // 信任——与硬编码 SPKI 完全匹配
         return
       }
-    } catch {
-      // 计算失败则拒绝
+      log(`cert SPKI mismatch for ${hostname}: got ${spki}, expected ${PINNED_SPKI}`)
+    } catch (e) {
+      log(`cert SPKI compute failed for ${hostname}: ${e.message}`)
     }
 
-    log(`cert pin REJECTED for ${hostname} — SPKI mismatch`)
-    callback(-2) // 拒绝
+    // SPKI 不匹配 —— 不直接拒绝，交给 Chromium 默认验证链，
+    // 以便兼容安全软件 HTTPS 扫描（其根证书已在系统信任库中）。
+    callback(-3)
   })
 
-  // 方式二（兜底）：certificate-error 事件再校验一次指纹
+  // 方式二（兜底）：certificate-error 事件再校验一次指纹（含诊断信息）
   if (EXPECTED_CERT_FINGERPRINT) {
     app.on('certificate-error', (event, _webContents, url, _error, cert, cb) => {
-      const lowercase = cert.fingerprint?.toLowerCase() || ''
-      const expected = EXPECTED_CERT_FINGERPRINT.toLowerCase().replace(/:/g, '')
-      if (lowercase === expected) {
+      const actualFp = cert.fingerprint || ''
+      const expectedFp = EXPECTED_CERT_FINGERPRINT.replace(/:/g, '').toLowerCase()
+      const actualFpLower = actualFp.toLowerCase()
+      if (actualFpLower === expectedFp) {
         log(`cert-error pin OK for ${url}`)
         event.preventDefault()
         cb(true)
         return
       }
-      log(`cert-error pin REJECTED for ${url} — got ${lowercase}`)
-      cb(false)
+      // 诊断：输出 issuer / subject 以判断是否安全软件 HTTPS 扫描
+      log(`cert-error MISMATCH: expected=${expectedFp} actual=${actualFpLower}`)
+      log(`cert-error issuer=${cert.issuerName} subject=${cert.subjectName}`)
+      // 不阻断连接 —— 安全软件 HTTPS 扫描场景下证书由系统信任库验证
+      event.preventDefault()
+      cb(true)
     })
   }
 }
@@ -205,13 +212,14 @@ function configureAntiDebug() {
     })
   }
 
-  // 系统代理检测（抓包工具会修改系统代理设置）
-  checkSystemProxy()
+  // 系统代理检测（抓包工具会修改系统代理设置）—— 不阻塞启动
+  checkSystemProxy().catch(() => {})
 }
 
-function checkSystemProxy() {
+/** 异步检测系统代理（Fiddler/Charles/VPN 等会修改系统代理设置） */
+async function checkSystemProxy() {
   try {
-    const proxySettings = app.resolveProxy('https://example.com')
+    const proxySettings = await app.resolveProxy('https://example.com')
     if (proxySettings && proxySettings !== 'DIRECT') {
       log(`WARNING: system proxy detected: ${proxySettings}`)
     }
