@@ -7,7 +7,7 @@
   --auth-ink: #06080f;
   --auth-rose: #f4a6b5;
   --auth-glass-border: rgba(255, 255, 255, 0.12);
-  --auth-caption-h: 36px;
+  --auth-caption-h: var(--electron-caption-height, #{$electron-caption-height});
 
   min-height: 100vh;
   display: flex;

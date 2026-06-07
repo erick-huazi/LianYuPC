@@ -433,16 +433,16 @@ async function startChat(characterId) {
 }
 
 .square-orb--1 {
-  width: 200px;
-  height: 200px;
+  width: min(200px, 40vw);
+  height: min(200px, 40vw);
   top: -4%;
   right: 6%;
   background: rgba($color-pink-rgb, 0.2);
 }
 
 .square-orb--2 {
-  width: 160px;
-  height: 160px;
+  width: min(160px, 32vw);
+  height: min(160px, 32vw);
   bottom: 8%;
   left: -4%;
   background: rgba(120, 100, 200, 0.12);

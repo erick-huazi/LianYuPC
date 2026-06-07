@@ -1,4 +1,5 @@
 // ===== Global Styles & Atmosphere =====
+@use 'variables' as *;
 
 // --- CSS Reset ---
 *,
@@ -70,12 +71,47 @@ h1, h2, h3, h4, h5, h6 { font-weight: $font-weight-semibold; line-height: $line-
 }
 
 body.electron-app {
-  --electron-caption-height: 36px;
-  --electron-caption-controls-width: 138px;
+  --electron-caption-height: #{$electron-caption-height};
+  --electron-caption-controls-width: #{$electron-caption-controls-width};
 
   #app {
     padding-top: var(--electron-caption-height);
     box-sizing: border-box;
+  }
+
+  /* 顶部标题栏背景（落地页等无 auth-page 条的页面） */
+  &::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--electron-caption-height);
+    background: rgba(6, 8, 15, 0.92);
+    backdrop-filter: blur(8px);
+    z-index: 9998;
+    pointer-events: none;
+  }
+
+  /* fixed / sticky 顶栏需下移，且右侧为窗口控制按钮留白 */
+  .landing-nav {
+    top: var(--electron-caption-height);
+  }
+
+  .landing-nav__inner {
+    padding-right: calc(#{$layout-page-gutter} + var(--electron-caption-controls-width));
+  }
+
+  .encounter-nav {
+    padding-right: var(--electron-caption-controls-width);
+  }
+
+  .encounter-nav__actions {
+    margin-right: 0;
+  }
+
+  .app-header {
+    margin-right: calc(#{$space-4} + var(--electron-caption-controls-width));
   }
 }
 
@@ -102,6 +138,15 @@ body.electron-app {
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid rgba($color-pink-rgb, 0.1);
+}
+
+.filter-select,
+.toolbar-select {
+  width: min(160px, 45vw);
+}
+
+.toolbar-select--wide {
+  width: min(200px, 55vw);
 }
 
 // --- Text Utilities ---

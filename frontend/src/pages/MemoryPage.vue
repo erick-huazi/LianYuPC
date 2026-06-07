@@ -10,7 +10,7 @@
         v-model="filterCharId"
         :placeholder="t('memory.allCharacters')"
         clearable
-        style="width:200px"
+        class="filter-select"
         @change="fetchMemories"
       >
         <el-option
@@ -221,9 +221,14 @@ function formatTime(ts) {
 
 .filter-row {
   display: flex;
+  flex-wrap: wrap;
   gap: $space-3;
   margin-bottom: $space-6;
   animation: fadeSlideUp 0.5s 0.04s ease both;
+}
+
+.filter-select {
+  width: min(200px, 55vw);
 }
 
 .loading-state, .empty-state {

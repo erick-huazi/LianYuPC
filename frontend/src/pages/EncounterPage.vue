@@ -81,6 +81,8 @@ function goRegister() {
 </style>
 
 <style lang="scss" scoped>
+@use '@/styles/variables' as *;
+
 .encounter {
   --landing-font-display: 'Noto Serif SC', 'Songti SC', serif;
   --landing-font-brand: 'Syne', system-ui, sans-serif;
@@ -88,7 +90,7 @@ function goRegister() {
   position: relative;
   background: #06080f;
   color: #f5f0f3;
-  padding: 24px clamp(16px, 4vw, 40px) 64px;
+  padding: clamp(#{$space-4}, 3vw, 24px) $layout-page-gutter clamp(3rem, 8vh, 64px);
 }
 
 .encounter__mesh {
@@ -112,11 +114,13 @@ function goRegister() {
 .encounter-nav {
   position: relative;
   z-index: 2;
-  max-width: 900px;
-  margin: 0 auto 48px;
+  max-width: min(900px, 100%);
+  margin: 0 auto clamp(2rem, 5vh, 48px);
+  padding: 0 $layout-page-gutter;
   display: flex;
   align-items: center;
-  gap: $space-4;
+  gap: clamp(#{$space-2}, 2vw, #{$space-4});
+  flex-wrap: wrap;
 }
 
 .encounter-nav__back {

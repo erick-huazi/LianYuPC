@@ -329,6 +329,8 @@ function goRegister() {
 </style>
 
 <style lang="scss" scoped>
+@use '@/styles/variables' as *;
+
 .landing {
   --landing-font-display: 'Noto Serif SC', 'Songti SC', serif;
   --landing-font-brand: 'Syne', system-ui, sans-serif;
@@ -410,11 +412,11 @@ function goRegister() {
 /* Nav */
 .landing-nav {
   position: fixed;
-  top: 0;
+  top: var(--electron-caption-height, 0px);
   left: 0;
   right: 0;
   z-index: 100;
-  padding: 14px 0;
+  padding: clamp(10px, 1.5vh, 14px) 0;
   transition:
     background 0.4s ease,
     backdrop-filter 0.4s ease,
@@ -422,7 +424,7 @@ function goRegister() {
     padding 0.3s ease;
 
   &--scrolled {
-    padding: 10px 0;
+    padding: clamp(8px, 1vh, 10px) 0;
     background: rgba(6, 8, 15, 0.75);
     backdrop-filter: blur(20px) saturate(1.2);
     border-bottom: 1px solid var(--landing-border);
@@ -430,9 +432,9 @@ function goRegister() {
 }
 
 .landing-nav__inner {
-  max-width: 1180px;
+  max-width: min(#{$max-content-width}, 100%);
   margin: 0 auto;
-  padding: 0 clamp(16px, 4vw, 40px);
+  padding: 0 $layout-page-gutter;
   display: flex;
   align-items: center;
   gap: $space-6;
@@ -450,16 +452,16 @@ function goRegister() {
 }
 
 .landing-nav__logo {
-  width: 42px;
-  height: 42px;
+  width: clamp(36px, 4.5vw, 42px);
+  height: clamp(36px, 4.5vw, 42px);
   border-radius: 14px;
   object-fit: cover;
   box-shadow: 0 8px 24px rgba(244, 166, 181, 0.35);
 }
 
 .landing-nav__mark {
-  width: 42px;
-  height: 42px;
+  width: clamp(36px, 4.5vw, 42px);
+  height: clamp(36px, 4.5vw, 42px);
   border-radius: 14px;
   display: grid;
   place-items: center;
@@ -524,7 +526,8 @@ function goRegister() {
 
 .landing-nav__actions {
   display: flex;
-  gap: 10px;
+  gap: clamp(6px, 1.5vw, 10px);
+  flex-shrink: 0;
 }
 
 /* Buttons */
@@ -610,9 +613,9 @@ function goRegister() {
 }
 
 .section__inner {
-  max-width: 1180px;
+  max-width: min(#{$max-content-width}, 100%);
   margin: 0 auto;
-  padding: 0 clamp(16px, 4vw, 40px);
+  padding: 0 $layout-page-gutter;
 }
 
 .section__kicker {
@@ -673,8 +676,8 @@ function goRegister() {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding-top: 100px;
-  padding-bottom: 80px;
+  padding-top: clamp(5.5rem, 14vh, 7.5rem);
+  padding-bottom: clamp(3rem, 8vh, 5rem);
 }
 
 .hero {
@@ -1095,9 +1098,9 @@ function goRegister() {
 }
 
 .landing-footer__inner {
-  max-width: 1180px;
+  max-width: min(#{$max-content-width}, 100%);
   margin: 0 auto;
-  padding: 0 clamp(16px, 4vw, 40px);
+  padding: 0 $layout-page-gutter;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1195,6 +1198,15 @@ function goRegister() {
 @media (max-width: 480px) {
   .landing-nav__wordmark {
     display: none;
+  }
+
+  .landing-nav__actions {
+    gap: 6px;
+
+    .btn {
+      padding: clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px);
+      font-size: clamp(0.75rem, 2.8vw, 0.82rem);
+    }
   }
 
   .landing-footer__links {

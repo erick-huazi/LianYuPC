@@ -151,7 +151,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingVault ? '编辑 AI 配置' : '添加 AI 配置'"
-      width="480px"
+      :width="dialogWidth"
       destroy-on-close
     >
       <el-form
@@ -214,6 +214,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useResponsiveDialogWidth } from '@/composables/useResponsiveDialogWidth'
 import { useI18n } from 'vue-i18n'
 import { useProvidersStore } from '@/stores/providers'
 import { useDesktopStore } from '@/stores/desktop'
@@ -237,6 +238,7 @@ const desktopForm = reactive({
   launcherPetId: 'raiden',
 })
 const dialogVisible = ref(false)
+const dialogWidth = useResponsiveDialogWidth(480)
 const editingVault = ref(null)
 const submitting = ref(false)
 const formRef = ref(null)

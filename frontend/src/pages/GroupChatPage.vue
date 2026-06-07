@@ -239,7 +239,7 @@
     </div>
 
     <!-- Create Group Dialog -->
-    <el-dialog v-model="dialogVisible" :title="t('group.createDialogTitle')" width="480px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="t('group.createDialogTitle')" :width="dialogWidth" destroy-on-close>
       <el-form label-position="top" @submit.prevent="handleCreateGroup">
         <el-form-item :label="t('group.selectMembers')">
           <el-select
@@ -296,6 +296,7 @@ import { useProvidersStore } from '@/stores/providers'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useLayoutStore } from '@/stores/layout'
 import { useConversationUnread } from '@/composables/useConversationUnread'
+import { useResponsiveDialogWidth } from '@/composables/useResponsiveDialogWidth'
 import GroupAvatar from '@/components/group/GroupAvatar.vue'
 import OnboardingHintBubble from '@/components/OnboardingHintBubble.vue'
 import { useOnboardingHint } from '@/composables/useOnboardingHint'
@@ -339,6 +340,7 @@ const groupMsgListRef = ref(null)
 const groupScrollAnchor = ref(null)
 
 const dialogVisible = ref(false)
+const dialogWidth = useResponsiveDialogWidth(480)
 const selectedCharIds = ref([])
 const groupTitle = ref('')
 const creatingGroup = ref(false)
