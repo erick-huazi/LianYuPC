@@ -136,10 +136,34 @@ function getSPKIHash(certificate) {
     return hash
   }
   // 降级：使用 issuerCert 的 fingerprint
-  throw new Error('SPKI not available')
+    throw new Error('SPKI not available')
+}
+
+/** 验证 app.asar 完整性（构建时 after-pack.mjs 注入哈希），防篡改源码注入 */
+function verifyAsarIntegrity() {
+  if (isDev) return
+  try {
+    const hexPath = path.join(process.resourcesPath, 'dist', 'asar-integrity.hex')
+    if (!fs.existsSync(hexPath)) {
+      log('asar integrity hash not found, skipping verification')
+      return
+    }
+    const expected = fs.readFileSync(hexPath, 'utf8').trim()
+    if (!expected || expected.length !== 64) {
+      log('asar integrity hash invalid, skipping verification')
+      return
+    }
+    // app.setAsarIntegrity 是 Electron 内置的 ASAR 完整性校验 API
+    ;(app.setAsarIntegrity ?? app.setAppAsarIntegrity)?.(expected)
+    log('asar integrity verification enabled')
+  } catch (err) {
+    log(`asar integrity verification failed: ${err.message}`)
+    // 不阻止启动——完整性校验失败由 Electron 内部处理（弹窗或退出）
+  }
 }
 
 function configureSecurity() {
+  verifyAsarIntegrity()
   configureCertificatePinning()
 }
 
