@@ -33,6 +33,8 @@ final class CharacterSquareTags {
             case "saekano" -> tag("saekano", workLabel(code, "路人女主", "路人女主", "冴えない彼女", "Saekano"));
             case "otonari" -> tag("otonari", workLabel(code, "邻座天使", "鄰座天使", "お隣の天使様", "Angel Next Door"));
             case "rezero" -> tag("rezero", workLabel(code, "Re:零", "Re:零", "Re:ゼロ", "Re:Zero"));
+            case "shizhong" -> tag("shizhong", workLabel(code, "十日终焉", "十日終焉", "十日終焉", "Ten Days to Die"));
+            case "danganronpa" -> tag("danganronpa", workLabel(code, "弹丸论破", "彈丸論破", "ダンガンロンパ", "Danganronpa"));
             default -> tag(workKey, workKey);
         };
     }

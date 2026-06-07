@@ -143,6 +143,8 @@ public final class CharacterSquareCatalog {
         CharacterSquareCatalogDal.register(map);
         CharacterSquareCatalogBlueArchive.register(map);
         CharacterSquareCatalogReZero.register(map);
+        CharacterSquareCatalogShizhong.register(map);
+        CharacterSquareCatalogDanganronpa.register(map);
         return Map.copyOf(map);
     }
 
@@ -191,6 +193,13 @@ public final class CharacterSquareCatalog {
             case 410 -> "minerva";
             case 420 -> "echidna";
             case 430 -> "petra";
+            case 440 -> "yu_nianan";
+            case 450 -> "zhongli";
+            case 460 -> "enoshima_junko";
+            case 470 -> "kirigiri_kyoko";
+            case 480 -> "nanami_chiaki";
+            case 490 -> "fukawa_toko";
+            case 500 -> "asahina_aoi";
             default -> null;
         };
     }
