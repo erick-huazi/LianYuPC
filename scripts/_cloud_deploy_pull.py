@@ -53,7 +53,15 @@ def main() -> None:
 
     run(client, "cd /opt/lianyu && git pull origin main")
     run(client, "cd /opt/lianyu && docker compose up -d --build backend frontend", timeout=1200)
-    run(client, "curl -s -o /dev/null -w 'captcha=%{http_code}\\n' http://127.0.0.1:8080/api/auth/captcha")
+    for attempt in range(8):
+        out = run(client, "curl -s -o /dev/null -w 'captcha=%{http_code}' http://127.0.0.1:8080/api/auth/captcha")
+        if "200" in out:
+            break
+        if attempt < 7:
+            import time
+            time.sleep(15)
+    else:
+        raise SystemExit(56)
     run(client, "docker ps --format 'table {{.Names}}\\t{{.Status}}' | head -8")
 
     client.close()
