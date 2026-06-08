@@ -31,5 +31,16 @@ CREATE TABLE IF NOT EXISTS relationship_event (
     INDEX idx_relationship_event_conversation_created (conversation_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE memory_meta
-    ADD COLUMN IF NOT EXISTS memory_type VARCHAR(32) NOT NULL DEFAULT 'FACT' AFTER summary;
+-- MySQL 8.4 不支持 ALTER ADD COLUMN IF NOT EXISTS（与 V20 相同写法）
+SET @memory_type_col := (
+    SELECT COUNT(1) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'memory_meta'
+      AND column_name = 'memory_type'
+);
+SET @sql_memory_type_col := IF(@memory_type_col = 0,
+    'ALTER TABLE memory_meta ADD COLUMN memory_type VARCHAR(32) NOT NULL DEFAULT ''FACT'' AFTER summary',
+    'SELECT 1');
+PREPARE stmt_memory_type_col FROM @sql_memory_type_col;
+EXECUTE stmt_memory_type_col;
+DEALLOCATE PREPARE stmt_memory_type_col;
