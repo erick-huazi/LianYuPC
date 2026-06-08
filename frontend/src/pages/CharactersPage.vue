@@ -62,6 +62,10 @@
         <div class="card-body">
           <h3 class="char-name">{{ char.name }}</h3>
           <p class="char-preview">{{ lastMessageForCharacter(char.id) }}</p>
+          <p class="char-inner-space-line">
+            <span aria-hidden="true">✦</span>
+            {{ innerSpaceHeadlineForCharacter(char.id) }}
+          </p>
 
           <div v-if="getCharMetaFields(char).length" class="char-meta-fields">
             <span
@@ -103,6 +107,10 @@
             <blockquote class="character-spotlight__quote">
               <p>{{ spotlightLastLine }}</p>
             </blockquote>
+            <div class="character-spotlight__inner-space">
+              <span class="character-spotlight__inner-label">内心空间</span>
+              <p>{{ innerSpaceBodyForCharacter(spotlightCharacter.id) }}</p>
+            </div>
             <el-button type="primary" class="character-spotlight__cta" @click="startChat(spotlightCharacter)">
               {{ t('characters.continueChat') }}
             </el-button>
@@ -297,6 +305,8 @@ const {
 const singleConvByCharacterId = ref({})
 const emotionByCharacterId = ref({})
 const hoveredCharacterId = ref(null)
+const DEFAULT_INNER_SPACE_HEADLINE = '她还在慢慢熟悉与你相处的节奏。'
+const DEFAULT_INNER_SPACE_BODY = '她对这段关系还保持着温柔的试探，正在从每一次对话里确认与你靠近的方式。'
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const generating = ref(false)
@@ -431,6 +441,16 @@ function lastCharacterLineForCharacter(characterId) {
   const status = emotionByCharacterId.value[characterId]?.statusText?.trim()
   if (status) return status
   return t('characters.noCharacterLineYet')
+}
+
+function innerSpaceHeadlineForCharacter(characterId) {
+  const headline = emotionByCharacterId.value[characterId]?.innerSpaceHeadline?.trim()
+  return headline || DEFAULT_INNER_SPACE_HEADLINE
+}
+
+function innerSpaceBodyForCharacter(characterId) {
+  const body = emotionByCharacterId.value[characterId]?.innerSpaceBody?.trim()
+  return body || DEFAULT_INNER_SPACE_BODY
 }
 
 function setHoveredCharacter(characterId) {
@@ -718,6 +738,37 @@ async function startChat(char) {
     }
   }
 
+  &__inner-space {
+    margin: 0 0 $space-5;
+    padding: $space-4 $space-4 $space-4 $space-5;
+    border-left: 2px solid rgba($color-pink-rgb, 0.38);
+    border-radius: 0 $radius-md $radius-md 0;
+    background: rgba($color-pink-rgb, 0.07);
+    backdrop-filter: blur(8px);
+
+    p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.88);
+      font-size: $font-size-sm;
+      line-height: $line-height-relaxed;
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+
+  &__inner-label {
+    display: block;
+    margin-bottom: $space-2;
+    color: $color-pink-primary;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-semibold;
+    letter-spacing: 0.12em;
+  }
+
   &__cta {
     width: 100%;
     border-radius: $radius-pill;
@@ -909,6 +960,27 @@ async function startChat(char) {
   overflow: hidden;
   margin-bottom: $space-3;
   line-height: $line-height-relaxed;
+}
+
+.char-inner-space-line {
+  position: relative;
+  margin: 0 0 $space-3;
+  padding: $space-2 $space-3;
+  border-radius: $radius-md;
+  border: 1px solid rgba($color-pink-rgb, 0.12);
+  background: rgba($color-pink-rgb, 0.06);
+  color: rgba($color-text-primary, 0.86);
+  font-size: $font-size-xs;
+  line-height: $line-height-relaxed;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  span {
+    color: $color-pink-primary;
+    margin-right: 4px;
+  }
 }
 
 .form-row-3 {
