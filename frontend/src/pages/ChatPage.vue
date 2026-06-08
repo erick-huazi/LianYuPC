@@ -20,7 +20,7 @@
           <el-icon :size="18"><ArrowLeft /></el-icon>
         </button>
         <div class="gal-header__meta">
-          <h2 class="gal-header__name" :class="{ 'is-typing': waitingReply }">{{ headerTitle }}</h2>
+          <h2 class="gal-header__name" :class="{ 'is-typing': awaitingOpening }">{{ headerTitle }}</h2>
           <EmotionBadge
             v-if="emotionState"
             :current-emotion="emotionState.currentEmotion"
@@ -35,6 +35,15 @@
       </div>
 
       <div class="gal-log" ref="msgListRef">
+        <button
+          v-if="isUserScrolledUp"
+          type="button"
+          class="gal-scroll-bottom"
+          :title="t('chat.scrollToBottom')"
+          @click="jumpToBottom"
+        >
+          <el-icon :size="18"><ArrowDown /></el-icon>
+        </button>
         <div
           v-for="msg in messages"
           v-show="msg.role !== 'assistant' || msg.content"
@@ -124,7 +133,7 @@
             :autosize="{ minRows: 1, maxRows: 3 }"
             :placeholder="t('chat.placeholder')"
             @keydown.enter.exact.prevent="handleSend"
-            :disabled="waitingReply || isBlocked"
+            :disabled="isBlocked"
           />
           <el-button
             type="primary"
@@ -188,7 +197,7 @@ import { useCharactersStore } from '@/stores/characters'
 import { humanizeError } from '@/utils/errorMessage'
 import { getConversation, getMessages, sendMessageStream, uploadChatImage } from '@/api/conversation'
 import { fetchModels } from '@/api/ai'
-import { ArrowLeft, ChatDotRound, Promotion, Picture, Close, User, UserFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowDown, ChatDotRound, Promotion, Picture, Close, User, UserFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
 import { PLATFORM_PROVIDER, PLATFORM_MODEL, PLATFORM_PROVIDER_LABEL } from '@/constants/ai'
@@ -198,6 +207,7 @@ import { getCharacterState } from '@/api/characterState'
 import { setActiveChatConversationId, setActiveChatRefreshHandler } from '@/composables/useActiveChatContext'
 import { splitAssistantReply, resolveMaxRepliesPerTurn } from '@/utils/assistantReplySplit'
 import { getElectronAPI } from '@/utils/electron'
+import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
 
 const route = useRoute()
 const router = useRouter()
@@ -213,6 +223,7 @@ const activeCharacter = ref(null)
 const emotionState = ref(null)
 const msgListRef = ref(null)
 const scrollAnchor = ref(null)
+const { isUserScrolledUp, scrollToBottom, jumpToBottom } = useChatScroll(msgListRef, scrollAnchor)
 const fileInputRef = ref(null)
 const galBgRef = ref(null)
 
@@ -295,7 +306,7 @@ const isBlocked = computed(() => activeSettings.value.blocked === true)
 const headerTitle = computed(() => {
   const name = activeCharacter.value?.name
   if (!name) return ''
-  if (waitingReply.value || awaitingOpening.value) {
+  if (awaitingOpening.value) {
     return t('chat.typing', { name })
   }
   return name
@@ -480,7 +491,7 @@ async function loadConversation(convId) {
     stopFastPolling()
   }
   await nextTick()
-  scrollToBottom()
+  scrollToBottom({ force: true })
   syncAwaitingOpening()
   if (awaitingOpening.value) {
     startFastPolling()
@@ -622,6 +633,19 @@ async function pollCurrentConversationMessages(force) {
   }
 }
 
+function focusChatInput() {
+  if (isBlocked.value) return
+  const el = inputTextRef.value
+  if (!el) return
+  if (typeof el.focus === 'function') {
+    el.focus()
+    return
+  }
+  const ta = el.$el?.querySelector?.('textarea')
+    || el.$el?.getElementsByTagName?.('textarea')?.[0]
+  ta?.focus()
+}
+
 async function handleSend() {
   const text = inputText.value.trim()
   const imageUrl = pendingImageUrl.value
@@ -648,15 +672,13 @@ async function handleSend() {
   inputText.value = ''
   pendingImageUrl.value = ''
   await nextTick()
-  // 发送后自动恢复输入焦点
-  const ta = inputTextRef.value?.$el?.querySelector('textarea')
-    || inputTextRef.value?.$el?.getElementsByTagName('textarea')?.[0]
-  if (ta) ta.focus()
-  scrollToBottom()
+  focusChatInput()
+  scrollToBottom({ force: true })
 
   waitingReply.value = true
   const streamGroupId = 'stream-' + Date.now()
   const streamCreatedAt = new Date().toISOString()
+  const sendStartedAt = Date.now()
 
   try {
     const sendConvId = currentConvId.value
@@ -676,13 +698,16 @@ async function handleSend() {
       throw new Error(errMsg)
     }
 
-    await drainAssistantStream(response, fullContent => {
-      if (currentConvId.value !== sendConvId) return
-      syncStreamingAssistantBubbles(fullContent, streamGroupId, streamCreatedAt)
-      void nextTick(() => scrollToBottom())
-    })
+    const fullContent = await drainAssistantStream(response)
+    const elapsed = Date.now() - sendStartedAt
+    if (elapsed < MIN_REPLY_DISPLAY_MS) {
+      await sleep(MIN_REPLY_DISPLAY_MS - elapsed)
+    }
 
-    if (currentConvId.value === sendConvId) {
+    if (currentConvId.value === sendConvId && fullContent?.trim()) {
+      syncStreamingAssistantBubbles(fullContent, streamGroupId, streamCreatedAt)
+      await nextTick()
+      scrollToBottom()
       skipBounceOnce = true
       await pollCurrentConversationMessages(true)
     }
@@ -694,12 +719,13 @@ async function handleSend() {
   } finally {
     waitingReply.value = false
     await nextTick()
+    focusChatInput()
     scrollToBottom()
     loadEmotionState()
   }
 }
 
-async function drainAssistantStream(response, onContentUpdate) {
+async function drainAssistantStream(response) {
   const reader = response.body?.getReader()
   if (!reader) {
     throw new Error('无法读取回复流')
@@ -727,7 +753,6 @@ async function drainAssistantStream(response, onContentUpdate) {
         }
         if (payload.content) {
           fullContent += payload.content
-          onContentUpdate?.(fullContent)
         }
       } catch (e) {
         if (e instanceof SyntaxError) continue
@@ -773,10 +798,6 @@ async function handleImageSelect(event) {
       fileInputRef.value.value = ''
     }
   }
-}
-
-function scrollToBottom() {
-  scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' })
 }
 
 function syncStreamingAssistantBubbles(fullContent, streamGroupId, createdAt) {
@@ -952,6 +973,31 @@ function formatTime(ts) {
   flex-direction: column;
   gap: $space-4;
   mask-image: linear-gradient(180deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+}
+
+.gal-scroll-bottom {
+  position: sticky;
+  bottom: $space-3;
+  align-self: center;
+  z-index: 5;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    opacity: 0.95;
+  }
 }
 
 .gal-log__item {

@@ -113,7 +113,7 @@ mybatis-plus:
 sa-token:
   token-name: lianyu-token          # 前端请求头 / localStorage 使用的 token 名
   timeout: 2592000                  # token 最长有效期（秒），默认 30 天
-  active-timeout: 1800              # 无操作多久后 token 冻结（秒），默认 30 分钟
+  active-timeout: -1                # -1 = 不因空闲冻结；配合本地 safeStorage 持久登录
   is-concurrent: true               # 允许多设备同时登录
   is-share: false                   # 各设备 token 不共用
   token-style: uuid

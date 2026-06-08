@@ -21,7 +21,13 @@ import {
   applyLaunchAtLogin,
   readLauncherPosition,
   writeLauncherPosition,
+  isDesktopPetEnabled,
 } from './desktopSettings.js'
+import {
+  readAuthSession,
+  writeAuthSession,
+  clearAuthSession,
+} from './authSessionStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !!process.env.VITE_DEV_SERVER_URL
@@ -495,7 +501,7 @@ function showLauncherWindow(options = {}) {
   const { center = false, force = false } = options
   if (!launcherLoggedIn) return
   const settings = readDesktopSettings()
-  if (!settings.showLauncherLogo) return
+  if (!isDesktopPetEnabled(settings)) return
   if (!force && isMainWindowOccupyingDesktop()) return
   const win = ensureLauncherWindow()
   if (!win) return
@@ -534,11 +540,42 @@ function showMainWindow(hash = '') {
   hideLauncherWindow()
 }
 
-const CAPTION_BAR_HEIGHT = 36
+const CAPTION_BAR_HEIGHT = 52
 const WIN_TITLE_BAR_OVERLAY = {
   color: '#0a0a10',
   symbolColor: '#d4d4d8',
   height: CAPTION_BAR_HEIGHT,
+}
+
+function resolveCaptionMetrics(win) {
+  const height = CAPTION_BAR_HEIGHT
+  let controlsWidth = 138
+  if (process.platform === 'win32' && win && !win.isDestroyed()) {
+    try {
+      const rect = win.getTitleBarOverlayRect?.()
+      if (rect?.width > 0) {
+        controlsWidth = Math.ceil(rect.width)
+      }
+    } catch (e) {
+      log(`getTitleBarOverlayRect failed: ${e.message}`)
+    }
+  } else if (process.platform === 'darwin') {
+    controlsWidth = 78
+  }
+  return { height, controlsWidth }
+}
+
+function pushCaptionMetrics(win) {
+  if (!win?.webContents || win.webContents.isDestroyed()) return
+  win.webContents.send('desktop:caption-metrics', resolveCaptionMetrics(win))
+}
+
+function attachCaptionMetricsChannel(win) {
+  const push = () => pushCaptionMetrics(win)
+  win.once('ready-to-show', push)
+  win.on('resize', push)
+  win.on('enter-full-screen', push)
+  win.on('leave-full-screen', push)
 }
 
 /** Windows 须在 BrowserWindow 构造时传入 titleBarOverlay，否则 setTitleBarOverlay 会抛错 */
@@ -585,9 +622,11 @@ function createMainWindow() {
   win.lianyuKind = 'main'
   win.setMenuBarVisibility(false)
   attachWindowLogging(win, 'main')
+  attachCaptionMetricsChannel(win)
 
   win.once('ready-to-show', () => {
     applyMainWindowCaption(win)
+    pushCaptionMetrics(win)
     win.show()
   })
 
@@ -688,7 +727,7 @@ function createLauncherWindow() {
 
 function ensureLauncherWindow() {
   const settings = readDesktopSettings()
-  if (!settings.showLauncherLogo) {
+  if (!isDesktopPetEnabled(settings)) {
     if (launcherWindow && !launcherWindow.isDestroyed()) {
       launcherWindow.close()
     }
@@ -699,7 +738,7 @@ function ensureLauncherWindow() {
 
 /** 启动时预创建桌宠窗口（不显示），后续最小化/关闭时瞬间展示，消除冷创建延迟 */
 function prewarmLauncherWindow() {
-  if (!readDesktopSettings().showLauncherLogo) return
+  if (!isDesktopPetEnabled(readDesktopSettings())) return
   createLauncherWindow()
 }
 
@@ -836,9 +875,11 @@ function openQuickChatWindow(conversationId) {
   win.lianyuKind = 'quickChat'
   win.setMenuBarVisibility(false)
   attachWindowLogging(win, `quickChat:${id}`)
+  attachCaptionMetricsChannel(win)
 
   win.once('ready-to-show', () => {
     applyMainWindowCaption(win)
+    pushCaptionMetrics(win)
     win.show()
   })
 
@@ -905,6 +946,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle('desktop:get-caption-height', () => CAPTION_BAR_HEIGHT)
 
+  ipcMain.handle('desktop:get-caption-metrics', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return resolveCaptionMetrics(win)
+  })
+
   ipcMain.handle('desktop:set-login-state', (_event, loggedIn) => {
     launcherLoggedIn = !!loggedIn
     if (!launcherLoggedIn) {
@@ -929,13 +975,20 @@ function registerIpcHandlers() {
     setLauncherMousePassthrough(!!ignore)
   })
 
+  ipcMain.handle('auth:get-session', () => readAuthSession())
+  ipcMain.handle('auth:set-session', (_event, session) => writeAuthSession(session))
+  ipcMain.handle('auth:clear-session', () => {
+    clearAuthSession()
+    return { ok: true }
+  })
+
   ipcMain.handle('desktop:get-settings', () => readDesktopSettings())
 
   ipcMain.handle('desktop:set-settings', (_event, partial) => {
     const next = writeDesktopSettings(partial || {})
-    if (!next.showLauncherLogo && launcherWindow && !launcherWindow.isDestroyed()) {
+    if (!isDesktopPetEnabled(next) && launcherWindow && !launcherWindow.isDestroyed()) {
       launcherWindow.close()
-    } else if (next.showLauncherLogo && mainWindow && !mainWindow.isVisible()) {
+    } else if (isDesktopPetEnabled(next) && mainWindow && !mainWindow.isVisible()) {
       showLauncherWindow()
     }
     if (partial?.launcherPetId != null && launcherWindow && !launcherWindow.isDestroyed()) {

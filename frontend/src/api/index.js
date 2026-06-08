@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import { apiBasePath } from '@/utils/runtime'
 import { extractApiError, humanizeError } from '@/utils/errorMessage'
 import { readToken, clearTokenStorage } from '@/utils/secureToken'
+import { applyOutputLanguageHeaders } from '@/utils/outputLanguageHeader'
 
 const http = axios.create({
   baseURL: apiBasePath(),
@@ -18,6 +19,7 @@ http.interceptors.request.use(async config => {
   }
   const traceId = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36)
   config.headers['X-Trace-Id'] = traceId
+  config.headers = applyOutputLanguageHeaders(config.headers)
   return config
 })
 
@@ -31,7 +33,11 @@ http.interceptors.response.use(
       }
       if (body.code === 401) {
         clearTokenStorage()
+        localStorage.removeItem('lianyu-token')
         localStorage.removeItem('lianyu-token-name')
+        void import('@/stores/user').then(({ useUserStore }) => {
+          void useUserStore().clearAuth({ keepUsername: true })
+        })
         const hash = window.location.hash || ''
         if (!hash.includes('#/login') && !hash.includes('#/register')) {
           window.location.hash = '#/'
@@ -49,7 +55,11 @@ http.interceptors.response.use(
   error => {
     if (error.response?.status === 401) {
       clearTokenStorage()
+      localStorage.removeItem('lianyu-token')
       localStorage.removeItem('lianyu-token-name')
+      void import('@/stores/user').then(({ useUserStore }) => {
+        void useUserStore().clearAuth({ keepUsername: true })
+      })
       const hash = window.location.hash || ''
       if (!hash.includes('#/login') && !hash.includes('#/register')) {
         window.location.hash = '#/'

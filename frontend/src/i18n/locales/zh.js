@@ -169,6 +169,7 @@ export default {
     cityPromptMessage: '为方便精确计算当地时间与天气，请填写你所在的城市。',
     cityPlaceholder: '如 上海、北京、广州',
     cityRequired: '请填写城市',
+    fictionalCityFailed: '由于角色背景原因虚构失败，建议您选择现实城市',
     confirmAdd: '确认加入',
     mostLiked: '更多人喜欢的角色',
     like: '点赞',
@@ -209,6 +210,7 @@ export default {
     loadMore: '加载更早消息',
     noMessages: '还没有消息，打个招呼吧',
     typing: '{name}正在输入中...',
+    scrollToBottom: '回到底部',
   },
   group: {
     title: '群聊',

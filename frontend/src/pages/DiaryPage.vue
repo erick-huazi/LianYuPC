@@ -11,7 +11,7 @@
       <p>{{ t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="diaries.length === 0" class="feed-empty glass stagger-item">
+    <div v-else-if="visibleDiaries.length === 0" class="feed-empty glass stagger-item">
       <div class="empty-icon">
         <el-icon :size="40"><Notebook /></el-icon>
       </div>
@@ -49,21 +49,39 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { Loading, Notebook, User } from '@element-plus/icons-vue'
 import { listAllDiaries } from '@/api/characterState'
 import { resolveMediaUrl } from '@/utils/media'
 import { feedDateKey, formatFeedDateLabel, formatFeedTime } from '@/utils/feedTime'
 
 const { t } = useI18n()
+const route = useRoute()
 
 const loading = ref(true)
 const diaries = ref([])
+const filterCharId = ref(null)
+
+const visibleDiaries = computed(() => {
+  if (!filterCharId.value) return diaries.value
+  return diaries.value.filter((diary) => diary.characterId === filterCharId.value)
+})
+
+function applyRouteCharacterFilter() {
+  const raw = route.query.characterId
+  if (raw == null || raw === '') {
+    filterCharId.value = null
+    return
+  }
+  const id = Number(raw)
+  filterCharId.value = Number.isFinite(id) ? id : null
+}
 
 const groupedDiaries = computed(() => {
   const map = new Map()
-  for (const diary of diaries.value) {
+  for (const diary of visibleDiaries.value) {
     const key = feedDateKey(diary.createdAt)
     if (!map.has(key)) {
       map.set(key, {
@@ -78,6 +96,7 @@ const groupedDiaries = computed(() => {
 })
 
 onMounted(async () => {
+  applyRouteCharacterFilter()
   try {
     const data = await listAllDiaries({ page: 1, size: 50 })
     diaries.value = Array.isArray(data) ? data : []
@@ -87,6 +106,13 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+watch(
+  () => route.query.characterId,
+  () => {
+    applyRouteCharacterFilter()
+  }
+)
 
 </script>
 

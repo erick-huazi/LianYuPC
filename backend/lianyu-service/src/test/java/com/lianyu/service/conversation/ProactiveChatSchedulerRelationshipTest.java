@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import com.lianyu.dao.entity.Conversation;
 import com.lianyu.dao.entity.Message;
 import com.lianyu.dao.mapper.CharacterMapper;
+import com.lianyu.dao.mapper.CharacterStateMapper;
 import com.lianyu.dao.mapper.ConversationMapper;
 import com.lianyu.dao.mapper.MessageMapper;
 import com.lianyu.service.character.CharacterChatBehavior;
@@ -25,6 +26,7 @@ class ProactiveChatSchedulerRelationshipTest {
         ConversationMapper conversationMapper = Mockito.mock(ConversationMapper.class);
         MessageMapper messageMapper = Mockito.mock(MessageMapper.class);
         CharacterMapper characterMapper = Mockito.mock(CharacterMapper.class);
+        CharacterStateMapper characterStateMapper = Mockito.mock(CharacterStateMapper.class);
         ConversationService conversationService = Mockito.mock(ConversationService.class);
         CharacterChatBehaviorResolver chatBehaviorResolver = Mockito.mock(CharacterChatBehaviorResolver.class);
         EngagementFrequencyScorer engagementScorer = Mockito.mock(EngagementFrequencyScorer.class);
@@ -35,6 +37,7 @@ class ProactiveChatSchedulerRelationshipTest {
                 conversationMapper,
                 messageMapper,
                 characterMapper,
+                characterStateMapper,
                 conversationService,
                 chatBehaviorResolver,
                 engagementScorer,
@@ -63,9 +66,22 @@ class ProactiveChatSchedulerRelationshipTest {
                         .build());
 
         java.lang.reflect.Method isEligibleMethod = ProactiveChatScheduler.class.getDeclaredMethod(
-                "isEligible", Conversation.class, CharacterChatBehavior.class, Message.class, Message.class);
+                "isEligible",
+                Conversation.class,
+                CharacterChatBehavior.class,
+                int.class,
+                Message.class,
+                Message.class,
+                RelationshipPhase.class);
         isEligibleMethod.setAccessible(true);
-        boolean result = (boolean) isEligibleMethod.invoke(scheduler, conversation, behavior, lastMessage, lastMessage);
+        boolean result = (boolean) isEligibleMethod.invoke(
+                scheduler,
+                conversation,
+                behavior,
+                behavior.minIdleMinutes(),
+                lastMessage,
+                lastMessage,
+                RelationshipPhase.INJURED);
 
         assertFalse(result);
     }

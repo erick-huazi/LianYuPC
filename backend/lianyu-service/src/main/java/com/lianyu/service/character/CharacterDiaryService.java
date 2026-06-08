@@ -20,6 +20,7 @@ import com.lianyu.service.dto.ChatResult;
 import com.lianyu.service.dto.MessageDto;
 import com.lianyu.service.memory.MemoryRetriever;
 import com.lianyu.service.relationship.RelationshipStateService;
+import com.lianyu.service.notification.NotificationService;
 import com.lianyu.service.support.OutputLanguageService;
 import com.lianyu.service.tools.ChatToolContext;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +66,7 @@ public class CharacterDiaryService {
     private final OutputLanguageService outputLanguageService;
     private final ObjectMapper objectMapper;
     private final RelationshipStateService relationshipStateService;
+    private final NotificationService notificationService;
 
     @Value("${lianyu.diary.enabled:true}")
     private boolean diaryEnabled;
@@ -326,6 +328,18 @@ public class CharacterDiaryService {
             diary.setMood(null);
             diary.setConversationId(conversation.getId());
             diaryMapper.insert(diary);
+
+            String preview = title;
+            if (preview == null || preview.isBlank()) {
+                preview = diaryContent;
+            }
+            notificationService.notifyDiaryNew(
+                    userId,
+                    conversation.getId(),
+                    characterId,
+                    character.getName(),
+                    preview
+            );
 
             return diary;
         } catch (Exception e) {

@@ -5,6 +5,7 @@ import { DEFAULT_PET_ID } from '@/constants/petCatalog'
 
 const STORAGE_CLOSE_TO_TRAY = 'lianyu-close-to-tray'
 const STORAGE_SHOW_LAUNCHER = 'lianyu-show-launcher'
+const STORAGE_SHOW_DESKTOP_PET = 'lianyu-show-desktop-pet'
 const STORAGE_LAUNCH_AT_LOGIN = 'lianyu-launch-at-login'
 const STORAGE_LAUNCHER_PET = 'lianyu-launcher-pet'
 
@@ -17,7 +18,10 @@ function readBool(key, fallback) {
 
 export const useDesktopStore = defineStore('desktop', () => {
   const closeToTray = ref(readBool(STORAGE_CLOSE_TO_TRAY, true))
-  const showLauncherLogo = ref(readBool(STORAGE_SHOW_LAUNCHER, true))
+  const showDesktopPet = ref(
+    readBool(STORAGE_SHOW_DESKTOP_PET, readBool(STORAGE_SHOW_LAUNCHER, true))
+  )
+  const showLauncherLogo = ref(readBool(STORAGE_SHOW_LAUNCHER, showDesktopPet.value))
   const launchAtLogin = ref(readBool(STORAGE_LAUNCH_AT_LOGIN, false))
   const launcherPetId = ref(localStorage.getItem(STORAGE_LAUNCHER_PET) || DEFAULT_PET_ID)
   const windowKind = ref('main')
@@ -32,11 +36,13 @@ export const useDesktopStore = defineStore('desktop', () => {
     try {
       const settings = await api.getDesktopSettings()
       closeToTray.value = settings.closeToTray !== false
-      showLauncherLogo.value = settings.showLauncherLogo !== false
+      showDesktopPet.value = settings.showDesktopPet !== false
+      showLauncherLogo.value = showDesktopPet.value
       launchAtLogin.value = settings.launchAtLogin === true
       launcherPetId.value = settings.launcherPetId || DEFAULT_PET_ID
       localStorage.setItem(STORAGE_CLOSE_TO_TRAY, String(closeToTray.value))
-      localStorage.setItem(STORAGE_SHOW_LAUNCHER, String(showLauncherLogo.value))
+      localStorage.setItem(STORAGE_SHOW_DESKTOP_PET, String(showDesktopPet.value))
+      localStorage.setItem(STORAGE_SHOW_LAUNCHER, String(showDesktopPet.value))
       localStorage.setItem(STORAGE_LAUNCH_AT_LOGIN, String(launchAtLogin.value))
       localStorage.setItem(STORAGE_LAUNCHER_PET, launcherPetId.value)
     } finally {
@@ -49,8 +55,15 @@ export const useDesktopStore = defineStore('desktop', () => {
       closeToTray.value = partial.closeToTray
       localStorage.setItem(STORAGE_CLOSE_TO_TRAY, String(partial.closeToTray))
     }
-    if (partial.showLauncherLogo != null) {
+    if (partial.showDesktopPet != null) {
+      showDesktopPet.value = partial.showDesktopPet
+      showLauncherLogo.value = partial.showDesktopPet
+      localStorage.setItem(STORAGE_SHOW_DESKTOP_PET, String(partial.showDesktopPet))
+      localStorage.setItem(STORAGE_SHOW_LAUNCHER, String(partial.showDesktopPet))
+    } else if (partial.showLauncherLogo != null) {
+      showDesktopPet.value = partial.showLauncherLogo
       showLauncherLogo.value = partial.showLauncherLogo
+      localStorage.setItem(STORAGE_SHOW_DESKTOP_PET, String(partial.showLauncherLogo))
       localStorage.setItem(STORAGE_SHOW_LAUNCHER, String(partial.showLauncherLogo))
     }
     if (partial.launchAtLogin != null) {
@@ -75,6 +88,7 @@ export const useDesktopStore = defineStore('desktop', () => {
 
   return {
     closeToTray,
+    showDesktopPet,
     showLauncherLogo,
     launchAtLogin,
     launcherPetId,

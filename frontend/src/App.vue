@@ -49,20 +49,35 @@ function viewKey(route) {
   return route.path
 }
 
+function applyCaptionMetrics(metrics) {
+  if (!metrics) return
+  const { height, controlsWidth } = metrics
+  if (height) {
+    document.documentElement.style.setProperty('--electron-caption-height', `${height}px`)
+  }
+  if (controlsWidth) {
+    document.documentElement.style.setProperty('--electron-caption-controls-width', `${controlsWidth}px`)
+  }
+}
+
 onMounted(async () => {
   if (isElectron) {
     syncElectronCaptionClass(!isLauncherSurface.value)
-    const height = await getElectronAPI()?.getCaptionBarHeight?.()
-    if (height) {
-      document.documentElement.style.setProperty('--electron-caption-height', `${height}px`)
+    const api = getElectronAPI()
+    const metrics = (await api?.getCaptionMetrics?.()) || {}
+    if (!metrics.height) {
+      const height = await api?.getCaptionBarHeight?.()
+      if (height) metrics.height = height
     }
+    applyCaptionMetrics(metrics)
+    api?.onCaptionMetrics?.(applyCaptionMetrics)
   }
 
-  if (userStore.token) {
+  if (userStore.isLoggedIn && !userStore.userId) {
     try {
       await userStore.fetchProfile()
     } catch {
-      userStore.clearAuth()
+      await userStore.clearAuth({ keepUsername: true })
     }
   }
 })

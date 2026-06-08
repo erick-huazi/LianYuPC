@@ -15,9 +15,17 @@ import {
 import { buildWsUrl, canUseWebPush, isElectronRuntime, resolveServiceWorkerUrl } from '@/utils/runtime'
 import { activeChatConversationId, requestActiveChatRefresh } from '@/composables/useActiveChatContext'
 import { getElectronAPI } from '@/utils/electron'
+import { buildNotificationHash, navigateToNotification } from '@/composables/useNotificationNavigation'
 
 const DESKTOP_PUSH_KEY = 'lianyu-desktop-push-enabled'
 const PUSH_OPT_OUT_KEY = 'lianyu-push-opt-out'
+
+/** 仅这些类型弹出站内通知；群聊发言与普通回复不弹窗 */
+const IN_APP_POPUP_TYPES = new Set(['PROACTIVE_MESSAGE', 'MOMENT_NEW', 'MOMENT_COMMENT', 'DIARY_NEW'])
+
+function shouldShowInAppPopup(type) {
+  return IN_APP_POPUP_TYPES.has(type || '')
+}
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const unreadCount = ref(0)
@@ -156,6 +164,19 @@ export const useNotificationsStore = defineStore('notifications', () => {
     } catch {}
   }
 
+  async function markNotificationsByIds(ids) {
+    const idList = (ids || []).filter(id => id != null)
+    if (!idList.length) return
+    try {
+      await markNotificationsRead({ ids: idList }, { silent: true })
+      const idSet = new Set(idList)
+      latest.value = latest.value.map(n =>
+        idSet.has(n.id) ? { ...n, read: true } : n
+      )
+      await refreshUnreadCount()
+    } catch {}
+  }
+
   function connectWebSocket() {
     const token = syncToken() || localStorage.getItem('lianyu-token')
     if (!token) {
@@ -227,11 +248,17 @@ export const useNotificationsStore = defineStore('notifications', () => {
     if (!data.read) {
       unreadCount.value += 1
     }
+    if (!shouldShowInAppPopup(data.type)) {
+      return
+    }
     ElNotification({
       title: data.title || '新消息',
       message: data.contentPreview || '',
       type: 'info',
-      duration: 4500
+      duration: 4500,
+      onClick: () => {
+        void navigateToNotification(data)
+      }
     })
     playSound()
     notifyIfPushEnabled(data)
@@ -241,7 +268,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   function extractCharacterName(title) {
     if (!title) return '她'
     const cleaned = String(title).trim()
-    const zhMatch = cleaned.match(/^(.+?)\s*(给你发来消息|在群聊中发言|发布了|评论了)/)
+    const zhMatch = cleaned.match(/^(.+?)\s*(给你发来消息|在群聊中发言|发布了|评论了|写了一篇新日记|写了新日记)/)
     if (zhMatch?.[1]) return zhMatch[1].trim()
     const enMatch = cleaned.match(/^(.+?)\s+(sent you|posted|commented)/i)
     if (enMatch?.[1]) return enMatch[1].trim()
@@ -252,7 +279,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     const electronAPI = getElectronAPI()
     if (!electronAPI?.notifyLauncherNewMessage) return
     const type = data?.type || ''
-    if (type.startsWith('MOMENT_')) return
+    if (!shouldShowInAppPopup(type)) return
     void electronAPI.notifyLauncherNewMessage({
       characterName: extractCharacterName(data?.title),
       preview: data?.contentPreview || '',
@@ -279,10 +306,6 @@ export const useNotificationsStore = defineStore('notifications', () => {
     } catch {}
   }
 
-  function buildNotificationTarget(conversationId) {
-    if (!conversationId) return '#/app'
-    return `#/app/chat/${conversationId}`
-  }
 
   function shouldShowNativeNotification() {
     if (typeof document === 'undefined') return false
@@ -301,7 +324,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     })
     notification.onclick = () => {
       window.focus()
-      const hash = buildNotificationTarget(data.conversationId)
+      const hash = buildNotificationHash(data)
       const electronAPI = getElectronAPI()
       if (electronAPI?.openMainWindow) {
         electronAPI.openMainWindow(hash)
@@ -448,6 +471,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     refreshLatest,
     markAllRead,
     markConversationRead,
+    markNotificationsByIds,
     subscribeGroupChat,
     unsubscribeGroupChat,
     reconnectWebSocket,

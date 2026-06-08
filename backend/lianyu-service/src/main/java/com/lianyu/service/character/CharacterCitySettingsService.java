@@ -35,6 +35,7 @@ public class CharacterCitySettingsService {
                 settings.put("fictional_city", inferred.trim());
             } else {
                 log.warn("Fictional city inference empty: userId={}, name={}", userId, characterName);
+                throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR, "由于角色背景原因虚构失败，建议您选择现实城市");
             }
             settings.remove("city");
             settings.put("city_mode", MODE_FICTIONAL);

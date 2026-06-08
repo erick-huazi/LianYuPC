@@ -93,8 +93,8 @@ $sidebar-collapsed: 72px;
 $max-content-width: 1200px;
 $narrow-page-max: 780px;
 $layout-page-gutter: clamp(#{$space-4}, 4vw, #{$space-10});
-$electron-caption-height: clamp(32px, 2.5vh, 40px);
-$electron-caption-controls-width: clamp(108px, 11vw, 142px);
+$electron-caption-height: 52px;
+$electron-caption-controls-width: 138px;
 
 // --- Z-index ---
 $z-sidebar: 100;

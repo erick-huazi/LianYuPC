@@ -1,6 +1,23 @@
 /**
  * 与后端 {@code AssistantReplySplitter} 一致：按换行拆成多条气泡。
  */
+const SENTENCE_SPLIT_MIN_CHARS = 40
+const CJK_SENTENCE_BOUNDARY = /(?<=[。！？!?])(?=[^。！？!?\s])/u
+const EN_SENTENCE_BOUNDARY = /(?<=[.!?])\s+/
+
+function splitWithPattern(text, pattern) {
+  const parts = text.split(pattern).map(s => s.trim()).filter(Boolean)
+  return parts.length ? parts : [text.trim()]
+}
+
+function splitBySentenceBoundary(text) {
+  const cjk = splitWithPattern(text, CJK_SENTENCE_BOUNDARY)
+  if (cjk.length > 1) return cjk
+  const en = splitWithPattern(text, EN_SENTENCE_BOUNDARY)
+  if (en.length > 1) return en
+  return [text.trim()]
+}
+
 export function splitAssistantReply(fullContent, maxRepliesPerTurn = 3) {
   if (!fullContent || !String(fullContent).trim()) {
     return []
@@ -13,6 +30,14 @@ export function splitAssistantReply(fullContent, maxRepliesPerTurn = 3) {
   if (pieces.length === 0) {
     pieces = [normalized]
   }
+
+  if (pieces.length === 1 && pieces[0].length >= SENTENCE_SPLIT_MIN_CHARS) {
+    const sentencePieces = splitBySentenceBoundary(pieces[0])
+    if (sentencePieces.length > 1) {
+      pieces = sentencePieces
+    }
+  }
+
   const limit = Math.max(1, Number(maxRepliesPerTurn) || 3)
   if (pieces.length > limit) {
     const head = pieces.slice(0, limit - 1)

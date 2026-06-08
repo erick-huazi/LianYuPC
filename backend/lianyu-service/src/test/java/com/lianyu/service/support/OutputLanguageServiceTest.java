@@ -1,0 +1,56 @@
+package com.lianyu.service.support;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+@ExtendWith(MockitoExtension.class)
+class OutputLanguageServiceTest {
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
+
+    private OutputLanguageService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new OutputLanguageService(redisTemplate);
+    }
+
+    @Test
+    void resolveForRequest_prefersCachedUserPreferenceOverTextDetection() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("lianyu:user:output_lang:9")).thenReturn("zh");
+
+        assertEquals("zh", service.resolveForRequest(9L, "hello this is clearly english text only"));
+    }
+
+    @Test
+    void detectFromText_keepsChineseWhenMessageIsMostlyChineseWithSomeEnglish() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn(null);
+
+        assertEquals("zh", service.resolveForRequest(null, "今天好累啊，just tired"));
+        assertEquals("zh", service.resolveForRequest(1L, "你在干嘛呢？"));
+    }
+
+    @Test
+    void detectFromText_usesEnglishOnlyWhenEnglishClearlyDominates() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn(null);
+
+        assertEquals("en", service.resolveForRequest(1L,
+                "I am really tired today and want to talk about work stress only"));
+    }
+}

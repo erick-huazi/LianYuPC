@@ -78,6 +78,15 @@
       </header>
 
       <div class="group-messages" ref="groupMsgListRef">
+        <button
+          v-if="isUserScrolledUp"
+          type="button"
+          class="group-scroll-bottom"
+          :title="t('chat.scrollToBottom')"
+          @click="jumpToBottom"
+        >
+          <el-icon :size="18"><ArrowDown /></el-icon>
+        </button>
         <template v-for="item in groupMessageTimeline" :key="item._key">
           <div v-if="item.type === 'time'" class="msg-time-divider">
             <span>{{ item.label }}</span>
@@ -99,20 +108,6 @@
             </div>
           </div>
         </template>
-        <div v-if="streamingChar" class="group-msg-row msg-assistant streaming">
-          <div class="gm-avatar">
-            <img v-if="streamingChar.avatarUrl" :src="resolveMediaUrl(streamingChar.avatarUrl)" />
-            <el-icon v-else :size="16"><User /></el-icon>
-          </div>
-          <div class="gm-body bubble-assistant">
-            <div class="gm-header">
-              <span class="gm-name">{{ streamingChar.name }}</span>
-              <span class="gm-typing">{{ t('group.typing') }}</span>
-            </div>
-            <div class="gm-content">{{ streamingChar._content }}</div>
-            <span class="typing-cursor">▊</span>
-          </div>
-        </div>
         <div ref="groupScrollAnchor"></div>
       </div>
 
@@ -282,6 +277,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import {
@@ -300,12 +296,13 @@ import { useResponsiveDialogWidth } from '@/composables/useResponsiveDialogWidth
 import GroupAvatar from '@/components/group/GroupAvatar.vue'
 import OnboardingHintBubble from '@/components/OnboardingHintBubble.vue'
 import { useOnboardingHint } from '@/composables/useOnboardingHint'
-import { Plus, ChatDotRound, ArrowLeft, User, UserFilled, Promotion, Delete, Edit, Check, Close } from '@element-plus/icons-vue'
+import { Plus, ChatDotRound, ArrowLeft, ArrowDown, User, UserFilled, Promotion, Delete, Edit, Check, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
 import { humanizeError } from '@/utils/errorMessage'
 import { dateLocaleForUi } from '@/utils/dateLocale'
 import { resolveGroupDisplayTitle } from '@/utils/groupTitle'
+import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
 
 const TIME_GAP_MS = 5 * 60 * 1000
 const MAX_GROUP_MEMBERS = 4
@@ -322,6 +319,7 @@ const {
   formatBadgeCount
 } = useConversationUnread()
 const { t, locale } = useI18n()
+const route = useRoute()
 const { visible: showMentionHint, dismiss: dismissMentionHint } = useOnboardingHint('group-mention')
 
 const charactersStore = useCharactersStore()
@@ -338,6 +336,12 @@ const speakingCharId = ref(null)
 const streamingChar = ref(null)
 const groupMsgListRef = ref(null)
 const groupScrollAnchor = ref(null)
+const { isUserScrolledUp, scrollToBottom: scrollGroupBottom, jumpToBottom } = useChatScroll(
+  groupMsgListRef,
+  groupScrollAnchor
+)
+let lastUserSendAt = 0
+let firstReplyAfterUserPending = false
 
 const dialogVisible = ref(false)
 const dialogWidth = useResponsiveDialogWidth(480)
@@ -379,11 +383,23 @@ const groupMessageTimeline = computed(() => {
   return items
 })
 
+async function openGroupFromRouteQuery() {
+  const raw = route.query.groupId
+  if (raw == null || raw === '') return
+  const groupId = Number(raw)
+  if (!Number.isFinite(groupId)) return
+  const group = groups.value.find((item) => item.id === groupId)
+  if (group) {
+    await openGroup(group)
+  }
+}
+
 onMounted(async () => {
   await providersStore.fetchVaults()
   await notificationsStore.init()
   await charactersStore.fetchList()
   await refreshGroupsList()
+  await openGroupFromRouteQuery()
 })
 
 onUnmounted(() => {
@@ -415,57 +431,39 @@ function connectWebSocket(groupId) {
   notificationsStore.subscribeGroupChat(groupId, handleGroupEvent)
 }
 
+async function appendCharacterMessage(body) {
+  if (firstReplyAfterUserPending && lastUserSendAt > 0) {
+    const elapsed = Date.now() - lastUserSendAt
+    if (elapsed < MIN_REPLY_DISPLAY_MS) {
+      await sleep(MIN_REPLY_DISPLAY_MS - elapsed)
+    }
+    firstReplyAfterUserPending = false
+  }
+  if (activeGroup.value?.id === body.conversationId) {
+    notificationsStore.markConversationRead(body.conversationId)
+    refreshUnreadFromApi()
+  }
+  const member = groupMembers.value.find(m => m.id === body.characterId)
+  groupMessages.value.push({
+    _key: 'g' + (++msgCounter),
+    role: 'assistant',
+    characterId: body.characterId,
+    _charName: body.characterName || member?.name || '角色',
+    _charAvatar: member?.avatarUrl || null,
+    content: body.content,
+    _time: new Date().toISOString()
+  })
+  streamingChar.value = null
+  speakingCharId.value = null
+  await nextTick()
+  scrollGroupBottom()
+}
+
 function handleGroupEvent(body) {
   const type = body.type
 
   if (type === 'CHARACTER_MESSAGE') {
-    if (activeGroup.value?.id === body.conversationId) {
-      notificationsStore.markConversationRead(body.conversationId)
-      refreshUnreadFromApi()
-    }
-    const member = groupMembers.value.find(m => m.id === body.characterId)
-    groupMessages.value.push({
-      _key: 'g' + (++msgCounter),
-      role: 'assistant',
-      characterId: body.characterId,
-      _charName: body.characterName || member?.name || '角色',
-      _charAvatar: member?.avatarUrl || null,
-      content: body.content,
-      _time: new Date().toISOString()
-    })
-    streamingChar.value = null
-    speakingCharId.value = null
-    nextTick(() => scrollGroupBottom())
-  } else if (type === 'CHARACTER_START') {
-    speakingCharId.value = body.characterId
-    const member = groupMembers.value.find(m => m.id === body.characterId)
-    if (member) {
-      streamingChar.value = { ...member, _content: '' }
-    }
-  } else if (type === 'CHARACTER_CHUNK') {
-    if (streamingChar.value) {
-      streamingChar.value._content += (body.content || '')
-      nextTick(() => scrollGroupBottom())
-    }
-  } else if (type === 'CHARACTER_END') {
-    if (streamingChar.value) {
-      groupMessages.value.push({
-        _key: 'g' + (++msgCounter),
-        role: 'assistant',
-        characterId: streamingChar.value.id,
-        _charName: streamingChar.value.name,
-        _charAvatar: streamingChar.value.avatarUrl,
-        content: streamingChar.value._content,
-        _time: new Date().toISOString()
-      })
-      if (activeGroup.value?.id === body.conversationId) {
-        notificationsStore.markConversationRead(body.conversationId)
-        refreshUnreadFromApi()
-      }
-    }
-    streamingChar.value = null
-    speakingCharId.value = null
-    nextTick(() => scrollGroupBottom())
+    void appendCharacterMessage(body)
   } else if (type === 'TURN_INTERRUPTED' || type === 'TURN_COMPLETE') {
     streamingChar.value = null
     speakingCharId.value = null
@@ -501,12 +499,13 @@ async function sendGroupMessage() {
   })
 
   groupInput.value = ''
+  lastUserSendAt = Date.now()
+  firstReplyAfterUserPending = true
   await nextTick()
-  // 发送后自动恢复输入焦点
   const ta = groupInputRef.value?.$el?.querySelector('textarea')
     || groupInputRef.value?.$el?.getElementsByTagName('textarea')?.[0]
   if (ta) ta.focus()
-  nextTick(() => scrollGroupBottom())
+  scrollGroupBottom({ force: true })
 }
 
 async function handleCreateGroup() {
@@ -596,7 +595,7 @@ async function openGroup(group, memberIds) {
   }
   connectWebSocket(group.id)
   await nextTick()
-  scrollGroupBottom()
+  scrollGroupBottom({ force: true })
 }
 
 function leaveGroup() {
@@ -709,10 +708,6 @@ async function handleDeleteGroup() {
   } finally {
     deletingGroup.value = false
   }
-}
-
-function scrollGroupBottom() {
-  groupScrollAnchor.value?.scrollIntoView({ behavior: 'smooth' })
 }
 
 function showCreateDialog() {
@@ -1020,6 +1015,7 @@ function isUserMessage(msg) {
 
 // Messages
 .group-messages {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1027,6 +1023,25 @@ function isUserMessage(msg) {
   display: flex;
   flex-direction: column;
   gap: $space-3;
+}
+
+.group-scroll-bottom {
+  position: sticky;
+  bottom: $space-3;
+  align-self: center;
+  z-index: 5;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .msg-time-divider {

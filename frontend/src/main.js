@@ -7,12 +7,10 @@ import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
 import { initAntiDebug } from './utils/antiDebug'
-import { readToken } from './utils/secureToken'
+import { bootstrapAuth } from './auth/bootstrap'
 import './styles/theme.scss'
 import './styles/global.scss'
 import './styles/app-shell.scss'
-
-document.documentElement.classList.add('dark')
 
 const isElectronRuntime = typeof window !== 'undefined' && (
   window.electronAPI?.isElectron === true
@@ -38,12 +36,7 @@ settingsStore.initTheme()
 // 反调试（生产环境 Electron 专用）
 initAntiDebug()
 
-// 通知 Electron 主进程当前登录状态（已登录用户在启动时恢复 session）
 ;(async () => {
-  const token = await readToken()
-  if (window.electronAPI?.setLoginState) {
-    window.electronAPI.setLoginState(!!token)
-  }
+  await bootstrapAuth(pinia)
+  app.mount('#app')
 })()
-
-app.mount('#app')

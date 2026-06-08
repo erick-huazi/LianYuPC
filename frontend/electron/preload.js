@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLauncherMousePassthrough: (ignore) => ipcRenderer.invoke('desktop:set-launcher-mouse-passthrough', ignore),
   notifyLauncherNewMessage: (payload) => ipcRenderer.invoke('desktop:notify-launcher-new-message', payload),
   getCaptionBarHeight: () => ipcRenderer.invoke('desktop:get-caption-height'),
+  getCaptionMetrics: () => ipcRenderer.invoke('desktop:get-caption-metrics'),
+  onCaptionMetrics: (callback) => {
+    const handler = (_event, metrics) => callback(metrics)
+    ipcRenderer.on('desktop:caption-metrics', handler)
+    return () => ipcRenderer.removeListener('desktop:caption-metrics', handler)
+  },
   onLauncherNewMessage: (callback) => {
     const handler = (_event, payload) => callback(payload)
     ipcRenderer.on('desktop:launcher-new-message', handler)
@@ -46,4 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('desktop:launcher-interaction-reset', handler)
   },
   setLoginState: (loggedIn) => ipcRenderer.invoke('desktop:set-login-state', loggedIn),
+  getAuthSession: () => ipcRenderer.invoke('auth:get-session'),
+  setAuthSession: (session) => ipcRenderer.invoke('auth:set-session', session),
+  clearAuthSession: () => ipcRenderer.invoke('auth:clear-session'),
 })

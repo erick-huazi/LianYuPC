@@ -81,9 +81,6 @@ public class ConversationService {
     @Value("${lianyu.ai.context-window:20}")
     private int contextWindow;
 
-    private static final Pattern STAGE_DIRECTION_PARENS =
-            Pattern.compile("[（(][^（）()\\n]{1,60}[)）]");
-
     @Transactional
     public ConversationResponse create(Long userId, CreateConversationRequest request) {
         Character character = characterMapper.selectById(request.getCharacterId());
@@ -790,14 +787,7 @@ public class ConversationService {
         if (text == null || text.isBlank()) {
             return "";
         }
-        // 去掉“（微笑）/（沉默片刻）”这类舞台说明，保留自然口语文本
-        String result = STAGE_DIRECTION_PARENS.matcher(text).replaceAll("");
-        result = result.replaceAll("\\s{2,}", " ").trim();
-        if (result.isBlank()) {
-            result = text.replace("（", "").replace("）", "")
-                    .replace("(", "").replace(")", "").trim();
-        }
-        return result;
+        return text.replaceAll("\\s{2,}", " ").trim();
     }
 
     private String buildSystemPromptForUser(Long userId, Character character, String memoryContext, String userInput) {

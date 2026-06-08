@@ -37,13 +37,24 @@ public class OutputLanguageService {
     }
 
     /**
-     * 按本条用户输入推断模型回复语言；无文本时回退用户缓存偏好。
+     * 解析本条请求的模型回复语言：优先用户设置（Redis 缓存），其次从文本推断，最后默认中文。
      */
     public String resolveForRequest(Long userId, String sampleText) {
+        if (hasCachedPreference(userId)) {
+            return resolveForUser(userId);
+        }
         if (sampleText != null && !sampleText.isBlank()) {
             return detectFromText(sampleText).getCode();
         }
         return resolveForUser(userId);
+    }
+
+    private boolean hasCachedPreference(Long userId) {
+        if (userId == null) {
+            return false;
+        }
+        String cached = redisTemplate.opsForValue().get(redisKey(userId));
+        return cached != null && !cached.isBlank();
     }
 
     private static OutputLanguage detectFromText(String text) {
@@ -60,10 +71,20 @@ public class OutputLanguageService {
                 zh++;
             }
         }
-        if (ja > en && ja >= zh) {
+        if (ja > en && ja >= zh && ja >= 3) {
             return OutputLanguage.JA;
         }
-        if (en > zh && en > ja) {
+        // 中英混杂时优先中文，避免少量英文词/缩写把整轮回复带成英文
+        if (en > zh * 2 && en > ja && en >= 5) {
+            return OutputLanguage.EN;
+        }
+        if (zh > 0) {
+            return OutputLanguage.ZH;
+        }
+        if (ja >= en && ja > 0) {
+            return OutputLanguage.JA;
+        }
+        if (en > 0) {
             return OutputLanguage.EN;
         }
         return OutputLanguage.ZH;
@@ -90,10 +111,30 @@ public class OutputLanguageService {
     public String buildNaturalStyleBlock(String languageCode) {
         OutputLanguage lang = OutputLanguage.fromCode(languageCode);
         return switch (lang) {
-            case JA -> "\n\n表現要件：舞台説明や動作の括弧描写（例「（微笑）」）は出力しない。自然なチャット文のみ。";
-            case EN -> "\n\nStyle: Do not output stage directions or action descriptions in parentheses. Natural chat text only.";
-            case ZH_TW -> "\n\n表達要求：不要輸出任何舞台說明/動作括號描寫（如「（微笑）」「(嘆氣)」）。只輸出自然聊天文本。";
-            default -> "\n\n表达要求：不要输出任何舞台说明/动作括号描写（如“（微笑）”“(叹气)”）。只输出自然聊天文本。";
+            case JA -> """
+                    
+                    表現要件：
+                    - 心の声・内面の独白は括弧で短く書いてよい（例「（本当はちょっと気になってる）」）
+                    - 動作・表情・身振りの括弧描写（例「（微笑）」「（ため息）」）は書かない
+                    - ユーザーが日本語で話しているのに英語など他言語で返さない""";
+            case EN -> """
+                    
+                    Style:
+                    - Inner thoughts may appear briefly in parentheses (e.g. "(I actually care more than I'm letting on)")
+                    - Do not use parentheses for physical actions or expressions (e.g. "(smiles)", "(sighs)")
+                    - Reply only in English unless the user clearly switched languages""";
+            case ZH_TW -> """
+                    
+                    表達要求：
+                    - 心理活動、內心獨白可用括號簡短寫出（如「（其實有點在意）」「（這傢伙怎麼又來了）」），與說出口的話區分開
+                    - 不要用括號寫動作、表情、肢體語言（如「（微笑）」「（嘆氣）」「（轉身離開）」）
+                    - 禁止無故夾雜英文/日文等其他語言；必須用繁體中文表述""";
+            default -> """
+                    
+                    表达要求：
+                    - 心理活动、内心独白可用括号简短写出（如「（其实有点在意）」「（这家伙怎么又来了）」），与说出口的话区分开
+                    - 不要用括号写动作、表情、肢体语言（如「（微笑）」「（叹气）」「（转身离开）」）
+                    - 禁止无故夹杂英文/日文等其他语言；必须用简体中文表述""";
         };
     }
 

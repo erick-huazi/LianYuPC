@@ -359,7 +359,7 @@ public class AiChatService {
             String reason = simplifyGenerationError(e);
             log.warn("Fictional city inference failed: userId={}, name={}, reason={}",
                     userId, characterName, reason);
-            throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR, "虚构城市推断失败，请稍后再试");
+            throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR, "由于角色背景原因虚构失败，建议您选择现实城市");
         }
     }
 

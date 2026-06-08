@@ -114,6 +114,7 @@ import { User, Lock, Loading, Refresh } from '@element-plus/icons-vue'
 import { APP_LOGO } from '@/constants/brand.js'
 import { ElMessage } from 'element-plus'
 import { getCaptcha } from '@/api/auth'
+import { getLastUsername } from '@/stores/user'
 import AuthParticles from '@/components/auth/AuthParticles.vue'
 import { useAuthPageGsap } from '@/composables/useAuthPageGsap'
 
@@ -140,6 +141,7 @@ const rules = {
 }
 
 onMounted(() => {
+  form.username = getLastUsername()
   refreshCaptcha()
 })
 

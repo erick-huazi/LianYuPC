@@ -58,11 +58,6 @@ onUnmounted(() => {
   height: calc(100vh - var(--electron-caption-height, 0px));
 }
 
-.app-layout--immersive {
-  min-height: calc(100vh - var(--electron-caption-height, 0px));
-  height: calc(100vh - var(--electron-caption-height, 0px));
-}
-
 .app-main {
   flex: 1;
   display: flex;

@@ -3,9 +3,11 @@ package com.lianyu.service.conversation;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lianyu.dao.dto.ConversationUserMessageCountRow;
 import com.lianyu.dao.entity.Character;
+import com.lianyu.dao.entity.CharacterState;
 import com.lianyu.dao.entity.Conversation;
 import com.lianyu.dao.entity.Message;
 import com.lianyu.dao.mapper.CharacterMapper;
+import com.lianyu.dao.mapper.CharacterStateMapper;
 import com.lianyu.dao.mapper.ConversationMapper;
 import com.lianyu.dao.mapper.MessageMapper;
 import com.lianyu.service.character.CharacterChatBehavior;
@@ -39,6 +41,7 @@ public class ProactiveChatScheduler {
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final CharacterMapper characterMapper;
+    private final CharacterStateMapper characterStateMapper;
     private final ConversationService conversationService;
     private final CharacterChatBehaviorResolver chatBehaviorResolver;
     private final EngagementFrequencyScorer engagementScorer;
@@ -91,6 +94,7 @@ public class ProactiveChatScheduler {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime activitySince = now.minusDays(engagementScorer.proactiveActivityWindowDays());
         Map<Long, Long> userMsgCountMap = loadUserMessageCounts(convIds, activitySince);
+        Map<String, CharacterState> stateMap = loadCharacterStates(candidates);
 
         List<ScoredCandidate> scored = new ArrayList<>();
         for (Conversation conv : candidates) {
@@ -98,16 +102,21 @@ public class ProactiveChatScheduler {
             CharacterChatBehavior behavior = chatBehaviorResolver.resolve(character);
             Message lastMessage = latestMessageMap.get(conv.getId());
             Message lastUser = latestUserMessageMap.get(conv.getId());
-            if (!isEligible(conv, behavior, lastMessage, lastUser)) {
+            CharacterState state = stateMap.get(stateKey(conv.getUserId(), conv.getCharacterId()));
+            RelationshipSnapshot relationship = relationshipStateService.getSnapshot(conv.getUserId(), conv.getCharacterId());
+            int effectiveMinIdle = engagementScorer.adjustMinIdleMinutes(
+                    behavior.minIdleMinutes(), state, relationship.phase());
+            if (!isEligible(conv, behavior, effectiveMinIdle, lastMessage, lastUser, relationship.phase())) {
                 continue;
             }
             int userMsgs = userMsgCountMap.getOrDefault(conv.getId(), 0L).intValue();
             LocalDateTime lastActivityAt = lastMessage.getCreatedAt();
             double effectiveProb = engagementScorer.proactiveTriggerProbability(
-                    behavior, userMsgs, lastActivityAt, now);
+                    behavior, userMsgs, lastActivityAt, now, state, relationship.phase());
             long idleMinutes = lastActivityAt == null ? 0 : ChronoUnit.MINUTES.between(lastActivityAt, now);
-            if (idleMinutes >= behavior.minIdleMinutes()) {
-                effectiveProb = Math.max(effectiveProb, behavior.triggerProbability());
+            if (idleMinutes >= effectiveMinIdle) {
+                effectiveProb = Math.max(effectiveProb, behavior.triggerProbability()
+                        * engagementScorer.personalityMultiplier(state, relationship.phase()));
             }
             if (effectiveProb <= 0.0) {
                 continue;
@@ -169,13 +178,14 @@ public class ProactiveChatScheduler {
 
     private boolean isEligible(Conversation conv,
                                CharacterChatBehavior behavior,
+                               int effectiveMinIdleMinutes,
                                Message lastMessage,
-                               Message lastUser) {
+                               Message lastUser,
+                               RelationshipPhase phase) {
         if (conv.getCharacterId() == null || !behavior.proactiveEnabled()) {
             return false;
         }
-        RelationshipSnapshot snapshot = relationshipStateService.getSnapshot(conv.getUserId(), conv.getCharacterId());
-        if (snapshot.phase() == RelationshipPhase.INJURED) {
+        if (phase == RelationshipPhase.INJURED) {
             return false;
         }
         if (Boolean.TRUE.equals(redisTemplate.hasKey(cooldownKey(conv.getId())))) {
@@ -188,7 +198,34 @@ public class ProactiveChatScheduler {
         if (lastActivityAt == null) {
             return false;
         }
-        return !lastActivityAt.isAfter(LocalDateTime.now().minusMinutes(Math.max(1, behavior.minIdleMinutes())));
+        return !lastActivityAt.isAfter(LocalDateTime.now().minusMinutes(Math.max(1, effectiveMinIdleMinutes)));
+    }
+
+    private Map<String, CharacterState> loadCharacterStates(List<Conversation> conversations) {
+        if (conversations == null || conversations.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> characterIds = conversations.stream()
+                .map(Conversation::getCharacterId)
+                .filter(id -> id != null && id > 0)
+                .collect(Collectors.toSet());
+        if (characterIds.isEmpty()) {
+            return Map.of();
+        }
+        List<CharacterState> states = characterStateMapper.selectList(
+                new LambdaQueryWrapper<CharacterState>()
+                        .in(CharacterState::getCharacterId, characterIds));
+        Map<String, CharacterState> map = new HashMap<>();
+        for (CharacterState state : states) {
+            if (state.getUserId() != null && state.getCharacterId() != null) {
+                map.put(stateKey(state.getUserId(), state.getCharacterId()), state);
+            }
+        }
+        return map;
+    }
+
+    private static String stateKey(Long userId, Long characterId) {
+        return userId + ":" + characterId;
     }
 
     private void setCooldown(Long conversationId, CharacterChatBehavior behavior) {

@@ -53,7 +53,6 @@ export const useSettingsStore = defineStore('settings', () => {
 
   watch(theme, val => {
     localStorage.setItem(STORAGE_THEME, val)
-    document.documentElement.classList.toggle('dark', val === 'dark')
   })
 
   function persistAndApply() {
@@ -97,7 +96,6 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function initTheme() {
-    document.documentElement.classList.toggle('dark', theme.value === 'dark')
     applyTheme(backgroundColor.value, accentColor.value)
   }
 

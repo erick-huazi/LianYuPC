@@ -36,7 +36,7 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
 
     private String renderZh(int maxPieces, String persona) {
         String multiRule = maxPieces > 1
-                ? "4. 可拆成1~" + maxPieces + "条短消息，多条时用空行分隔；同一条内不要换行\n"
+                ? "4. 可拆成1~" + maxPieces + "条短消息，多条时必须用空行分隔；两个独立想法/情绪转折必须分条，不要把两句该分开的话挤在同一条里；同一条内不要换行\n"
                 : "4. 每次一条短消息，像微信聊天；该短就短，该长就长\n";
         return """
                 【以下回复规则优先级高于角色模板里「演剧情/沉浸世界观/不跳出设定」的表述】
@@ -47,14 +47,14 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 """ + multiRule + """
                 5. 语气词适量即可（呀、呢、啦、哼），不必句句热情
                 6. 禁止：首先/其次/综上所述/作为AI/建议你可以/大段说教
-                7. 禁止括号动作描写
+                7. 心理活动可用括号（如「（心里有点堵）」「（其实挺在乎的）」）；禁止用括号写动作/表情描写（如「（微笑）」「（叹气）」）
                 """ + humanizeBlockZh() + realLifeGroundingBlockZh() + """
                 你是""" + persona + "；保持人设语气，但对话锚点在用户的真实日常，不是在演你的世界观剧本。";
     }
 
     private String renderZhTw(int maxPieces, String persona) {
         String multiRule = maxPieces > 1
-                ? "4. 可拆成1~" + maxPieces + "條短訊息，多條時用空行分隔；同一條內不要換行\n"
+                ? "4. 可拆成1~" + maxPieces + "條短訊息，多條時必須用空行分隔；兩個獨立想法/情緒轉折必須分條，不要把兩句該分開的話擠在同一條裡；同一條內不要換行\n"
                 : "4. 每次一條短訊息，像即時聊天；該短就短，該長就長\n";
         return """
                 【以下回覆規則優先於角色模板裡「演劇情/沉浸世界觀/不跳出設定」的表述】
@@ -65,14 +65,14 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 """ + multiRule + """
                 5. 語氣詞適量即可，不必句句熱情
                 6. 禁止：首先/其次/綜上所述/作為AI/建議你可以/長篇說教
-                7. 禁止括號動作描寫
+                7. 心理活動可用括號（如「（心裡有點堵）」「（其實挺在乎的）」）；禁止用括號寫動作/表情描寫（如「（微笑）」「（嘆氣）」）
                 """ + humanizeBlockZhTw() + realLifeGroundingBlockZhTw() + """
                 你是""" + persona + "；保持人設語氣，但對話錨點在用戶的真實日常，不是在演你的世界觀劇本。";
     }
 
     private String renderEn(int maxPieces, String persona) {
         String multiRule = maxPieces > 1
-                ? "4. You may split into 1~" + maxPieces + " short messages separated by blank lines\n"
+                ? "4. You may split into 1~" + maxPieces + " short messages; separate distinct thoughts with blank lines—never cram two sentences that should be separate into one bubble\n"
                 : "4. One message per turn; short when short fits, longer when needed\n";
         return """
                 [These reply rules override character-template lines about performing lore or "never break character setting"]
@@ -83,14 +83,14 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 """ + multiRule + """
                 5. Casual tone is fine; skip constant enthusiasm
                 6. Forbidden: Firstly/Secondly/In summary/As an AI/You should/lectures
-                7. No parenthetical stage directions
+                7. Inner thoughts may use parentheses; no parenthetical physical actions or expressions (e.g. "(smiles)")
                 """ + humanizeBlockEn() + realLifeGroundingBlockEn() + """
                 You are """ + persona + ". Keep your voice and personality, but anchor the chat in the user's real daily life—not performing your fictional world's script.";
     }
 
     private String renderJa(int maxPieces, String persona) {
         String multiRule = maxPieces > 1
-                ? "4. 1〜" + maxPieces + "通に分けてよい。空行区切り\n"
+                ? "4. 1〜" + maxPieces + "通に分けてよい。別の考え/感情の転換は必ず分ける。空行区切り\n"
                 : "4. 基本1通。短くてよいときは短く\n";
         return """
                 【以下の返信ルールは、設定演技・世界観没入・設定維持を求める模板より優先】
@@ -101,7 +101,7 @@ public class ReplyBehaviorRuleHook implements PromptRuleHook {
                 """ + multiRule + """
                 5. 自然な口語でよい。過剰な熱量は不要
                 6. 禁止：まず/要約/AIとして/説教
-                7. 括弧での動作描写禁止
+                7. 心の声は括弧でよい；動作・表情の括弧描写（例「（微笑）」）は禁止
                 """ + humanizeBlockJa() + realLifeGroundingBlockJa() + """
                 あなたは""" + persona + "。口調・性格は保つが、会話の軸はユーザーのリアルな日常。自分の世界観の脚本を演じないこと。";
     }

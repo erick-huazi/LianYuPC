@@ -23,10 +23,10 @@
         </div>
         <div class="desktop-settings__row">
           <div>
-            <div class="desktop-settings__label">显示桌面快捷 Logo</div>
-            <div class="desktop-settings__hint">在桌面显示可点击的 LianYu 图标</div>
+            <div class="desktop-settings__label">启用桌面桌宠</div>
+            <div class="desktop-settings__hint">关闭主窗口后在桌面显示角色像素桌宠，点击可快速开聊</div>
           </div>
-          <el-switch v-model="desktopForm.showLauncherLogo" @change="onDesktopChange" />
+          <el-switch v-model="desktopForm.showDesktopPet" @change="onDesktopChange" />
         </div>
         <div class="desktop-settings__row">
           <div>
@@ -35,9 +35,9 @@
           </div>
           <el-switch v-model="desktopForm.launchAtLogin" @change="onDesktopChange" />
         </div>
-        <div class="desktop-settings__pet-block">
-          <div class="desktop-settings__label">桌面桌宠</div>
-          <div class="desktop-settings__hint">关闭主窗口后显示的角色像素桌宠，点击可快速开聊</div>
+        <div v-if="desktopForm.showDesktopPet" class="desktop-settings__pet-block">
+          <div class="desktop-settings__label">桌宠角色</div>
+          <div class="desktop-settings__hint">选择关闭主窗口后在桌面显示的角色形象</div>
           <div class="pet-picker">
             <button
               v-for="pet in petCatalog"
@@ -233,7 +233,7 @@ const isElectron = isElectronApp()
 const petCatalog = PET_CATALOG.map(p => ({ ...p, previewUrl: getPetPreviewUrl(p) }))
 const desktopForm = reactive({
   closeToTray: true,
-  showLauncherLogo: true,
+  showDesktopPet: true,
   launchAtLogin: false,
   launcherPetId: 'raiden',
 })
@@ -297,7 +297,7 @@ onMounted(async () => {
   if (isElectron) {
     await desktopStore.syncFromMain()
     desktopForm.closeToTray = desktopStore.closeToTray
-    desktopForm.showLauncherLogo = desktopStore.showLauncherLogo
+    desktopForm.showDesktopPet = desktopStore.showDesktopPet
     desktopForm.launchAtLogin = desktopStore.launchAtLogin
     desktopForm.launcherPetId = desktopStore.launcherPetId
   }
@@ -320,7 +320,8 @@ async function selectPet(id) {
 async function onDesktopChange() {
   await desktopStore.persist({
     closeToTray: desktopForm.closeToTray,
-    showLauncherLogo: desktopForm.showLauncherLogo,
+    showDesktopPet: desktopForm.showDesktopPet,
+    showLauncherLogo: desktopForm.showDesktopPet,
     launchAtLogin: desktopForm.launchAtLogin,
     launcherPetId: desktopForm.launcherPetId,
   })

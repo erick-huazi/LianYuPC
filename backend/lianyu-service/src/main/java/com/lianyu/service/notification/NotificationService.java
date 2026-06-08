@@ -75,6 +75,16 @@ public class NotificationService {
         return createAndPushNotification(userId, conversationId, characterId, title, preview, "MOMENT_COMMENT");
     }
 
+    public NotificationResponse notifyDiaryNew(Long userId,
+                                             Long conversationId,
+                                             Long characterId,
+                                             String characterName,
+                                             String preview) {
+        String speaker = (characterName == null || characterName.isBlank()) ? "角色" : characterName;
+        String title = speaker + " 写了一篇新日记";
+        return createAndPushNotification(userId, conversationId, characterId, title, preview, "DIARY_NEW");
+    }
+
     public NotificationResponse notifyGroupMessage(Long userId,
                                                    Long conversationId,
                                                    Long characterId,

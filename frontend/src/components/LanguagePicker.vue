@@ -98,8 +98,8 @@ watch(
 
 <style lang="scss" scoped>
 .lang-trigger {
-  width: 40px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;

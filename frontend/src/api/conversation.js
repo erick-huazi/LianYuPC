@@ -1,4 +1,5 @@
 import http from './index'
+import { applyOutputLanguageHeaders } from '@/utils/outputLanguageHeader'
 import { apiBasePath } from '@/utils/runtime'
 import { syncToken } from '@/utils/secureToken'
 
@@ -56,10 +57,10 @@ export function sendMessageStream(id, data) {
   const token = syncToken() || localStorage.getItem('lianyu-token')
   return fetch(`${apiBasePath()}/conversation/${id}/messages/stream`, {
     method: 'POST',
-    headers: {
+    headers: applyOutputLanguageHeaders({
       'Content-Type': 'application/json',
       'lianyu-token': token || ''
-    },
+    }),
     body: JSON.stringify(data)
   })
 }

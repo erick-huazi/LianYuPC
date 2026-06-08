@@ -31,7 +31,7 @@
                 :key="n.id"
                 class="notify-item"
                 :class="{ unread: !n.read }"
-                @click="goConversation(n.conversationId)"
+                @click="handleNotificationClick(n)"
               >
                 <div class="notify-title">{{ n.title || t('header.newMessage') }}</div>
                 <div class="notify-body">{{ n.contentPreview || '' }}</div>
@@ -115,6 +115,7 @@ import { useOnboardingHint } from '@/composables/useOnboardingHint'
 import { useI18n } from 'vue-i18n'
 import { APP_LOGO } from '@/constants/brand.js'
 import { resolveMediaUrl } from '@/utils/media'
+import { useNotificationNavigation } from '@/composables/useNotificationNavigation'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -122,11 +123,10 @@ const notificationsStore = useNotificationsStore()
 const { t } = useI18n()
 const { visible: showThemeHint, dismiss: dismissThemeHint } = useOnboardingHint('theme-color')
 const { visible: showPushHint, dismiss: dismissPushHint } = useOnboardingHint('push')
+const { navigateToNotification } = useNotificationNavigation()
 
-function goConversation(conversationId) {
-  if (!conversationId) return
-  notificationsStore.markConversationRead(conversationId)
-  router.push(`/app/chat/${conversationId}`)
+async function handleNotificationClick(notification) {
+  await navigateToNotification(notification)
 }
 
 function pushMessageKey(result) {
@@ -191,13 +191,13 @@ async function handleUserMenu(command) {
   position: sticky;
   top: 0;
   z-index: $z-header;
-  --app-header-height: 56px;
+  --app-header-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   margin: 0;
-  padding: $space-3 $space-4 $space-3 $layout-page-gutter; // 右侧用较小留白，让按钮靠右置顶
+  padding: $space-2 $space-2 $space-2 $layout-page-gutter;
   border-radius: 0;
   background: rgba(var(--ly-bg-surface-rgb), 0.55);
   backdrop-filter: blur(20px) saturate(130%);
@@ -246,7 +246,9 @@ async function handleUserMenu(command) {
   position: relative;
   display: flex;
   align-items: center;
-  gap: $space-2;
+  gap: $space-1;
+  flex-shrink: 0;
+  margin-left: auto;
   overflow: visible;
 }
 

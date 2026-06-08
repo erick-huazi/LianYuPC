@@ -275,9 +275,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ChatDotRound,
@@ -306,6 +307,7 @@ import { useOpenSingleChat } from '@/composables/useOpenSingleChat'
 import AtmospherePanel from '@/components/AtmospherePanel.vue'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 
 const charactersStore = useCharactersStore()
@@ -438,6 +440,16 @@ const sidebarQuote = computed(() => {
   return t('home.atmosphereFallbackQuote')
 })
 
+function applyRouteCharacterFilter() {
+  const raw = route.query.characterId
+  if (raw == null || raw === '') {
+    filterCharId.value = null
+    return
+  }
+  const id = Number(raw)
+  filterCharId.value = Number.isFinite(id) ? id : null
+}
+
 onMounted(async () => {
   try {
     await charactersStore.fetchList()
@@ -445,6 +457,7 @@ onMounted(async () => {
   } catch {
     charactersStore.invalidate()
   }
+  applyRouteCharacterFilter()
   await Promise.all([
     reloadFeed(),
     loadSidebarData()
@@ -456,6 +469,14 @@ onMounted(async () => {
   }
   startCommentPolling()
 })
+
+watch(
+  () => route.query.characterId,
+  () => {
+    applyRouteCharacterFilter()
+    reloadFeed()
+  }
+)
 
 onUnmounted(() => {
   stopCommentPolling()

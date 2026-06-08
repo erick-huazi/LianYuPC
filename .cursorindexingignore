@@ -1,3 +1,39 @@
 
-# Don't index SpecStory auto-save files, but allow explicit context inclusion via @ references
+# Cursor semantic index exclusions (gitignore syntax).
+# Files here stay readable via @ mention; they are skipped from codebase search/indexing.
+# .gitignore patterns are already excluded; this list adds project-specific noise.
+
+# Chat / local tooling
 .specstory/**
+
+# Codegraph local index (SQLite + daemon logs)
+.codegraph/**
+
+# Deploy exports (large tar images)
+.deploy-export/**
+
+# Python / temp
+__pycache__/**
+.tmp/**
+
+# E2E screenshots & reports (not source)
+scripts/e2e/artifacts/**
+
+# Large binary assets (sprites, avatars — keep in repo, skip indexing)
+frontend/public/pet/**
+backend/lianyu-app/src/main/resources/square-avatars/**
+
+# Electron build icon bundle (binary)
+frontend/build/**
+
+# Secrets (defense in depth; also in .gitignore)
+secrets/**
+
+# Stray test images at repo/backend root (not product code)
+backend/*.jpg
+backend/*.jpeg
+backend/*.webp
+backend/*.png
+*.jpg
+*.jpeg
+*.webp

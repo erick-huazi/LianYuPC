@@ -232,7 +232,7 @@ public class GroupChatService {
             String content = msg.getContent();
             if (msg.getCharacterId() != null && !msg.getCharacterId().equals(character.getId())) {
                 String charName = getCharacterName(msg.getCharacterId());
-                content = charName + ": " + content;
+                content = formatOtherCharacterHistoryLine(charName, content);
             }
             dto.setContent(content);
             allMsgs.add(dto);
@@ -491,7 +491,7 @@ public class GroupChatService {
                 }
                 if (msg.getCharacterId() != null && !msg.getCharacterId().equals(character.getId())) {
                     String charName = getCharacterName(msg.getCharacterId());
-                    content = charName + ": " + content;
+                    content = formatOtherCharacterHistoryLine(charName, content);
                 }
                 dto.setContent(content);
                 allMsgs.add(dto);
@@ -1021,6 +1021,14 @@ public class GroupChatService {
         return text;
     }
 
+    private static final String GROUP_HISTORY_TAG = "群聊-";
+
+    private String formatOtherCharacterHistoryLine(String charName, String content) {
+        String safeName = charName == null || charName.isBlank() ? "其他角色" : charName.trim();
+        String safeContent = content == null ? "" : content;
+        return "「" + GROUP_HISTORY_TAG + safeName + "」: " + safeContent;
+    }
+
     private String sanitizeGroupReply(String raw, String speakerName, List<GroupMember> members) {
         if (raw == null || raw.isBlank()) {
             return raw;
@@ -1037,15 +1045,18 @@ public class GroupChatService {
                 if (t.isEmpty()) {
                     continue;
                 }
-                if (!lineAttributedToOtherSpeaker(t, speakerName, members)) {
-                    kept.add(stripLeadingSpeakerLabel(t, speakerName));
+                if (lineAttributedToOtherSpeaker(t, speakerName, members)) {
+                    continue;
+                }
+                String stripped = stripLeadingSpeakerLabel(t, speakerName);
+                if (!stripped.isBlank()) {
+                    kept.add(stripped);
                 }
             }
             if (!kept.isEmpty()) {
                 cleanedParagraphs.add(replySplitter.collapseSoftLineBreaks(String.join("", kept)));
             }
         }
-        // 全是「别的角色名: 台词」的剧本行时，不要原样塞回当前角色气泡
         if (cleanedParagraphs.isEmpty()) {
             return "";
         }
@@ -1054,15 +1065,15 @@ public class GroupChatService {
 
     private boolean lineAttributedToOtherSpeaker(String line, String speakerName, List<GroupMember> members) {
         String t = line.trim();
-        int colonIdx = t.indexOf('：');
-        int asciiColon = t.indexOf(':');
-        int splitAt = colonIdx >= 0 && asciiColon >= 0 ? Math.min(colonIdx, asciiColon)
-                : Math.max(colonIdx, asciiColon);
-        if (splitAt <= 0 || splitAt > 24) {
+        String groupSpeaker = extractGroupHistorySpeaker(t);
+        if (groupSpeaker != null) {
+            return !groupSpeaker.equals(speakerName) && !groupSpeaker.equalsIgnoreCase(speakerName);
+        }
+        String colonSpeaker = extractColonSpeakerPrefix(t);
+        if (colonSpeaker == null) {
             return false;
         }
-        String prefix = t.substring(0, splitAt).trim();
-        if (prefix.isEmpty() || prefix.equals(speakerName)) {
+        if (colonSpeaker.equals(speakerName) || colonSpeaker.equalsIgnoreCase(speakerName)) {
             return false;
         }
         for (GroupMember member : members) {
@@ -1070,11 +1081,51 @@ public class GroupChatService {
             if (name == null || name.isBlank() || name.equals(speakerName)) {
                 continue;
             }
-            if (prefix.equals(name) || prefix.equalsIgnoreCase(name)) {
+            if (colonSpeaker.equals(name) || colonSpeaker.equalsIgnoreCase(name)) {
                 return true;
             }
         }
-        return true;
+        return looksLikeSpeakerScriptLine(colonSpeaker);
+    }
+
+    private String extractGroupHistorySpeaker(String line) {
+        if (line == null || !line.startsWith("「" + GROUP_HISTORY_TAG)) {
+            return null;
+        }
+        int end = line.indexOf('」');
+        if (end <= GROUP_HISTORY_TAG.length() + 1) {
+            return null;
+        }
+        return line.substring(GROUP_HISTORY_TAG.length() + 1, end).trim();
+    }
+
+    private String extractColonSpeakerPrefix(String line) {
+        String t = line.trim();
+        int colonIdx = t.indexOf('：');
+        int asciiColon = t.indexOf(':');
+        int splitAt = colonIdx >= 0 && asciiColon >= 0 ? Math.min(colonIdx, asciiColon)
+                : Math.max(colonIdx, asciiColon);
+        if (splitAt <= 0 || splitAt > 32) {
+            return null;
+        }
+        String prefix = t.substring(0, splitAt).trim();
+        if (prefix.isEmpty()) {
+            return null;
+        }
+        if (prefix.endsWith("说") || prefix.endsWith("说道")) {
+            prefix = prefix.replaceAll("(说|说道)$", "").trim();
+        }
+        return prefix.isEmpty() ? null : prefix;
+    }
+
+    private boolean looksLikeSpeakerScriptLine(String prefix) {
+        if (prefix == null || prefix.isBlank()) {
+            return false;
+        }
+        return prefix.length() <= 16
+                && !prefix.contains(" ")
+                && !prefix.contains("，")
+                && !prefix.contains(",");
     }
 
     private String stripLeadingSpeakerLabel(String line, String speakerName) {
@@ -1082,11 +1133,34 @@ public class GroupChatService {
         if (speakerName == null || speakerName.isBlank()) {
             return t;
         }
+        String groupSpeaker = extractGroupHistorySpeaker(t);
+        if (groupSpeaker != null) {
+            int colonIdx = t.indexOf('：');
+            int asciiColon = t.indexOf(':');
+            int splitAt = colonIdx >= 0 && asciiColon >= 0 ? Math.min(colonIdx, asciiColon)
+                    : Math.max(colonIdx, asciiColon);
+            if (splitAt > 0 && splitAt < t.length() - 1) {
+                return t.substring(splitAt + 1).trim();
+            }
+            return "";
+        }
         if (t.startsWith(speakerName + "：")) {
             return t.substring(speakerName.length() + 1).trim();
         }
         if (t.startsWith(speakerName + ":")) {
             return t.substring(speakerName.length() + 1).trim();
+        }
+        if (t.startsWith(speakerName + "说：")) {
+            return t.substring(speakerName.length() + 2).trim();
+        }
+        if (t.startsWith(speakerName + "说道：")) {
+            return t.substring(speakerName.length() + 3).trim();
+        }
+        if (t.startsWith("「" + GROUP_HISTORY_TAG + speakerName + "」:")) {
+            return t.substring(("「" + GROUP_HISTORY_TAG + speakerName + "」:").length()).trim();
+        }
+        if (t.startsWith("「" + GROUP_HISTORY_TAG + speakerName + "」：")) {
+            return t.substring(("「" + GROUP_HISTORY_TAG + speakerName + "」：").length()).trim();
         }
         return t;
     }

@@ -26,6 +26,12 @@ public class GroupChatRuleHook implements PromptRuleHook {
 
         return switch (OutputLanguage.fromCode(context.outputLanguage())) {
             case JA -> """
+                    === 絶対禁止（最優先）===
+                    自分（""" + name + """
+                    ）としてのみ話すこと。
+                    他キャラ名付きの台詞行・三人称代弁・複数キャラ脚本形式・「群聊-」形式の引用行は禁止。
+                    履歴の「群聊-名前」はシステム注記であり、出力フォーマットではない。
+
                     === グループチャット ===
                     あなたはグループチャットにいる。""" + other + "\n"
                     + "自然に会話に参加し、他キャラにも話しかけ、ユーザにも返信してよい。\n"
@@ -42,6 +48,12 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + groupRealLifeGroundingHint(OutputLanguage.JA)
                     + mention;
             case EN -> """
+                    === Absolute ban (highest priority) ===
+                    Speak ONLY as yourself (""" + name + """
+                    ).
+                    Never output: lines prefixed with another character's name, third-person narration, multi-character script layouts, or any "groupchat-" style attribution lines.
+                    History may show tagged lines like 「groupchat-Name」—that is system markup, NOT your output format.
+
                     === Group chat ===
                     You are in a group chat. """ + other + "\n"
                     + "Participate naturally: address other characters or reply to the user.\n"
@@ -58,6 +70,12 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + groupRealLifeGroundingHint(OutputLanguage.EN)
                     + mention;
             case ZH_TW -> """
+                    === 絕對禁止（最高優先級）===
+                    你只能以你自己（""" + name + """
+                    ）的身份說話。
+                    嚴禁輸出：帶角色名的對話行、第三人稱代述、多人劇本格式、「群聊-」前綴引用行。
+                    歷史裡的「群聊-某某」只是系統標註，不是你的輸出格式。
+
                     === 群聊資訊 ===
                     你現在在一個群聊中。""" + other + "\n"
                     + "請自然參與群聊討論，可以對其他角色說話，也可以回應用戶。\n"
@@ -75,6 +93,12 @@ public class GroupChatRuleHook implements PromptRuleHook {
                     + groupRealLifeGroundingHint(OutputLanguage.ZH_TW)
                     + mention;
             case ZH -> """
+                    === 绝对禁止（最高优先级）===
+                    你只能以你自己（""" + name + """
+                    ）的身份说话。
+                    严禁输出：带角色名的对话行、第三人称代述、多人剧本格式、「群聊-」前缀引用行。
+                    历史里出现的「群聊-某某」只是系统标注，不是你的输出格式，复制或模仿它等于严重错误。
+
                     === 群聊信息 ===
                     你现在在一个群聊中。""" + other + "\n"
                     + "请自然参与群聊讨论，可以对其他角色说话，也可以回应用户。\n"

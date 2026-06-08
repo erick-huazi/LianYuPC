@@ -10,6 +10,7 @@ const ALLOWED_PET_IDS = [
 
 const DEFAULTS = {
   closeToTray: true,
+  showDesktopPet: true,
   showLauncherLogo: true,
   launchAtLogin: false,
   closeHintShown: false,
@@ -20,13 +21,26 @@ function settingsPath() {
   return path.join(app.getPath('userData'), 'desktop-settings.json')
 }
 
+function normalizeDesktopSettings(settings) {
+  const next = { ...DEFAULTS, ...settings }
+  if (settings.showDesktopPet == null && settings.showLauncherLogo != null) {
+    next.showDesktopPet = settings.showLauncherLogo !== false
+  }
+  next.showLauncherLogo = next.showDesktopPet !== false
+  return next
+}
+
 export function readDesktopSettings() {
   try {
     const raw = fs.readFileSync(settingsPath(), 'utf8')
-    return { ...DEFAULTS, ...JSON.parse(raw) }
+    return normalizeDesktopSettings(JSON.parse(raw))
   } catch {
     return { ...DEFAULTS }
   }
+}
+
+export function isDesktopPetEnabled(settings) {
+  return settings?.showDesktopPet !== false && settings?.showLauncherLogo !== false
 }
 
 export function writeDesktopSettings(partial) {
@@ -34,7 +48,12 @@ export function writeDesktopSettings(partial) {
   if (sanitized.launcherPetId && !ALLOWED_PET_IDS.includes(sanitized.launcherPetId)) {
     delete sanitized.launcherPetId
   }
-  const next = { ...readDesktopSettings(), ...sanitized }
+  if (sanitized.showDesktopPet != null) {
+    sanitized.showLauncherLogo = sanitized.showDesktopPet
+  } else if (sanitized.showLauncherLogo != null) {
+    sanitized.showDesktopPet = sanitized.showLauncherLogo
+  }
+  const next = normalizeDesktopSettings({ ...readDesktopSettings(), ...sanitized })
   fs.mkdirSync(path.dirname(settingsPath()), { recursive: true })
   fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2))
   applyLaunchAtLogin(next.launchAtLogin)
