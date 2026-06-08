@@ -19,6 +19,7 @@ import com.lianyu.service.dto.AiChatRequest;
 import com.lianyu.service.dto.ChatResult;
 import com.lianyu.service.dto.MessageDto;
 import com.lianyu.service.memory.MemoryRetriever;
+import com.lianyu.service.relationship.RelationshipStateService;
 import com.lianyu.service.support.OutputLanguageService;
 import com.lianyu.service.tools.ChatToolContext;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +64,7 @@ public class CharacterDiaryService {
     private final MemoryRetriever memoryRetriever;
     private final OutputLanguageService outputLanguageService;
     private final ObjectMapper objectMapper;
+    private final RelationshipStateService relationshipStateService;
 
     @Value("${lianyu.diary.enabled:true}")
     private boolean diaryEnabled;
@@ -210,9 +212,13 @@ public class CharacterDiaryService {
         Collections.reverse(recentMessages);
 
         String memoryContext = memoryRetriever.retrieveProfileContext(characterId, userId);
+        String relationshipContext = relationshipStateService.buildPromptContext(userId, characterId);
+        String mergedContext = memoryContext != null
+                ? memoryContext + "\n\n" + relationshipContext
+                : relationshipContext;
         String lang = outputLanguageService.resolveForUser(userId);
 
-        String basePrompt = promptBuilder.buildSystemPrompt(character, memoryContext, lang, true);
+        String basePrompt = promptBuilder.buildSystemPrompt(character, mergedContext, lang, true);
 
         String instruction = switch (OutputLanguage.fromCode(lang)) {
             case JA -> """

@@ -19,6 +19,7 @@ import com.lianyu.service.ai.CharacterPromptBuilder;
 import com.lianyu.service.dto.*;
 import com.lianyu.service.memory.MemoryRetriever;
 import com.lianyu.service.notification.NotificationService;
+import com.lianyu.service.relationship.RelationshipStateService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.support.OutputLanguageService;
 import com.lianyu.service.tools.ChatToolContext;
@@ -67,6 +68,7 @@ public class MomentsService {
     private final StringRedisTemplate redisTemplate;
     private final FileStorageService fileStorageService;
     private final MomentsCommentOrchestrator momentsCommentOrchestrator;
+    private final RelationshipStateService relationshipStateService;
 
     @Value("${lianyu.moments.content-max-chars:180}")
     private int contentMaxChars;
@@ -373,7 +375,9 @@ public class MomentsService {
 
     private String buildSystemPrompt(Long userId, Character character, String memoryContext, String userInput) {
         String lang = outputLanguageService.resolveForRequest(userId, userInput);
-        String base = promptBuilder.buildSystemPrompt(character, memoryContext, lang, true);
+        String relationshipContext = relationshipStateService.buildPromptContext(userId, character.getId());
+        String mergedContext = memoryContext != null ? memoryContext + "\n\n" + relationshipContext : relationshipContext;
+        String base = promptBuilder.buildSystemPrompt(character, mergedContext, lang, true);
         return base + outputLanguageService.buildNaturalStyleBlock(lang);
     }
 
