@@ -8,6 +8,8 @@ import com.lianyu.dao.entity.CharacterState;
 import com.lianyu.dao.mapper.CharacterMapper;
 import com.lianyu.service.character.CharacterDiaryService;
 import com.lianyu.service.character.CharacterStateService;
+import com.lianyu.service.relationship.RelationshipInnerSpace;
+import com.lianyu.service.relationship.RelationshipStateService;
 import com.lianyu.service.storage.FileStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +31,7 @@ public class CharacterStateController {
     private final CharacterDiaryService diaryService;
     private final CharacterMapper characterMapper;
     private final FileStorageService fileStorageService;
+    private final RelationshipStateService relationshipStateService;
 
     @Operation(summary = "获取角色当前情绪状态")
     @GetMapping("/{id}/state")
@@ -44,6 +47,7 @@ public class CharacterStateController {
         result.put("emotionIntensity", state.getEmotionIntensity());
         result.put("statusText", state.getStatusText());
         result.put("emotionUpdatedAt", state.getEmotionUpdatedAt());
+        putInnerSpace(result, userId, characterId);
         return Result.ok(result);
     }
 
@@ -71,6 +75,7 @@ public class CharacterStateController {
             item.put("currentEmotion", state.getCurrentEmotion());
             item.put("emotionIntensity", state.getEmotionIntensity());
             item.put("statusText", state.getStatusText());
+            putInnerSpace(item, userId, character.getId());
             result.add(item);
         }
         return Result.ok(result);
@@ -150,5 +155,19 @@ public class CharacterStateController {
             result.add(item);
         }
         return Result.ok(result);
+    }
+
+    private void putInnerSpace(Map<String, Object> item, Long userId, Long characterId) {
+        RelationshipInnerSpace innerSpace = safeInnerSpace(userId, characterId);
+        item.put("innerSpaceHeadline", innerSpace.headline());
+        item.put("innerSpaceBody", innerSpace.body());
+    }
+
+    private RelationshipInnerSpace safeInnerSpace(Long userId, Long characterId) {
+        try {
+            return relationshipStateService.buildInnerSpace(userId, characterId);
+        } catch (RuntimeException ignored) {
+            return RelationshipInnerSpace.defaultSpace();
+        }
     }
 }
