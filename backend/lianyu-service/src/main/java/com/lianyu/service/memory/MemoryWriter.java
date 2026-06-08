@@ -5,6 +5,7 @@ import com.lianyu.dao.entity.MemoryMeta;
 import com.lianyu.dao.entity.Message;
 import com.lianyu.dao.mapper.MemoryMetaMapper;
 import com.lianyu.dao.mapper.MessageMapper;
+import com.lianyu.dao.enums.MemoryType;
 import com.lianyu.service.ai.EmbeddingService;
 import com.lianyu.storage.milvus.MilvusConfig;
 import io.milvus.client.MilvusServiceClient;
@@ -61,21 +62,33 @@ public class MemoryWriter {
 
             java.util.Collections.reverse(recentMsgs);
             List<ProfileFact> facts = extractProfileFacts(recentMsgs);
-            if (facts.isEmpty()) {
-                log.debug("Skip memory write: no profile facts, convId={}", task.conversationId());
-                return;
-            }
+            List<MemoryCandidate> relationMemories = extractRelationshipMemories(recentMsgs);
 
             int created = 0;
             int updated = 0;
             int skipped = 0;
             for (ProfileFact fact : facts) {
-                MemoryUpsertResult result = upsertProfileMemory(task, List.of(fact.sourceMsgId()), fact);
+                MemoryUpsertResult result = upsertTypedMemory(task, List.of(fact.sourceMsgId()),
+                        formatProfileSummary(fact.slot(), fact.value()), MemoryType.FACT);
                 switch (result) {
                     case CREATED -> created++;
                     case UPDATED -> updated++;
                     case SKIPPED -> skipped++;
                 }
+            }
+            for (MemoryCandidate candidate : relationMemories) {
+                MemoryUpsertResult result = upsertTypedMemory(task, List.of(candidate.sourceMsgId()),
+                        candidate.summary(), candidate.memoryType());
+                switch (result) {
+                    case CREATED -> created++;
+                    case UPDATED -> updated++;
+                    case SKIPPED -> skipped++;
+                }
+            }
+
+            if (facts.isEmpty() && relationMemories.isEmpty()) {
+                log.debug("Skip memory write: no facts or relationship memories, convId={}", task.conversationId());
+                return;
             }
 
             log.info("Memory upsert done: convId={}, created={}, updated={}, skipped={}",
@@ -118,17 +131,10 @@ public class MemoryWriter {
         }
     }
 
-    private MemoryUpsertResult upsertProfileMemory(MemorySummaryTask task, List<Long> sourceIds, ProfileFact fact) {
-        String sourceHash = computeFactHash(task.userId(), task.characterId(), fact.slot());
-        String summary = formatProfileSummary(fact.slot(), fact.value());
-        MemoryMeta existing = findExistingProfileMemory(task.userId(), task.characterId(), fact.slot(), sourceHash);
-
-        Message factMsg = messageMapper.selectById(fact.sourceMsgId());
-        if (existing != null && factMsg != null && isStaleFact(existing, factMsg)) {
-            log.debug("Skip stale profile fact: slot={}, value={}, msgId={}",
-                    fact.slot(), fact.value(), fact.sourceMsgId());
-            return MemoryUpsertResult.SKIPPED;
-        }
+    private MemoryUpsertResult upsertTypedMemory(MemorySummaryTask task, List<Long> sourceIds,
+                                                   String summary, MemoryType memoryType) {
+        String sourceHash = computeMemoryHash(task.userId(), task.characterId(), summary);
+        MemoryMeta existing = findExistingMemory(task.userId(), task.characterId(), sourceHash);
 
         if (existing == null) {
             String vecId = insertVector(task.characterId(), task.userId(), summary);
@@ -136,6 +142,7 @@ public class MemoryWriter {
             meta.setCharacterId(task.characterId());
             meta.setUserId(task.userId());
             meta.setSummary(summary);
+            meta.setMemoryType(memoryType);
             meta.setSourceMsgIds(sourceIds);
             meta.setSourceHash(sourceHash);
             meta.setMilvusVecId(vecId);
@@ -143,8 +150,7 @@ public class MemoryWriter {
             return MemoryUpsertResult.CREATED;
         }
 
-        String oldValue = parseProfileValue(existing.getSummary());
-        if (oldValue != null && normalizeFactValue(oldValue).equals(normalizeFactValue(fact.value()))) {
+        if (summary.equals(existing.getSummary())) {
             existing.setSourceMsgIds(mergeSourceIds(existing.getSourceMsgIds(), sourceIds));
             if (!sourceHash.equals(existing.getSourceHash())) {
                 existing.setSourceHash(sourceHash);
@@ -155,6 +161,7 @@ public class MemoryWriter {
 
         String oldVecId = existing.getMilvusVecId();
         existing.setSummary(summary);
+        existing.setMemoryType(memoryType);
         existing.setSourceMsgIds(mergeSourceIds(existing.getSourceMsgIds(), sourceIds));
         existing.setSourceHash(sourceHash);
         existing.setMilvusVecId(insertVector(task.characterId(), task.userId(), summary));
@@ -163,49 +170,21 @@ public class MemoryWriter {
         return MemoryUpsertResult.UPDATED;
     }
 
-    private MemoryMeta findExistingProfileMemory(Long userId, Long characterId, String slot, String sourceHash) {
-        MemoryMeta byHash = memoryMetaMapper.selectOne(
+    private MemoryMeta findExistingMemory(Long userId, Long characterId, String sourceHash) {
+        return memoryMetaMapper.selectOne(
                 new LambdaQueryWrapper<MemoryMeta>()
                         .eq(MemoryMeta::getSourceHash, sourceHash)
                         .last("LIMIT 1"));
-        if (byHash != null) {
-            return byHash;
-        }
-
-        List<MemoryMeta> bySlot = memoryMetaMapper.selectList(
-                new LambdaQueryWrapper<MemoryMeta>()
-                        .eq(MemoryMeta::getUserId, userId)
-                        .eq(MemoryMeta::getCharacterId, characterId)
-                        .likeRight(MemoryMeta::getSummary, profilePrefix(slot))
-                        .orderByDesc(MemoryMeta::getCreatedAt));
-        if (bySlot.isEmpty()) {
-            return null;
-        }
-
-        MemoryMeta primary = bySlot.get(0);
-        for (int i = 1; i < bySlot.size(); i++) {
-            MemoryMeta duplicate = bySlot.get(i);
-            deleteVectors(duplicate.getMilvusVecId() == null ? List.of() : List.of(duplicate.getMilvusVecId()));
-            memoryMetaMapper.deleteById(duplicate.getId());
-        }
-        return primary;
     }
 
-    private boolean isStaleFact(MemoryMeta existing, Message factMsg) {
-        Message latestStored = getLatestSourceMessage(existing.getSourceMsgIds());
-        return latestStored != null && factMsg.getCreatedAt().isBefore(latestStored.getCreatedAt());
-    }
-
-    private Message getLatestSourceMessage(List<Long> sourceMsgIds) {
-        if (sourceMsgIds == null || sourceMsgIds.isEmpty()) {
-            return null;
+    private String computeMemoryHash(Long userId, Long characterId, String summary) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(("u:" + userId + "|c:" + characterId + "|text:" + summary).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
         }
-        List<Message> messages = messageMapper.selectList(
-                new LambdaQueryWrapper<Message>()
-                        .in(Message::getId, sourceMsgIds)
-                        .orderByDesc(Message::getCreatedAt)
-                        .last("LIMIT 1"));
-        return messages.isEmpty() ? null : messages.get(0);
     }
 
     private String insertVector(Long characterId, Long userId, String summary) {
@@ -348,6 +327,35 @@ public class MemoryWriter {
 
     private enum MemoryUpsertResult { CREATED, UPDATED, SKIPPED }
     private record ProfileFact(String slot, String value, Long sourceMsgId) {}
+
+    public record MemoryCandidate(String summary, MemoryType memoryType, Long sourceMsgId) {}
+
+    public List<MemoryCandidate> extractRelationshipMemories(List<Message> messages) {
+        List<MemoryCandidate> result = new ArrayList<>();
+        for (Message msg : messages) {
+            if (!"USER".equalsIgnoreCase(msg.getRole()) || msg.getContent() == null) {
+                continue;
+            }
+            String text = msg.getContent().trim();
+            if (text.isEmpty()) {
+                continue;
+            }
+            if (text.contains("只给你叫") || text.contains("以后你可以叫我") || text.contains("专属")) {
+                result.add(new MemoryCandidate("你们形成了专属称呼锚点", MemoryType.RITUAL, msg.getId()));
+            }
+            if (text.contains("我今天很崩溃") || text.contains("我有点难受") || text.contains("我有点害怕")
+                    || text.contains("其实我很") || text.contains("我真的很累")) {
+                result.add(new MemoryCandidate("用户向你暴露了脆弱情绪", MemoryType.EMOTION, msg.getId()));
+            }
+            if (text.contains("对不起") || text.contains("我解释一下") || text.contains("我不是故意的")) {
+                result.add(new MemoryCandidate("用户尝试修复刚才的关系波动", MemoryType.RELATION, msg.getId()));
+            }
+            if (text.contains("约定") || text.contains("答应你") || text.contains("以后我们")) {
+                result.add(new MemoryCandidate("你们之间建立了一个小约定", MemoryType.RELATION, msg.getId()));
+            }
+        }
+        return result;
+    }
 
     public record MemorySummaryTask(Long conversationId, Long characterId,
                                      Long userId) implements Serializable {}

@@ -2,6 +2,7 @@ package com.lianyu.service.memory;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lianyu.dao.entity.MemoryMeta;
+import com.lianyu.dao.enums.MemoryType;
 import com.lianyu.dao.mapper.MemoryMetaMapper;
 import com.lianyu.service.ai.EmbeddingService;
 import com.lianyu.service.ai.RerankerService;
@@ -15,6 +16,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -39,11 +42,27 @@ public class MemoryRetriever {
      * 结构化长期记忆（姓名/爱好等），发消息前预注入 system prompt。
      */
     public String retrieveProfileContext(Long characterId, Long userId) {
-        List<String> facts = loadProfileFacts(characterId, userId);
-        if (facts.isEmpty()) {
+        List<MemoryMeta> metas = loadRecentMemoryMetas(characterId, userId);
+        String facts = joinByType(metas, MemoryType.FACT, "用户画像");
+        String emotions = joinByType(metas, MemoryType.EMOTION, "近期情绪线索");
+        String relations = joinByType(metas, MemoryType.RELATION, "关系事件");
+        String rituals = joinByType(metas, MemoryType.RITUAL, "专属仪式");
+        String result = Stream.of(facts, emotions, relations, rituals)
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.joining("\n\n"));
+        return result.isBlank() ? null : result;
+    }
+
+    private String joinByType(List<MemoryMeta> metas, MemoryType type, String label) {
+        List<String> lines = metas.stream()
+                .filter(m -> m.getMemoryType() == type && m.getSummary() != null && !m.getSummary().isBlank())
+                .map(m -> "- " + m.getSummary())
+                .distinct()
+                .toList();
+        if (lines.isEmpty()) {
             return null;
         }
-        return String.join("\n", facts);
+        return "[" + label + "]\n" + String.join("\n", lines);
     }
 
     /**
