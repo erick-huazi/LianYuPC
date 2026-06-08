@@ -1,0 +1,142 @@
+package com.lianyu.service.conversation;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.lianyu.dao.entity.Character;
+import com.lianyu.dao.entity.Conversation;
+import com.lianyu.dao.entity.Message;
+import com.lianyu.dao.mapper.CharacterMapper;
+import com.lianyu.dao.mapper.ConversationMapper;
+import com.lianyu.dao.mapper.GroupMemberMapper;
+import com.lianyu.dao.mapper.MessageMapper;
+import com.lianyu.service.ai.AiChatService;
+import com.lianyu.service.ai.AssistantReplySplitter;
+import com.lianyu.service.ai.CharacterPromptBuilder;
+import com.lianyu.service.character.CharacterChatBehavior;
+import com.lianyu.service.character.CharacterChatBehaviorResolver;
+import com.lianyu.service.character.CharacterStateService;
+import com.lianyu.service.dto.ChatResult;
+import com.lianyu.service.dto.MessageResponse;
+import com.lianyu.service.dto.SendMessageRequest;
+import com.lianyu.service.memory.MemoryRetriever;
+import com.lianyu.service.memory.MemoryWriter;
+import com.lianyu.service.notification.NotificationService;
+import com.lianyu.service.relationship.RelationshipStateService;
+import com.lianyu.service.storage.FileStorageService;
+import com.lianyu.service.support.OutputLanguageService;
+import java.lang.reflect.Field;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+class ConversationRelationshipFlowTest {
+
+    @Test
+    void sendMessage_buildsPromptWithRelationshipContextAndRecordsUserEvents() throws Exception {
+        ConversationMapper conversationMapper = mock(ConversationMapper.class);
+        MessageMapper messageMapper = mock(MessageMapper.class);
+        GroupMemberMapper groupMemberMapper = mock(GroupMemberMapper.class);
+        CharacterMapper characterMapper = mock(CharacterMapper.class);
+        AiChatService aiChatService = mock(AiChatService.class);
+        CharacterPromptBuilder promptBuilder = mock(CharacterPromptBuilder.class);
+        MemoryRetriever memoryRetriever = mock(MemoryRetriever.class);
+        MemoryWriter memoryWriter = mock(MemoryWriter.class);
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        FileStorageService fileStorageService = mock(FileStorageService.class);
+        CharacterChatBehaviorResolver chatBehaviorResolver = mock(CharacterChatBehaviorResolver.class);
+        AssistantReplySplitter replySplitter = mock(AssistantReplySplitter.class);
+        NotificationService notificationService = mock(NotificationService.class);
+        OutputLanguageService outputLanguageService = mock(OutputLanguageService.class);
+        CharacterStateService characterStateService = mock(CharacterStateService.class);
+        ProactiveRealWorldContextService proactiveRealWorldContext = mock(ProactiveRealWorldContextService.class);
+        RelationshipStateService relationshipStateService = mock(RelationshipStateService.class);
+
+        ConversationService conversationService = new ConversationService(
+                conversationMapper,
+                messageMapper,
+                groupMemberMapper,
+                characterMapper,
+                aiChatService,
+                promptBuilder,
+                memoryRetriever,
+                memoryWriter,
+                redisTemplate,
+                fileStorageService,
+                chatBehaviorResolver,
+                replySplitter,
+                notificationService,
+                outputLanguageService,
+                characterStateService,
+                proactiveRealWorldContext,
+                relationshipStateService);
+
+        Field contextWindow = ConversationService.class.getDeclaredField("contextWindow");
+        contextWindow.setAccessible(true);
+        contextWindow.set(conversationService, 20);
+
+        Conversation conversation = new Conversation();
+        conversation.setId(11L);
+        conversation.setUserId(3L);
+        conversation.setCharacterId(5L);
+        conversation.setMode("SINGLE");
+
+        Character character = new Character();
+        character.setId(5L);
+        character.setOwnerUserId(3L);
+        character.setName("测试角色");
+        CharacterChatBehavior behavior = new CharacterChatBehavior(1, true, 5, 0.5d, 5, 10, "gentle");
+
+        when(conversationMapper.selectById(11L)).thenReturn(conversation);
+        when(characterMapper.selectById(5L)).thenReturn(character);
+        when(chatBehaviorResolver.resolve(character)).thenReturn(behavior);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.increment("msg_seq:11")).thenReturn(1L, 2L);
+        when(memoryRetriever.retrieveProfileContext(5L, 3L)).thenReturn("[profile]\n喜欢夜跑");
+        when(relationshipStateService.buildPromptContext(3L, 5L))
+                .thenReturn("关系阶段: familiar\n近期关系事件:\n- 用户解释了迟到原因");
+        when(outputLanguageService.resolveForRequest(eq(3L), any())).thenReturn("zh-CN");
+        when(outputLanguageService.buildNaturalStyleBlock("zh-CN")).thenReturn("\n[style]");
+        when(promptBuilder.buildSystemPrompt(any(Character.class), any(String.class), any(String.class), eq(true)))
+                .thenReturn("关系阶段: familiar\n[system]");
+        when(messageMapper.selectList(any())).thenReturn(List.of());
+        when(aiChatService.chatBlocking(eq(3L), any()))
+                .thenReturn(ChatResult.builder().content("没关系，我还在。 ").totalTokens(12).build());
+        when(replySplitter.split("没关系，我还在。 ", 1)).thenReturn(List.of("没关系，我还在。"));
+
+        doAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            if ("USER".equalsIgnoreCase(msg.getRole())) {
+                msg.setId(91L);
+                msg.setCreatedAt(LocalDateTime.now());
+            } else {
+                msg.setId(92L);
+                msg.setCreatedAt(LocalDateTime.now());
+            }
+            return 1;
+        }).when(messageMapper).insert(any(Message.class));
+
+        SendMessageRequest request = new SendMessageRequest();
+        request.setProvider("openai");
+        request.setContent("对不起，我刚才没回你");
+
+        MessageResponse response = conversationService.sendMessage(3L, 11L, request);
+
+        assertEquals("没关系，我还在。", response.getContent());
+        verify(relationshipStateService).recordUserTurn(eq(3L), eq(5L), eq(11L), any(Message.class), anyList());
+        verify(relationshipStateService).recordAssistantTurn(eq(3L), eq(5L), eq(11L), anyList());
+        verify(aiChatService).chatBlocking(eq(3L), argThat(req ->
+                req.getMessages().get(0).getContent().contains("关系阶段: familiar")));
+    }
+}

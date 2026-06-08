@@ -24,6 +24,7 @@ import com.lianyu.service.dto.*;
 import com.lianyu.service.memory.MemoryRetriever;
 import com.lianyu.service.memory.MemoryWriter;
 import com.lianyu.service.notification.NotificationService;
+import com.lianyu.service.relationship.RelationshipStateService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.support.OutputLanguageService;
 import com.lianyu.service.tools.ChatToolContext;
@@ -71,6 +72,7 @@ public class ConversationService {
     private final OutputLanguageService outputLanguageService;
     private final CharacterStateService characterStateService;
     private final ProactiveRealWorldContextService proactiveRealWorldContext;
+    private final RelationshipStateService relationshipStateService;
 
     @Lazy
     @Autowired
@@ -198,13 +200,24 @@ public class ConversationService {
         long nextSeq = getNextSeq(conversationId);
         PreparedUserTurn turn = prepareUserTurn(conversationId, character.getId(), request, nextSeq);
         messageMapper.insert(turn.userMsg());
+        List<Message> history = getRecentMessages(conversationId, contextWindow);
+        relationshipStateService.recordUserTurn(
+                userId,
+                character.getId(),
+                conversationId,
+                turn.userMsg(),
+                history);
 
         // 更新角色情绪
         characterStateService.afterUserMessage(character.getId(), userId, turn.aiUserContent());
 
         String memoryContext = memoryRetriever.retrieveProfileContext(character.getId(), userId);
-        String systemPrompt = buildSystemPromptForUser(userId, character, memoryContext, turn.memoryQuery());
-        List<Message> history = getRecentMessages(conversationId, contextWindow);
+        String relationshipContext = relationshipStateService.buildPromptContext(userId, character.getId());
+        String systemPrompt = buildSystemPromptForUser(
+                userId,
+                character,
+                memoryContext + "\n\n" + relationshipContext,
+                turn.memoryQuery());
 
         AiChatRequest aiRequest = buildChatRequest(
                 request, character, systemPrompt, history, turn.userMsg().getId(), turn.aiUserContent());
@@ -213,6 +226,7 @@ public class ConversationService {
 
         List<MessageResponse> replies = saveAssistantReplies(
                 conversationId, character, chatResult.getContent(), chatResult.getTotalTokens());
+        relationshipStateService.recordAssistantTurn(userId, character.getId(), conversationId, replies);
 
         memoryWriter.enqueueSummary(conversationId, character.getId(), userId);
         if (!replies.isEmpty()) {
@@ -240,13 +254,24 @@ public class ConversationService {
         long userSeq = getNextSeq(conversationId);
         PreparedUserTurn turn = prepareUserTurn(conversationId, character.getId(), request, userSeq);
         messageMapper.insert(turn.userMsg());
+        List<Message> history = getRecentMessages(conversationId, contextWindow);
+        relationshipStateService.recordUserTurn(
+                userId,
+                character.getId(),
+                conversationId,
+                turn.userMsg(),
+                history);
 
         // 更新角色情绪
         characterStateService.afterUserMessage(character.getId(), userId, turn.aiUserContent());
 
         String memoryContext = memoryRetriever.retrieveProfileContext(character.getId(), userId);
-        String systemPrompt = buildSystemPromptForUser(userId, character, memoryContext, turn.memoryQuery());
-        List<Message> history = getRecentMessages(conversationId, contextWindow);
+        String relationshipContext = relationshipStateService.buildPromptContext(userId, character.getId());
+        String systemPrompt = buildSystemPromptForUser(
+                userId,
+                character,
+                memoryContext + "\n\n" + relationshipContext,
+                turn.memoryQuery());
 
         AiChatRequest aiRequest = buildChatRequest(
                 request, character, systemPrompt, history, turn.userMsg().getId(), turn.aiUserContent());
@@ -256,6 +281,7 @@ public class ConversationService {
             if (fullContent != null && !fullContent.isBlank()) {
                 List<MessageResponse> replies = saveAssistantReplies(
                         conversationId, streamCharacter, fullContent, null);
+                relationshipStateService.recordAssistantTurn(userId, character.getId(), conversationId, replies);
                 log.info("Assistant message saved: convId={}, pieces={}, size={} chars",
                         conversationId, replies.size(), fullContent.length());
                 memoryWriter.enqueueSummary(conversationId, character.getId(), userId);

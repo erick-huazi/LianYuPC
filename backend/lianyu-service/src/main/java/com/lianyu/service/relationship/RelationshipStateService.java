@@ -1,8 +1,210 @@
 package com.lianyu.service.relationship;
 
-public final class RelationshipStateService {
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lianyu.dao.entity.Message;
+import com.lianyu.dao.entity.RelationshipEvent;
+import com.lianyu.dao.entity.RelationshipState;
+import com.lianyu.dao.mapper.RelationshipEventMapper;
+import com.lianyu.dao.mapper.RelationshipStateMapper;
+import com.lianyu.service.dto.MessageResponse;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
-    private RelationshipStateService() {
+@Service
+@RequiredArgsConstructor
+public class RelationshipStateService {
+
+    private final RelationshipStateMapper relationshipStateMapper;
+    private final RelationshipEventMapper relationshipEventMapper;
+    private final RelationshipContextAssembler relationshipContextAssembler;
+
+    public RelationshipSnapshot getSnapshot(Long userId, Long characterId) {
+        return toSnapshot(loadOrCreateState(userId, characterId));
+    }
+
+    public String buildPromptContext(Long userId, Long characterId) {
+        RelationshipSnapshot snapshot = getSnapshot(userId, characterId);
+        return relationshipContextAssembler.assemble(snapshot, listRecentEventSummaries(userId, characterId, 5));
+    }
+
+    public void recordUserTurn(Long userId,
+                               Long characterId,
+                               Long conversationId,
+                               Message userMessage,
+                               List<Message> history) {
+        if (userMessage == null) {
+            return;
+        }
+        String previousAssistantText = findPreviousAssistantText(history);
+        List<RelationshipEventInput> events = RelationshipHeuristics.fromUserTurn(
+                userId,
+                characterId,
+                conversationId,
+                userMessage.getId(),
+                userMessage.getContent(),
+                previousAssistantText,
+                false);
+        applyEvents(userId, characterId, events);
+    }
+
+    public void recordAssistantTurn(Long userId,
+                                    Long characterId,
+                                    Long conversationId,
+                                    List<MessageResponse> replies) {
+        if (replies == null || replies.isEmpty()) {
+            return;
+        }
+        List<RelationshipEventInput> events = new ArrayList<>();
+        for (MessageResponse reply : replies) {
+            if (reply == null || reply.getContent() == null) {
+                continue;
+            }
+            String content = reply.getContent().trim();
+            if (content.contains("我会一直在") || content.contains("别怕") || content.contains("我还在")) {
+                events.add(new RelationshipEventInput(
+                        userId,
+                        characterId,
+                        conversationId,
+                        reply.getId(),
+                        RelationshipEventType.ASSISTANT_VULNERABLE_REPLY,
+                        1,
+                        "角色给出了安抚和陪伴式回应"));
+            }
+        }
+        applyEvents(userId, characterId, events);
+    }
+
+    private void applyEvents(Long userId, Long characterId, List<RelationshipEventInput> events) {
+        if (events == null || events.isEmpty()) {
+            return;
+        }
+        RelationshipState state = loadOrCreateState(userId, characterId);
+        RelationshipSnapshot snapshot = toSnapshot(state);
+        boolean hasRecentInjury = false;
+        boolean hasRecentRepair = false;
+        for (RelationshipEventInput event : events) {
+            snapshot = applyEvent(snapshot, event);
+            persistEvent(event);
+            if (event.eventType() == RelationshipEventType.USER_DISMISSIVE_RESPONSE
+                    || event.eventType() == RelationshipEventType.USER_BROKE_PROMISE
+                    || event.eventType() == RelationshipEventType.MISUNDERSTANDING_TRIGGERED) {
+                hasRecentInjury = true;
+            }
+            if (event.eventType() == RelationshipEventType.REPAIR_SUCCESS
+                    || event.eventType() == RelationshipEventType.REPAIR_ATTEMPT) {
+                hasRecentRepair = true;
+            }
+        }
+        snapshot = snapshot.toBuilder()
+                .phase(derivePhase(snapshot, hasRecentInjury, hasRecentRepair))
+                .build();
+        updateState(state, snapshot, hasRecentInjury, hasRecentRepair);
+    }
+
+    private void persistEvent(RelationshipEventInput input) {
+        RelationshipEvent event = new RelationshipEvent();
+        event.setUserId(input.userId());
+        event.setCharacterId(input.characterId());
+        event.setConversationId(input.conversationId());
+        event.setMessageId(input.messageId());
+        event.setEventType(input.eventType().name());
+        event.setEventWeight(input.weight());
+        event.setSummary(input.summary());
+        event.setMetadataJson(new HashMap<>());
+        relationshipEventMapper.insert(event);
+    }
+
+    private List<String> listRecentEventSummaries(Long userId, Long characterId, int limit) {
+        return relationshipEventMapper.selectList(new LambdaQueryWrapper<RelationshipEvent>()
+                        .eq(RelationshipEvent::getUserId, userId)
+                        .eq(RelationshipEvent::getCharacterId, characterId)
+                        .isNotNull(RelationshipEvent::getSummary)
+                        .orderByDesc(RelationshipEvent::getCreatedAt)
+                        .last("LIMIT " + Math.max(1, limit)))
+                .stream()
+                .map(RelationshipEvent::getSummary)
+                .toList();
+    }
+
+    private RelationshipState loadOrCreateState(Long userId, Long characterId) {
+        RelationshipState existing = relationshipStateMapper.selectOne(new LambdaQueryWrapper<RelationshipState>()
+                .eq(RelationshipState::getUserId, userId)
+                .eq(RelationshipState::getCharacterId, characterId)
+                .last("LIMIT 1"));
+        if (existing != null) {
+            return existing;
+        }
+        RelationshipState created = new RelationshipState();
+        created.setUserId(userId);
+        created.setCharacterId(characterId);
+        created.setTrustScore(40);
+        created.setIntimacyScore(20);
+        created.setSecurityScore(40);
+        created.setAnticipationScore(25);
+        created.setPhase(RelationshipPhase.TESTING.name());
+        relationshipStateMapper.insert(created);
+        return created;
+    }
+
+    private RelationshipSnapshot toSnapshot(RelationshipState state) {
+        return RelationshipSnapshot.builder()
+                .trustScore(defaultScore(state.getTrustScore(), 40))
+                .intimacyScore(defaultScore(state.getIntimacyScore(), 20))
+                .securityScore(defaultScore(state.getSecurityScore(), 40))
+                .anticipationScore(defaultScore(state.getAnticipationScore(), 25))
+                .phase(parsePhase(state.getPhase()))
+                .build();
+    }
+
+    private void updateState(RelationshipState state,
+                             RelationshipSnapshot snapshot,
+                             boolean hasRecentInjury,
+                             boolean hasRecentRepair) {
+        state.setTrustScore(snapshot.trustScore());
+        state.setIntimacyScore(snapshot.intimacyScore());
+        state.setSecurityScore(snapshot.securityScore());
+        state.setAnticipationScore(snapshot.anticipationScore());
+        state.setPhase(snapshot.phase().name());
+        if (hasRecentInjury) {
+            state.setLastInjuryAt(LocalDateTime.now());
+        }
+        if (hasRecentRepair) {
+            state.setLastRepairAt(LocalDateTime.now());
+        }
+        relationshipStateMapper.updateById(state);
+    }
+
+    private String findPreviousAssistantText(List<Message> history) {
+        if (history == null || history.isEmpty()) {
+            return null;
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Message message = history.get(i);
+            if (message != null && "ASSISTANT".equalsIgnoreCase(message.getRole())) {
+                return message.getContent();
+            }
+        }
+        return null;
+    }
+
+    private int defaultScore(Integer value, int fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private RelationshipPhase parsePhase(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return RelationshipPhase.TESTING;
+        }
+        try {
+            return RelationshipPhase.valueOf(raw);
+        } catch (IllegalArgumentException ignored) {
+            return RelationshipPhase.TESTING;
+        }
     }
 
     public static RelationshipSnapshot applyEvent(RelationshipSnapshot before, RelationshipEventInput input) {
