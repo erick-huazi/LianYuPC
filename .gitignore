@@ -41,3 +41,5 @@ docker-compose.override.yml
 # Local tooling / chat history (may contain secrets)
 .specstory/
 .codegraph/
+.superpowers/
+.worktrees/
