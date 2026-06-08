@@ -2,6 +2,7 @@ package com.lianyu.dao.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.lianyu.common.handler.JacksonListTypeHandler;
+import com.lianyu.dao.enums.MemoryType;
 import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,6 +15,7 @@ public class MemoryMeta {
     private Long characterId;
     private Long userId;
     private String summary;
+    private MemoryType memoryType;
     @TableField(typeHandler = JacksonListTypeHandler.class)
     private List<Long> sourceMsgIds;
     private String sourceHash;
