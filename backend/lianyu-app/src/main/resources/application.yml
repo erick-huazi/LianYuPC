@@ -160,7 +160,7 @@ lianyu:
       max-context-messages: 12
     milvus:
       collection: memory_vectors_v2
-      resync-on-startup: true
+      resync-on-startup: false
     retrieval:
       importance-threshold: 0.5
     cache:
