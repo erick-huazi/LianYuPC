@@ -104,7 +104,15 @@
               <div v-if="!isUserMessage(item)" class="gm-header">
                 <span class="gm-name">{{ item._charName || item.characterName }}</span>
               </div>
-              <div class="gm-content">{{ item.content }}</div>
+              <div v-if="isUserMessage(item)" class="gm-content">{{ item.content }}</div>
+              <AssistantMessageContent
+                v-else
+                :content="item.content"
+                :show-inner-thoughts="item._showInnerThoughts"
+                variant="group"
+                tag="div"
+                extra-class="gm-content"
+              />
             </div>
           </div>
         </template>
@@ -303,6 +311,7 @@ import { humanizeError } from '@/utils/errorMessage'
 import { dateLocaleForUi } from '@/utils/dateLocale'
 import { resolveGroupDisplayTitle } from '@/utils/groupTitle'
 import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
+import AssistantMessageContent from '@/components/AssistantMessageContent.vue'
 import { stripInnerThoughts, resolveShowInnerThoughts } from '@/utils/innerThoughtFilter'
 
 const TIME_GAP_MS = 5 * 60 * 1000
@@ -387,7 +396,14 @@ const groupMessageTimeline = computed(() => {
         label: formatTimeDivider(ms)
       })
     }
-    items.push({ type: 'message', ...msg, content })
+    items.push({
+      type: 'message',
+      ...msg,
+      content,
+      _showInnerThoughts: isUserMessage(msg)
+        ? true
+        : resolveShowInnerThoughts(settingsByCharId[msg.characterId] || {})
+    })
     prevMs = ms
   }
   return items
@@ -1156,7 +1172,8 @@ function isUserMessage(msg) {
   font-style: italic;
 }
 
-.gm-content {
+.gm-content,
+:deep(.gm-content) {
   font-size: $font-size-sm;
   line-height: 1.6;
   white-space: pre-wrap;

@@ -103,7 +103,14 @@
             <div v-if="item.imageUrl" class="gal-dialogue__image">
               <img :src="resolveMediaUrl(item.imageUrl)" alt="" />
             </div>
-            <p v-if="item.content" class="gal-dialogue__text">{{ item.content }}</p>
+            <AssistantMessageContent
+              v-if="item.content"
+              :content="item.content"
+              :show-inner-thoughts="showInnerThoughts"
+              variant="chat"
+              tag="p"
+              extra-class="gal-dialogue__text"
+            />
           </div>
 
           <div
@@ -233,6 +240,7 @@ import { splitAssistantReply, resolveMaxRepliesPerTurn } from '@/utils/assistant
 import { getElectronAPI } from '@/utils/electron'
 import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
 import { dateLocaleForUi } from '@/utils/dateLocale'
+import AssistantMessageContent from '@/components/AssistantMessageContent.vue'
 import { stripInnerThoughts, resolveShowInnerThoughts } from '@/utils/innerThoughtFilter'
 
 const TIME_GAP_MS = 5 * 60 * 1000
@@ -1230,7 +1238,8 @@ function formatTime(ts) {
     color: rgba(255, 255, 255, 0.38);
   }
 
-  &__text {
+  &__text,
+  :deep(.gal-dialogue__text) {
     margin: 0;
     font-size: $font-size-base;
     line-height: $line-height-relaxed;
