@@ -441,12 +441,15 @@ function setLauncherMousePassthrough(ignore) {
   }
 }
 
+function restoreLauncherPassthrough() {
+  const pickerActive = pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()
+  setLauncherMousePassthrough(!pickerActive)
+}
+
 /** 显示/拖拽结束后重置穿透与拖拽状态。若角色选择器正打开则保持穿透，避免拦截其点击。 */
 function resetLauncherInteraction() {
   launcherIsDragging = false
-  const pickerActive = pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()
-  // 默认穿透鼠标事件，仅在 picker 打开或拖拽中才拦截
-  setLauncherMousePassthrough(!pickerActive)
+  restoreLauncherPassthrough()
   if (launcherWindow && !launcherWindow.isDestroyed() && !launcherWindow.webContents.isDestroyed()) {
     launcherWindow.webContents.send('desktop:launcher-interaction-reset')
   }
@@ -1063,7 +1066,8 @@ function registerIpcHandlers() {
     writeLauncherPosition(bounds.x, bounds.y)
     clampLauncherToWorkArea()
     repositionPickerNearLauncher()
-    resetLauncherInteraction()
+    // 仅恢复穿透，不广播 interaction-reset，避免与 pointerup 清理竞态导致无法二次拖拽
+    restoreLauncherPassthrough()
   })
 
   ipcMain.handle('desktop:set-launcher-screen-position', (_event, { x, y }) => {

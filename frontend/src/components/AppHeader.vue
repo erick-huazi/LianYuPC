@@ -14,8 +14,13 @@
         <div class="notify-entry">
           <el-popover placement="bottom-end" :width="320" trigger="click">
             <template #reference>
-              <button class="header-btn" :title="t('header.notifications')">
-                <el-badge :value="notificationsStore.unreadCount" :hidden="!notificationsStore.unreadCount" :max="99">
+              <button class="header-btn header-btn--notify" :title="t('header.notifications')">
+                <el-badge
+                  :value="notificationsStore.unreadCount"
+                  :hidden="!notificationsStore.unreadCount"
+                  :max="99"
+                  :offset="[-6, 4]"
+                >
                   <el-icon :size="20"><Bell /></el-icon>
                 </el-badge>
               </button>
@@ -207,7 +212,7 @@ async function handleUserMenu(command) {
   position: relative;
   display: flex;
   align-items: center;
-  gap: $space-1;
+  gap: $space-3;
   flex-shrink: 0;
   margin-left: auto;
   overflow: visible;
@@ -282,7 +287,23 @@ async function handleUserMenu(command) {
   }
 }
 
+.header-btn--notify {
+  margin-right: $space-1;
+
+  :deep(.el-badge__content) {
+    border: none;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 16px;
+    transform: none;
+  }
+}
+
 .header-avatar {
+  margin-left: $space-1;
+  flex-shrink: 0;
   width: 38px;
   height: 38px;
   border-radius: $radius-full;

@@ -8,9 +8,11 @@
   >
     <template #reference>
       <button class="theme-trigger" type="button" title="主题配色">
-        <span class="swatch-bg" :style="{ background: settingsStore.backgroundColor }" />
-        <span class="swatch-accent" :style="{ background: settingsStore.accentColor }" />
-        <el-icon :size="16"><Brush /></el-icon>
+        <span class="theme-trigger__preview" aria-hidden="true">
+          <span class="swatch-bg" :style="{ background: settingsStore.backgroundColor }" />
+          <span class="swatch-accent" :style="{ background: settingsStore.accentColor }" />
+        </span>
+        <el-icon class="theme-trigger__icon" :size="14"><Brush /></el-icon>
       </button>
     </template>
 
@@ -156,28 +158,37 @@ function onAccentChange(val) {
   }
 }
 
+.theme-trigger__preview {
+  display: flex;
+  width: 22px;
+  height: 18px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
 .swatch-bg {
-  position: absolute;
-  left: 5px;
-  top: 8px;
-  width: 14px;
-  height: 20px;
-  border-radius: 4px 0 0 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex: 1;
+  min-width: 0;
   pointer-events: none;
 }
 
 .swatch-accent {
-  position: absolute;
-  left: 17px;
-  top: 8px;
   width: 10px;
-  height: 20px;
-  border-radius: 0 4px 4px 0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-left: none;
+  flex-shrink: 0;
   pointer-events: none;
-  box-shadow: 0 0 8px rgba(var(--ly-accent-rgb), 0.35);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+.theme-trigger__icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.85)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
 }
 
 .theme-panel-title {

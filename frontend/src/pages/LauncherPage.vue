@@ -264,7 +264,6 @@ onMounted(async () => {
   document.body.style.background = 'transparent'
   const appEl = document.getElementById('app')
   if (appEl) appEl.style.background = 'transparent'
-  getElectronAPI()?.setLauncherMousePassthrough?.(false)
   const settings = await getElectronAPI()?.getDesktopSettings?.()
   applyPetId(settings?.launcherPetId || DEFAULT_PET_ID)
   if (wrapRef.value) {
@@ -369,6 +368,8 @@ body:has(.pet-root),
   cursor: pointer;
   touch-action: none;
   pointer-events: auto;
+  /* 穿透模式下透明区域不接收事件，需极低透明度以维持可拖拽 */
+  background: rgba(0, 0, 0, 0.001);
 }
 
 .pet-toast-fade-enter-active,
