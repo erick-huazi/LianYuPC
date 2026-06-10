@@ -80,7 +80,7 @@ const routes = [
         path: 'characters/:id/detail',
         name: 'CharacterChatDetail',
         component: () => import('@/pages/CharacterChatDetailPage.vue'),
-        meta: { titleKey: 'routes.characterDetail', immersive: true }
+        meta: { titleKey: 'routes.characterDetail' }
       },
       {
         path: 'chat/:id',

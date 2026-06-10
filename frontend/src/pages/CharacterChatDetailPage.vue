@@ -12,10 +12,10 @@
     <el-button type="primary" class="btn-cta" @click="router.push('/characters')">返回角色页</el-button>
   </div>
 
-  <div v-else class="detail-page stagger-container">
+  <div v-else class="detail-page companion-page stagger-container">
     <header class="page-header">
       <div class="header-left">
-        <el-button text :icon="ArrowLeft" @click="router.push('/characters')">返回</el-button>
+        <el-button text :icon="ArrowLeft" @click="goBack">返回</el-button>
         <div class="character-hero">
           <div class="hero-avatar">
             <img v-if="character.avatarUrl" :src="resolveMediaUrl(character.avatarUrl)" />
@@ -32,42 +32,52 @@
     <section class="detail-card glass stagger-item">
       <el-form label-position="top" class="detail-form">
         <div class="section-title">{{ t('characterSettings.chatBackground') }}</div>
-        <div class="form-grid two-col">
-          <el-form-item :label="t('characterSettings.useGlobalBackground')">
-            <el-switch v-model="form.useGlobalChatBackground" />
-          </el-form-item>
-          <el-form-item label="聊天背景图（上传图片）">
-            <div class="chat-bg-uploader" :class="{ disabled: form.useGlobalChatBackground }">
-              <div
-                class="chat-bg-preview"
-                :style="chatBgPreviewStyle"
-                @click="triggerBgUpload"
-                @pointerdown.prevent="onBgPointerDown"
-                @pointermove.prevent="onBgPointerMove"
-                @pointerup="onBgPointerUp"
-                @pointercancel="onBgPointerUp"
-                @pointerleave="onBgPointerUp"
-              >
-                <div v-if="!form.chatBackgroundImageUrl" class="chat-bg-placeholder">点击上传背景图</div>
-              </div>
-              <div class="chat-bg-actions">
-                <el-button size="small" :disabled="form.useGlobalChatBackground || bgUploading" @click="triggerBgUpload">
-                  {{ form.chatBackgroundImageUrl ? '更换图片' : '上传图片' }}
-                </el-button>
-                <el-button size="small" text :disabled="form.useGlobalChatBackground || !form.chatBackgroundImageUrl || bgUploading" @click="clearBgImage">
-                  清除图片
-                </el-button>
-                <span class="chat-bg-hint">JPG/PNG/WebP/GIF，建议横图，最大 5MB；可在预览图里拖动调整显示焦点</span>
-              </div>
-              <input
-                ref="bgFileInput"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                style="display:none"
-                @change="handleBgFileChange"
-              />
+        <el-form-item :label="t('characterSettings.useGlobalBackground')">
+          <el-switch v-model="form.useGlobalChatBackground" />
+        </el-form-item>
+        <div class="chat-bg-section" :class="{ 'is-global': form.useGlobalChatBackground }">
+          <div class="chat-bg-uploader">
+            <div
+              class="chat-bg-preview"
+              :class="{ 'has-image': !!form.chatBackgroundImageUrl }"
+              :style="chatBgPreviewStyle"
+              role="button"
+              tabindex="0"
+              :aria-disabled="bgUploading"
+              @click="onBgPreviewClick"
+              @keydown.enter.prevent="onBgPreviewClick"
+              @pointerdown="onBgPointerDown"
+              @pointermove="onBgPointerMove"
+              @pointerup="onBgPointerUp"
+              @pointercancel="onBgPointerUp"
+            >
+              <div v-if="!form.chatBackgroundImageUrl" class="chat-bg-placeholder">点击上传背景图</div>
             </div>
-          </el-form-item>
+            <div class="chat-bg-actions">
+              <el-button size="small" :loading="bgUploading" @click="triggerBgUpload">
+                {{ form.chatBackgroundImageUrl ? '更换图片' : '上传图片' }}
+              </el-button>
+              <el-button
+                size="small"
+                text
+                :disabled="!form.chatBackgroundImageUrl || bgUploading"
+                @click="clearBgImage"
+              >
+                清除图片
+              </el-button>
+              <span v-if="form.useGlobalChatBackground" class="chat-bg-hint chat-bg-hint--warn">
+                已启用全局背景，上传图片将自动切换为角色专属背景
+              </span>
+              <span class="chat-bg-hint">JPG/PNG/WebP/GIF，建议横图，最大 5MB；上传后可在预览图里拖动调整显示焦点</span>
+            </div>
+            <input
+              ref="bgFileInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              class="chat-bg-file-input"
+              @change="handleBgFileChange"
+            />
+          </div>
         </div>
 
         <div class="section-title">{{ t('characterSettings.location') }}</div>
@@ -163,6 +173,7 @@ const bgUploading = ref(false)
 const character = ref(null)
 const bgFileInput = ref(null)
 const draggingBg = ref(false)
+const bgDragMoved = ref(false)
 
 const isRealCityMode = computed(() => {
   const settings = character.value?.settings || {}
@@ -315,9 +326,26 @@ function sanitizeBackgroundKey(value) {
   return hex || trimmed
 }
 
+function goBack() {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  router.push('/app/characters')
+}
+
 function triggerBgUpload() {
-  if (form.useGlobalChatBackground || bgUploading.value) return
+  if (bgUploading.value) return
+  if (form.useGlobalChatBackground) {
+    form.useGlobalChatBackground = false
+  }
   bgFileInput.value?.click()
+}
+
+function onBgPreviewClick() {
+  if (bgUploading.value || bgDragMoved.value) return
+  if (form.chatBackgroundImageUrl) return
+  triggerBgUpload()
 }
 
 async function handleBgFileChange(e) {
@@ -354,18 +382,28 @@ function clearBgImage() {
 }
 
 function onBgPointerDown(e) {
-  if (form.useGlobalChatBackground || !form.chatBackgroundImageUrl) return
+  if (!form.chatBackgroundImageUrl || form.useGlobalChatBackground || bgUploading.value) return
+  if (e.button !== undefined && e.button !== 0) return
   draggingBg.value = true
+  bgDragMoved.value = false
+  e.currentTarget?.setPointerCapture?.(e.pointerId)
   updateBgPositionFromPointer(e)
 }
 
 function onBgPointerMove(e) {
-  if (!draggingBg.value || form.useGlobalChatBackground || !form.chatBackgroundImageUrl) return
+  if (!draggingBg.value || !form.chatBackgroundImageUrl) return
+  bgDragMoved.value = true
   updateBgPositionFromPointer(e)
 }
 
-function onBgPointerUp() {
+function onBgPointerUp(e) {
+  if (draggingBg.value) {
+    e?.currentTarget?.releasePointerCapture?.(e.pointerId)
+  }
   draggingBg.value = false
+  window.setTimeout(() => {
+    bgDragMoved.value = false
+  }, 0)
 }
 
 function updateBgPositionFromPointer(e) {
@@ -406,7 +444,8 @@ function clampPercentage(value, fallback = 50) {
 
 <style lang="scss" scoped>
 .detail-page {
-  max-width: 980px;
+  width: 100%;
+  max-width: $narrow-page-max;
 }
 
 .loading-state,
@@ -520,34 +559,51 @@ function clampPercentage(value, fallback = 50) {
   margin-top: $space-4;
 }
 
-.chat-bg-uploader {
-  display: flex;
-  gap: $space-3;
-  align-items: center;
-  width: 100%;
+.chat-bg-section {
+  margin-bottom: $space-2;
 
-  &.disabled {
-    opacity: 0.55;
-    pointer-events: none;
+  &.is-global {
+    opacity: 0.88;
   }
 }
 
+.chat-bg-uploader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-4;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.chat-bg-file-input {
+  display: none;
+}
+
 .chat-bg-preview {
-  width: 168px;
-  height: 94px;
+  width: min(100%, 280px);
+  aspect-ratio: 16 / 9;
   border-radius: $radius-md;
   border: 1px dashed rgba($color-pink-rgb, 0.35);
   overflow: hidden;
   background: rgba($color-bg-surface, 0.5);
   cursor: pointer;
-  touch-action: none;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
 
-  &:active {
-    cursor: grabbing;
+  &:hover {
+    border-color: rgba($color-pink-rgb, 0.55);
+    box-shadow: 0 0 0 1px rgba($color-pink-rgb, 0.12);
+  }
+
+  &.has-image {
+    cursor: grab;
+
+    &:active {
+      cursor: grabbing;
+    }
   }
 }
 
@@ -558,13 +614,21 @@ function clampPercentage(value, fallback = 50) {
 
 .chat-bg-actions {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  align-items: flex-start;
   gap: $space-2;
+  min-width: min(100%, 240px);
 }
 
 .chat-bg-hint {
   font-size: $font-size-xs;
   color: $color-text-muted;
+  line-height: $line-height-relaxed;
+}
+
+.chat-bg-hint--warn {
+  color: $color-pink-primary;
 }
 
 .danger-card {
