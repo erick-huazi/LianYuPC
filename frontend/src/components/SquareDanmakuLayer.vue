@@ -51,9 +51,10 @@ useSquareDanmaku(layerRef, commentsRef)
 }
 
 :deep(.danmaku-item--mine) {
-  color: #fff;
-  font-weight: $font-weight-semibold;
-  background: rgba($color-pink-rgb, 0.88);
-  box-shadow: 0 0 10px rgba($color-pink-rgb, 0.35);
+  color: #1a1a24;
+  font-weight: $font-weight-bold;
+  background: linear-gradient(135deg, #ffd866 0%, #f5b042 100%);
+  box-shadow: 0 0 12px rgba(245, 176, 66, 0.45), 0 1px 4px rgba(0, 0, 0, 0.25);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 </style>

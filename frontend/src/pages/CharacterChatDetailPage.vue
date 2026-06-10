@@ -446,6 +446,7 @@ function clampPercentage(value, fallback = 50) {
 .detail-page {
   width: 100%;
   max-width: $narrow-page-max;
+  padding-bottom: 120px;
 }
 
 .loading-state,
