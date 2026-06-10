@@ -28,6 +28,7 @@ import com.lianyu.service.relationship.RelationshipStateService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.support.OutputLanguageService;
 import com.lianyu.service.tools.ChatToolContext;
+import com.lianyu.service.tools.TimeTool;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,6 +74,7 @@ public class ConversationService {
     private final CharacterStateService characterStateService;
     private final ProactiveRealWorldContextService proactiveRealWorldContext;
     private final RelationshipStateService relationshipStateService;
+    private final TimeTool timeTool;
 
     @Lazy
     @Autowired
@@ -795,8 +797,21 @@ public class ConversationService {
     private String buildSystemPromptForUser(Long userId, Character character, String memoryContext, String userInput) {
         String lang = outputLanguageService.resolveForRequest(userId, userInput);
         String base = promptBuilder.buildSystemPrompt(character, memoryContext, lang, true);
+        base = appendCurrentTimeContext(base);
         base = appendGoodnightContextIfApplicable(base, userInput, lang);
         return enforceNaturalChatStyle(base, lang);
+    }
+
+    /** 每次用户发消息都注入真实时间，避免隔夜续聊时模型仍以为在昨晚。 */
+    private String appendCurrentTimeContext(String basePrompt) {
+        String timeFact = timeTool.readCurrentTimeFact();
+        return basePrompt + """
+
+                
+                === 当前真实环境 ===
+                """ + timeFact + """
+                
+                注意：上方对话记录中的消息可能发生在更早的时刻（例如昨晚）。判断「现在」是白天还是夜晚、今天星期几、是否跨天等，必须以本条中的当前真实时间为准，不要根据旧对话的语气或内容臆测当前时刻。""";
     }
 
     /** 单聊主动开口（含破冰/跟进）：在 system 中预置已查询的真实时间与天气。 */

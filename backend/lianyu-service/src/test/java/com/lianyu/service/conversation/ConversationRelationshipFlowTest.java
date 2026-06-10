@@ -62,6 +62,7 @@ class ConversationRelationshipFlowTest {
         CharacterStateService characterStateService = mock(CharacterStateService.class);
         ProactiveRealWorldContextService proactiveRealWorldContext = mock(ProactiveRealWorldContextService.class);
         RelationshipStateService relationshipStateService = mock(RelationshipStateService.class);
+        com.lianyu.service.tools.TimeTool timeTool = mock(com.lianyu.service.tools.TimeTool.class);
 
         ConversationService conversationService = new ConversationService(
                 conversationMapper,
@@ -80,7 +81,8 @@ class ConversationRelationshipFlowTest {
                 outputLanguageService,
                 characterStateService,
                 proactiveRealWorldContext,
-                relationshipStateService);
+                relationshipStateService,
+                timeTool);
 
         Field contextWindow = ConversationService.class.getDeclaredField("contextWindow");
         contextWindow.setAccessible(true);

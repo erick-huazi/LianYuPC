@@ -44,15 +44,17 @@
         >
           <el-icon :size="18"><ArrowDown /></el-icon>
         </button>
-        <div
-          v-for="msg in messages"
-          v-show="msg.role !== 'assistant' || msg.content"
-          :key="msg.id || msg._tempId"
-          class="gal-log__item"
-          :class="msg.role === 'user' ? 'gal-log__item--user' : 'gal-log__item--hero'"
-        >
+        <template v-for="item in messageTimeline" :key="item._key">
+          <div v-if="item.type === 'time'" class="msg-time-divider">
+            <span>{{ item.label }}</span>
+          </div>
           <div
-            v-if="msg.role !== 'user'"
+            v-else
+            class="gal-log__item"
+            :class="item.role === 'user' ? 'gal-log__item--user' : 'gal-log__item--hero'"
+          >
+          <div
+            v-if="item.role !== 'user'"
             class="gal-log__avatar gal-log__avatar--hero"
             aria-hidden="true"
           >
@@ -64,27 +66,27 @@
             <el-icon v-else :size="18"><User /></el-icon>
           </div>
 
-          <div v-if="msg.role === 'user'" class="gal-user-choice">
-            <div v-if="msg.imageUrl" class="gal-user-choice__image">
-              <img :src="resolveMediaUrl(msg.imageUrl)" alt="" />
+          <div v-if="item.role === 'user'" class="gal-user-choice">
+            <div v-if="item.imageUrl" class="gal-user-choice__image">
+              <img :src="resolveMediaUrl(item.imageUrl)" alt="" />
             </div>
-            <p v-if="msg.content" class="gal-user-choice__text">{{ msg.content }}</p>
-            <span class="gal-user-choice__time">{{ formatTime(msg.createdAt) }}</span>
+            <p v-if="item.content" class="gal-user-choice__text">{{ item.content }}</p>
+            <span class="gal-user-choice__time">{{ formatTime(item.createdAt) }}</span>
           </div>
 
           <div v-else class="gal-dialogue">
             <div class="gal-dialogue__nameplate">
               <span class="gal-dialogue__name">{{ activeCharacter?.name }}</span>
-              <span v-if="!msg._streamGroupId" class="gal-dialogue__time">{{ formatTime(msg.createdAt) }}</span>
+              <span v-if="!item._streamGroupId" class="gal-dialogue__time">{{ formatTime(item.createdAt) }}</span>
             </div>
-            <div v-if="msg.imageUrl" class="gal-dialogue__image">
-              <img :src="resolveMediaUrl(msg.imageUrl)" alt="" />
+            <div v-if="item.imageUrl" class="gal-dialogue__image">
+              <img :src="resolveMediaUrl(item.imageUrl)" alt="" />
             </div>
-            <p v-if="msg.content" class="gal-dialogue__text">{{ msg.content }}</p>
+            <p v-if="item.content" class="gal-dialogue__text">{{ item.content }}</p>
           </div>
 
           <div
-            v-if="msg.role === 'user'"
+            v-if="item.role === 'user'"
             class="gal-log__avatar gal-log__avatar--user"
             aria-hidden="true"
           >
@@ -95,7 +97,8 @@
             />
             <el-icon v-else :size="18"><UserFilled /></el-icon>
           </div>
-        </div>
+          </div>
+        </template>
         <div ref="scrollAnchor" />
       </div>
 
@@ -188,7 +191,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import gsap from 'gsap'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 import { useProvidersStore } from '@/stores/providers'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useUserStore } from '@/stores/user'
@@ -208,6 +211,9 @@ import { setActiveChatConversationId, setActiveChatRefreshHandler } from '@/comp
 import { splitAssistantReply, resolveMaxRepliesPerTurn } from '@/utils/assistantReplySplit'
 import { getElectronAPI } from '@/utils/electron'
 import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
+import { dateLocaleForUi } from '@/utils/dateLocale'
+
+const TIME_GAP_MS = 5 * 60 * 1000
 
 const route = useRoute()
 const router = useRouter()
@@ -313,6 +319,25 @@ const headerTitle = computed(() => {
 })
 
 const characterAvatarUrl = computed(() => activeCharacter.value?.avatarUrl || '')
+
+const messageTimeline = computed(() => {
+  const items = []
+  let prevMs = null
+  for (const msg of messages.value) {
+    if (msg.role === 'assistant' && !msg.content) continue
+    const ms = parseMessageTime(msg)
+    if (prevMs != null && ms - prevMs > TIME_GAP_MS) {
+      items.push({
+        type: 'time',
+        _key: `time-${ms}`,
+        label: formatTimeDivider(ms)
+      })
+    }
+    items.push({ type: 'message', ...msg, _key: msg.id || msg._tempId })
+    prevMs = ms
+  }
+  return items
+})
 
 function clampPercentage(value, fallback = 50) {
   const n = Number(value)
@@ -827,6 +852,19 @@ function normalizeMessageRole(msg) {
   }
 }
 
+function parseMessageTime(msg) {
+  const ts = msg?.createdAt || msg?._time
+  if (!ts) return Date.now()
+  const ms = new Date(ts).getTime()
+  return Number.isNaN(ms) ? Date.now() : ms
+}
+
+function formatTimeDivider(ms) {
+  const d = new Date(ms)
+  const loc = dateLocaleForUi(locale.value)
+  return d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 function formatTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -973,6 +1011,23 @@ function formatTime(ts) {
   flex-direction: column;
   gap: $space-4;
   mask-image: linear-gradient(180deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+}
+
+.msg-time-divider {
+  align-self: center;
+  text-align: center;
+  margin: $space-1 0 $space-2;
+  flex-shrink: 0;
+
+  span {
+    display: inline-block;
+    font-size: 11px;
+    color: $color-text-muted;
+    padding: 3px 12px;
+    border-radius: $radius-full;
+    background: rgba($color-bg-surface, 0.75);
+    border: 1px solid rgba($color-pink-rgb, 0.08);
+  }
 }
 
 .gal-scroll-bottom {

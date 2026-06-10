@@ -2,7 +2,6 @@ package com.lianyu.service.conversation;
 
 import cn.hutool.core.util.StrUtil;
 import com.lianyu.dao.entity.Character;
-import com.lianyu.service.tools.TimeTool;
 import com.lianyu.service.tools.WeatherTool;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ProactiveRealWorldContextService {
 
-    private final TimeTool timeTool;
     private final WeatherTool weatherTool;
 
     @Value("${lianyu.tools.default-city:}")
@@ -36,12 +34,10 @@ public class ProactiveRealWorldContextService {
         }
         Map<String, Object> settings = character != null ? character.getSettings() : null;
         String city = resolveProactiveCity(settings);
-        String timeFact = timeTool.readCurrentTimeFact();
         String weatherFact = StrUtil.isNotBlank(city) ? weatherTool.readCurrentWeatherFact(city) : "";
 
         StringBuilder sb = new StringBuilder();
-        sb.append("\n\n=== 当前真实环境（主动开口前已由系统查询，请自然融入问候，勿逐条朗读） ===\n");
-        sb.append(timeFact).append('\n');
+        sb.append("\n\n=== 主动开口参考环境（时间以 system 中已注入的当前真实时间为准，请自然融入问候，勿逐条朗读） ===\n");
         if (StrUtil.isNotBlank(weatherFact)) {
             sb.append(weatherFact).append('\n');
         } else {
