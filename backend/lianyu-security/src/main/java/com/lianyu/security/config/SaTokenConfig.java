@@ -19,7 +19,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
         registry.addInterceptor(new SaInterceptor(handle -> {
                     var router = SaRouter.match("/api/**")
                             .notMatch("/api/auth/login", "/api/auth/register", "/api/auth/captcha")
-                            .notMatch("/api/public/**");
+                            .notMatch("/api/public/**")
+                            .notMatch("/api/desktop/observe");
                     if (apiDocsEnabled) {
                         router.notMatch("/doc.html", "/v3/api-docs/**", "/webjars/**", "/swagger-ui.html",
                                 "/swagger-ui/**");

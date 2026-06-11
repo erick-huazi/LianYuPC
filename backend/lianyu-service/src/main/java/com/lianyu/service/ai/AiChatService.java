@@ -82,10 +82,10 @@ public class AiChatService {
     @Value("${lianyu.ai.vision.enabled:true}")
     private boolean visionEnabled;
 
-    @Value("${lianyu.ai.vision.model:qwen3-vl-flash}")
+    @Value("${lianyu.ai.vision.model:qwen3-vl-plus}")
     private String visionModel;
 
-    @Value("${lianyu.ai.vision.describe-max-tokens:320}")
+    @Value("${lianyu.ai.vision.describe-max-tokens:420}")
     private int visionDescribeMaxTokens;
 
     @Value("${lianyu.ai.vision.api-key:}")
@@ -519,6 +519,7 @@ public class AiChatService {
 
     /**
      * Stage-1：仅用 VL 客观识图，短输出，不扮演角色。结果由主聊天模型消费。
+     * 若图中包含动漫/游戏/影视等知名角色，必须输出角色全名。
      */
     public String describeImage(String imageUrl) {
         if (!visionEnabled) {
@@ -529,11 +530,16 @@ public class AiChatService {
 
         MessageDto imageDto = new MessageDto();
         imageDto.setRole("user");
-        imageDto.setContent("请客观简洁描述这张图片的可见内容（人物、物体、场景、文字等）。");
+        imageDto.setContent(
+            "请客观简洁描述这张图片的可见内容（场景、动作、文字等）。"
+                + "如果图中包含动漫/游戏/影视等知名角色，必须在描述最前面用「角色：XXX」明确写出该角色的名字。"
+                + "如果是原创或无法识别的角色，直接描述画面即可，不要猜测名字。"
+        );
         imageDto.setImageUrl(imageUrl);
 
         List<Message> messages = List.of(
-                new SystemMessage("你是图片内容识别助手。只输出客观描述，不要扮演角色，不要闲聊，不要反问。"),
+                new SystemMessage("你是图片内容识别助手。只输出客观描述，不要扮演角色，不要闲聊，不要反问。"
+                        + "遇到动漫、游戏、影视等已知 IP 角色时，必须输出「角色：角色全名」作为首行。"),
                 buildVisionUserMessage(imageDto)
         );
         Prompt prompt = new Prompt(messages, OpenAiChatOptions.builder()
@@ -548,6 +554,70 @@ public class AiChatService {
         }
         log.info("Image described via {} ({} chars)", visionModel, content.length());
         return content.trim();
+    }
+
+    /**
+     * 桌面感知：截图 VL 识图 → 角色语气生成主动问候。
+     */
+    public String observeDesktop(String imageBase64, String windowTitle, String persona) {
+        if (!visionEnabled) {
+            return null;
+        }
+        VaultEntryResponse visionVault = buildVisionVault();
+        ChatModel chatModel = buildChatModel(visionVault, visionModel, visionVault.getApiKey());
+
+        byte[] imageBytes;
+        try {
+            imageBytes = java.util.Base64.getDecoder().decode(imageBase64);
+        } catch (IllegalArgumentException e) {
+            log.warn("Desktop observe: invalid base64 image");
+            return null;
+        }
+
+        // Stage 1: VL 识图
+        Media media = Media.builder()
+                .data(new ByteArrayResource(imageBytes))
+                .mimeType(MimeTypeUtils.IMAGE_PNG)
+                .build();
+        Message vlMessage = UserMessage.builder()
+                .text("请客观简洁描述这张屏幕截图的内容。"
+                + "如果图中包含知名游戏/软件界面/视频画面，请明确指出。"
+                + "如果图中包含动漫/游戏角色，用\"角色：XXX\"格式写出角色名。")
+                .media(media)
+                .build();
+        List<Message> vlMessages = List.of(
+                new SystemMessage("你是屏幕内容识别助手。只输出客观描述，不扮演角色，不闲聊。"),
+                vlMessage);
+        Prompt vlPromptObj = new Prompt(vlMessages, OpenAiChatOptions.builder()
+                .model(visionModel).temperature(0.2).maxTokens(visionDescribeMaxTokens).build());
+        ChatResponse vlResponse = chatModel.call(vlPromptObj);
+        String description = extractStreamDelta(vlResponse);
+        if (description == null || description.isBlank()) {
+            log.warn("Desktop observe: VL returned empty description");
+            return null;
+        }
+        log.info("Desktop observe: VL description ({} chars)", description.length());
+
+        // Stage 2: 角色语气生成问候
+        String personaText = (persona != null && !persona.isBlank()) ? persona : "你是一个可爱的桌面宠物。";
+        String winTitle = (windowTitle != null && !windowTitle.isBlank()) ? windowTitle : "未知";
+        String greetingPrompt = personaText + "\n\n"
+                + "你正在看着用户的电脑屏幕。当前画面：" + description + "\n"
+                + "用户正在使用的窗口：" + winTitle + "\n\n"
+                + "请用你的角色语气，对用户正在做的事情说一句话（像打招呼或随口感叹）。\n"
+                + "要求：自然、口语化、不超过40字。不要加上动作描述或括号。直接输出说的话。";
+
+        List<Message> greetingMessages = List.of(new UserMessage(greetingPrompt));
+        Prompt greetingPromptObj = new Prompt(greetingMessages, OpenAiChatOptions.builder()
+                .model(visionModel).temperature(0.9).maxTokens(120).build());
+        ChatResponse greetingResponse = chatModel.call(greetingPromptObj);
+        String greeting = extractStreamDelta(greetingResponse);
+        if (greeting == null || greeting.isBlank()) {
+            log.warn("Desktop observe: greeting generation returned empty");
+            return null;
+        }
+        log.info("Desktop observe: greeting generated ({} chars): {}", greeting.length(), greeting);
+        return greeting.trim();
     }
 
     private VaultEntryResponse buildVisionVault() {
