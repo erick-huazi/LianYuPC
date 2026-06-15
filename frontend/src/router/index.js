@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { syncToken } from '@/utils/secureToken'
+import { readToken, syncToken } from '@/utils/secureToken'
+import { useUserStore } from '@/stores/user'
 
 const routes = [
   {
@@ -137,29 +138,27 @@ const router = createRouter({
   routes
 })
 
-// Auth guard
-router.beforeEach((to, from, next) => {
+// Auth guard — 须先 await readToken()，且仅有 token 无 userId 时仍允许进登录页
+router.beforeEach(async (to, from, next) => {
+  await readToken()
   const token = syncToken()
+  const userStore = useUserStore()
+  const hasValidSession = !!(token && userStore.userId)
 
   if (to.meta.guest) {
-    // Already logged in users shouldn't see login/register
-    if (token) {
+    if (hasValidSession) {
       return next('/app')
     }
     return next()
   }
 
   if (to.meta.public) {
-    if (to.name === 'Landing' && token) {
+    if (to.name === 'Landing' && hasValidSession) {
       return next('/app')
-    }
-    if (to.meta.chromeless) {
-      return next()
     }
     return next()
   }
 
-  // Protected routes require token → 未登录回营销首页
   if (to.meta.requiresAuth && !token) {
     return next({ path: '/', replace: true })
   }

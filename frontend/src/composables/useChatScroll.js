@@ -1,12 +1,14 @@
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, unref } from 'vue'
 
 const SCROLL_UP_THRESHOLD = 80
 const SCROLL_BOTTOM_THRESHOLD = 20
+const SCROLL_TOP_LOAD_THRESHOLD = 120
 
 /**
- * 聊天消息区滚动：用户上翻时不自动拉底，提供「回到底部」按钮。
+ * 聊天消息区滚动：用户上翻时不自动拉底，提供「回到底部」按钮；
+ * 可选在滚到顶部时触发加载更早消息。
  */
-export function useChatScroll(containerRef, anchorRef) {
+export function useChatScroll(containerRef, anchorRef, options = {}) {
   const isUserScrolledUp = ref(false)
   let detachScrollListener = null
 
@@ -25,6 +27,15 @@ export function useChatScroll(containerRef, anchorRef) {
     }
   }
 
+  function maybeLoadOlder() {
+    const el = containerRef.value
+    if (!el || el.scrollTop > SCROLL_TOP_LOAD_THRESHOLD) return
+    const hasMore = unref(options.hasMoreOlder)
+    const loading = unref(options.loadingOlder)
+    if (!hasMore || loading) return
+    options.onReachTop?.()
+  }
+
   function scrollToBottom({ force = false, behavior = 'smooth' } = {}) {
     if (!force && isUserScrolledUp.value) return
     anchorRef.value?.scrollIntoView({ behavior })
@@ -40,7 +51,10 @@ export function useChatScroll(containerRef, anchorRef) {
   onMounted(() => {
     const el = containerRef.value
     if (!el) return
-    const onScroll = () => updateScrollState()
+    const onScroll = () => {
+      updateScrollState()
+      maybeLoadOlder()
+    }
     el.addEventListener('scroll', onScroll, { passive: true })
     detachScrollListener = () => el.removeEventListener('scroll', onScroll)
     updateScrollState()

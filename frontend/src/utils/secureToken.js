@@ -73,15 +73,22 @@ async function decryptFromStorage() {
 }
 
 /**
+ * 登录成功后立即写入内存缓存，避免 persistSession 异步加密完成前 API 读不到 token
+ */
+export function syncSetTokenCache(value) {
+  rawToken = value || null
+  restored = true
+}
+
+/**
  * 登录后调用：加密 token 写入 localStorage + 同步缓存
  */
 export async function storeToken(value) {
+  syncSetTokenCache(value)
   if (!value) {
     localStorage.removeItem(TOKEN_STORE_KEY)
     localStorage.removeItem(KEY_STORE_KEY)
     cachedKey = null
-    rawToken = null
-    restored = true
     return
   }
   const key = await getOrCreateKey()
@@ -93,8 +100,6 @@ export async function storeToken(value) {
   combined.set(iv, 0)
   combined.set(new Uint8Array(encrypted), iv.length)
   localStorage.setItem(TOKEN_STORE_KEY, bytesToHex(combined))
-  rawToken = value
-  restored = true
 }
 
 /**

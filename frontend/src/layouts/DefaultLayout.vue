@@ -11,7 +11,17 @@
     <div class="app-main">
       <AppHeader v-if="!isImmersive" />
       <main class="app-content">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <component :is="Component" v-if="Component" />
+          <section v-else class="app-recovery glass">
+            <h2>页面加载失败</h2>
+            <p>主内容未能显示。可尝试重新登录，或安装最新客户端后重试。</p>
+            <div class="app-recovery__actions">
+              <el-button type="primary" @click="reloadApp">重新加载</el-button>
+              <el-button @click="forceLogout">退出并重新登录</el-button>
+            </div>
+          </section>
+        </router-view>
       </main>
     </div>
     <AppDock v-if="!hideDock" />
@@ -20,15 +30,18 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import AppDock from '@/components/AppDock.vue'
 import AppShellAtmosphere from '@/components/AppShellAtmosphere.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useLayoutStore } from '@/stores/layout'
 import { useDesktopCloseHint } from '@/composables/useDesktopCloseHint'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
 const notificationsStore = useNotificationsStore()
 const layoutStore = useLayoutStore()
 useDesktopCloseHint()
@@ -43,6 +56,15 @@ onMounted(() => {
 onUnmounted(() => {
   notificationsStore.dispose()
 })
+
+function reloadApp() {
+  window.location.reload()
+}
+
+async function forceLogout() {
+  await userStore.clearAuth({ keepUsername: true })
+  await router.replace('/login')
+}
 </script>
 
 <style lang="scss" scoped>
@@ -105,6 +127,32 @@ onUnmounted(() => {
   padding-top: 0;
   padding-left: 0;
   padding-right: 0;
+}
+
+.app-recovery {
+  margin-top: $space-8;
+  padding: $space-8;
+  border-radius: $radius-lg;
+  text-align: center;
+
+  h2 {
+    margin-bottom: $space-3;
+    font-size: $font-size-lg;
+    color: $color-text-primary;
+  }
+
+  p {
+    margin-bottom: $space-6;
+    color: $color-text-secondary;
+    line-height: $line-height-relaxed;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: center;
+    gap: $space-3;
+    flex-wrap: wrap;
+  }
 }
 
 </style>

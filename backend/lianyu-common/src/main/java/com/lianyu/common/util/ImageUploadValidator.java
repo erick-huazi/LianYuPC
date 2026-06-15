@@ -16,8 +16,8 @@ import javax.imageio.ImageIO;
  */
 public final class ImageUploadValidator {
 
-    public static final long MAX_BYTES = 2L * 1024 * 1024;
-    public static final int MAX_DIMENSION = 4096;
+    public static final long MAX_BYTES = 8L * 1024 * 1024;
+    public static final int MAX_DIMENSION = 8192;
 
     private ImageUploadValidator() {
     }
@@ -27,7 +27,7 @@ public final class ImageUploadValidator {
 
     public static ValidatedImage validateAndReencode(InputStream input, long declaredSize) {
         if (declaredSize > MAX_BYTES) {
-            throw new BusinessException(ErrorCode.FILE_TOO_LARGE, "图片大小不能超过 2MB");
+            throw new BusinessException(ErrorCode.FILE_TOO_LARGE, "图片大小不能超过 8MB");
         }
         byte[] raw;
         try {
@@ -36,7 +36,7 @@ public final class ImageUploadValidator {
             throw new BusinessException(ErrorCode.FILE_TYPE_DENIED, "无法读取图片文件");
         }
         if (raw.length == 0 || raw.length > MAX_BYTES) {
-            throw new BusinessException(ErrorCode.FILE_TOO_LARGE, "图片大小不能超过 2MB");
+            throw new BusinessException(ErrorCode.FILE_TOO_LARGE, "图片大小不能超过 8MB");
         }
         if (!looksLikeImage(raw)) {
             throw new BusinessException(ErrorCode.FILE_TYPE_DENIED, "仅支持 JPG / PNG / WebP / GIF 图片");

@@ -83,6 +83,7 @@ public class ConversationService {
     private final CharacterStateService characterStateService;
     private final ProactiveRealWorldContextService proactiveRealWorldContext;
     private final RelationshipStateService relationshipStateService;
+    private final ProactiveUnrepliedThrottle proactiveUnrepliedThrottle;
     private final TimeTool timeTool;
 
     @Lazy
@@ -208,6 +209,7 @@ public class ConversationService {
         long nextSeq = getNextSeq(conversationId);
         PreparedUserTurn turn = prepareUserTurn(conversationId, character.getId(), request, nextSeq);
         messageMapper.insert(turn.userMsg());
+        proactiveUnrepliedThrottle.resetOnUserReply(conversationId);
         List<Message> history = getRecentMessages(conversationId, contextWindow);
         relationshipStateService.recordUserTurn(
                 userId,
@@ -263,6 +265,7 @@ public class ConversationService {
         long userSeq = getNextSeq(conversationId);
         PreparedUserTurn turn = prepareUserTurn(conversationId, character.getId(), request, userSeq);
         messageMapper.insert(turn.userMsg());
+        proactiveUnrepliedThrottle.resetOnUserReply(conversationId);
         List<Message> history = getRecentMessages(conversationId, contextWindow);
         relationshipStateService.recordUserTurn(
                 userId,
@@ -349,6 +352,7 @@ public class ConversationService {
         List<MessageResponse> replies = saveAssistantReplies(
                 conversationId, character, chatResult.getContent(), chatResult.getTotalTokens());
         if (!replies.isEmpty()) {
+            proactiveUnrepliedThrottle.recordProactiveSent(conversationId);
             memoryWriter.enqueueSummary(conversationId, character.getId(), userId);
         }
         return replies;

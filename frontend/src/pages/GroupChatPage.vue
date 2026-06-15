@@ -87,6 +87,8 @@
         >
           <el-icon :size="18"><ArrowDown /></el-icon>
         </button>
+        <div v-if="loadingOlder" class="group-load-more">{{ t('common.loading') }}</div>
+        <div v-else-if="hasMoreOlder" class="group-load-more group-load-more--hint">{{ t('chat.loadMore') }}</div>
         <template v-for="item in groupMessageTimeline" :key="item._key">
           <div v-if="item.type === 'time'" class="msg-time-divider">
             <span>{{ item.label }}</span>
@@ -346,9 +348,18 @@ const speakingCharId = ref(null)
 const streamingChar = ref(null)
 const groupMsgListRef = ref(null)
 const groupScrollAnchor = ref(null)
+const oldestLoadedSeq = ref(null)
+const hasMoreOlder = ref(false)
+const loadingOlder = ref(false)
+const GROUP_MESSAGE_PAGE_SIZE = 50
 const { isUserScrolledUp, scrollToBottom: scrollGroupBottom, jumpToBottom } = useChatScroll(
   groupMsgListRef,
-  groupScrollAnchor
+  groupScrollAnchor,
+  {
+    hasMoreOlder,
+    loadingOlder,
+    onReachTop: () => { void loadOlderGroupMessages() },
+  }
 )
 let lastUserSendAt = 0
 let firstReplyAfterUserPending = false
@@ -594,30 +605,85 @@ function membersForGroup(groupId) {
   return groupMembersCache.value[groupId] || []
 }
 
+function mapGroupMessages(msgs, seenChars) {
+  return msgs.map(m => ({
+    ...m,
+    _key: 'g' + (++msgCounter),
+    _charName: (m.role || '').toLowerCase() === 'user' ? t('group.me') : (seenChars.get(m.characterId)?.name || t('group.roleFallback')),
+    _charAvatar: seenChars.get(m.characterId)?.avatarUrl || null,
+    _time: m.createdAt
+  }))
+}
+
+async function loadRecentGroupMessages(groupId, seenChars) {
+  const page = await getMessages(groupId, { limit: GROUP_MESSAGE_PAGE_SIZE })
+  const batch = page?.records || []
+  groupMessages.value = mapGroupMessages(batch, seenChars)
+  hasMoreOlder.value = !!page?.hasMore
+  oldestLoadedSeq.value = page?.nextBeforeSeq ?? (batch[0]?.seq ?? null)
+  if (!batch.length) {
+    hasMoreOlder.value = false
+    oldestLoadedSeq.value = null
+  }
+}
+
+async function loadOlderGroupMessages() {
+  const group = activeGroup.value
+  if (!group?.id || loadingOlder.value || !hasMoreOlder.value) return
+  const beforeSeq = oldestLoadedSeq.value
+  if (beforeSeq == null) return
+
+  loadingOlder.value = true
+  const el = groupMsgListRef.value
+  const prevHeight = el?.scrollHeight ?? 0
+  const seenChars = new Map(groupMembers.value.map(m => [m.id, m]))
+
+  try {
+    const page = await getMessages(group.id, { limit: GROUP_MESSAGE_PAGE_SIZE, beforeSeq })
+    const batch = page?.records || []
+    if (!batch.length) {
+      hasMoreOlder.value = false
+      return
+    }
+    const existingIds = new Set(groupMessages.value.map(m => m.id).filter(Boolean))
+    const toPrepend = batch.filter(m => !m.id || !existingIds.has(m.id))
+    if (toPrepend.length) {
+      groupMessages.value = [...mapGroupMessages(toPrepend, seenChars), ...groupMessages.value]
+    }
+    hasMoreOlder.value = !!page?.hasMore
+    oldestLoadedSeq.value = page?.nextBeforeSeq ?? (toPrepend[0]?.seq ?? oldestLoadedSeq.value)
+    await nextTick()
+    if (el) {
+      el.scrollTop += el.scrollHeight - prevHeight
+    }
+  } catch {
+    // ignore
+  } finally {
+    loadingOlder.value = false
+  }
+}
+
 async function openGroup(group, memberIds) {
   activeGroup.value = group
+  oldestLoadedSeq.value = null
+  hasMoreOlder.value = false
+  loadingOlder.value = false
   if (group?.id) {
     await notificationsStore.markConversationRead(group.id)
     await refreshUnreadFromApi()
   }
 
   try {
-    const page = await getMessages(group.id, { limit: 50 })
-    const msgs = page?.records || []
     groupMembers.value = await loadGroupMembers(group.id, memberIds)
     groupMembersCache.value = { ...groupMembersCache.value, [group.id]: groupMembers.value }
     const seenChars = new Map(groupMembers.value.map(m => [m.id, m]))
-    groupMessages.value = msgs.map(m => ({
-      ...m,
-      _key: 'g' + (++msgCounter),
-      _charName: (m.role || '').toLowerCase() === 'user' ? t('group.me') : (seenChars.get(m.characterId)?.name || t('group.roleFallback')),
-      _charAvatar: seenChars.get(m.characterId)?.avatarUrl || null,
-      _time: m.createdAt
-    }))
+    await loadRecentGroupMessages(group.id, seenChars)
   } catch {
     groupMembers.value = await loadGroupMembers(group.id, memberIds)
     groupMembersCache.value = { ...groupMembersCache.value, [group.id]: groupMembers.value }
     groupMessages.value = []
+    oldestLoadedSeq.value = null
+    hasMoreOlder.value = false
   }
   connectWebSocket(group.id)
   await nextTick()
@@ -630,6 +696,9 @@ function leaveGroup() {
   activeGroup.value = null
   groupMembers.value = []
   groupMessages.value = []
+  oldestLoadedSeq.value = null
+  hasMoreOlder.value = false
+  loadingOlder.value = false
   refreshUnreadFromApi()
 }
 
@@ -1049,6 +1118,18 @@ function isUserMessage(msg) {
   display: flex;
   flex-direction: column;
   gap: $space-3;
+}
+
+.group-load-more {
+  align-self: center;
+  padding: $space-2 $space-4;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  text-align: center;
+
+  &--hint {
+    opacity: 0.75;
+  }
 }
 
 .group-scroll-bottom {

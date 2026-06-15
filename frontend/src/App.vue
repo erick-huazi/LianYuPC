@@ -34,9 +34,11 @@ const elementLocale = computed(() => elementLocaleMap[settingsStore.uiLanguage] 
 /** Electron file:// 下禁用路由过渡，避免 out-in 中间态黑屏 */
 const isElectron = isElectronRuntime()
 const isLauncherSurface = computed(() => route.name === 'Launcher' || route.name === 'LauncherPick')
+const usesAppHeader = computed(() => route.path.startsWith('/app') || route.path.startsWith('/quick'))
 const pageTransitionName = computed(() => (isElectron ? '' : 'page'))
 const pageTransitionMode = computed(() => (isElectron ? undefined : 'out-in'))
-const showElectronCaptionDrag = computed(() => isElectron && !isLauncherSurface.value)
+/** 主界面由 AppHeader 充当标题栏；仅营销/登录页保留顶部拖拽条 */
+const showElectronCaptionDrag = computed(() => isElectron && !isLauncherSurface.value && !usesAppHeader.value)
 
 function syncElectronCaptionClass(enabled) {
   document.body.classList.toggle('electron-app', !!enabled)

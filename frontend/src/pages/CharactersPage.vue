@@ -228,7 +228,7 @@
               <el-button type="default" size="small" @click="triggerUpload">
                 {{ form.avatarUrl ? '更换头像' : '选择图片' }}
               </el-button>
-              <span class="avatar-hint">拖拽图片到左侧，或点击上传 · JPG/PNG/WebP · 最大 5MB</span>
+              <span class="avatar-hint">拖拽图片到左侧，或点击上传 · JPG/PNG/WebP · 最大 8MB</span>
             </div>
             <input
               ref="fileInput"
@@ -485,8 +485,8 @@ function applyAvatarFile(file) {
     ElMessage.warning('请上传图片文件（JPG / PNG / WebP）')
     return
   }
-  if (file.size > 5 * 1024 * 1024) {
-    ElMessage.warning('图片大小不能超过 5MB')
+  if (file.size > 8 * 1024 * 1024) {
+    ElMessage.warning('图片大小不能超过 8MB')
     return
   }
   avatarFile.value = file

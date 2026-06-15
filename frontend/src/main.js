@@ -21,6 +21,15 @@ if (isElectronRuntime) {
 }
 
 const app = createApp(App)
+
+app.config.errorHandler = (err, instance, info) => {
+  const detail = `${info}: ${err?.stack || err}`
+  console.error('[VUE-ERROR]', detail)
+  if (typeof window !== 'undefined') {
+    window.__vueErr = (window.__vueErr || []).concat(detail)
+  }
+}
+
 const pinia = createPinia()
 
 app.use(pinia)

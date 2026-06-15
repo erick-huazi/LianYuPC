@@ -9,7 +9,7 @@ import {
   updateProfile as updateProfileApi,
   uploadProfileAvatar as uploadProfileAvatarApi
 } from '@/api/auth'
-import { storeToken, readToken, clearTokenStorage, syncToken } from '@/utils/secureToken'
+import { storeToken, readToken, clearTokenStorage, syncToken, syncSetTokenCache } from '@/utils/secureToken'
 import { getElectronAPI } from '@/utils/electron'
 import { LAST_USERNAME_KEY, PROFILE_CACHE_KEY } from '@/constants/authSession'
 
@@ -133,6 +133,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function setAuth(t, tn, user) {
+    syncSetTokenCache(t)
     token.value = t
     tokenName.value = tn
     if (user) {

@@ -68,7 +68,7 @@
               <span v-if="form.useGlobalChatBackground" class="chat-bg-hint chat-bg-hint--warn">
                 已启用全局背景，上传图片将自动切换为角色专属背景
               </span>
-              <span class="chat-bg-hint">JPG/PNG/WebP/GIF，建议横图，最大 5MB；上传后可在预览图里拖动调整显示焦点</span>
+              <span class="chat-bg-hint">JPG/PNG/WebP/GIF，建议横图，最大 8MB；上传后可在预览图里拖动调整显示焦点</span>
             </div>
             <input
               ref="bgFileInput"
@@ -356,8 +356,8 @@ async function handleBgFileChange(e) {
     ElMessage.warning('请上传图片文件')
     return
   }
-  if (file.size > 5 * 1024 * 1024) {
-    ElMessage.warning('图片大小不能超过 5MB')
+  if (file.size > 8 * 1024 * 1024) {
+    ElMessage.warning('图片大小不能超过 8MB')
     return
   }
   bgUploading.value = true

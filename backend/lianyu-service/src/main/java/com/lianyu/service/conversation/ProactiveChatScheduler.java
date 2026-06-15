@@ -47,6 +47,7 @@ public class ProactiveChatScheduler {
     private final EngagementFrequencyScorer engagementScorer;
     private final StringRedisTemplate redisTemplate;
     private final RelationshipStateService relationshipStateService;
+    private final ProactiveUnrepliedThrottle proactiveUnrepliedThrottle;
 
     @Value("${lianyu.chat.proactive.enabled:true}")
     private boolean proactiveEnabled;
@@ -189,6 +190,9 @@ public class ProactiveChatScheduler {
             return false;
         }
         if (Boolean.TRUE.equals(redisTemplate.hasKey(cooldownKey(conv.getId())))) {
+            return false;
+        }
+        if (proactiveUnrepliedThrottle.isPaused(conv.getId())) {
             return false;
         }
         if (lastMessage == null) {

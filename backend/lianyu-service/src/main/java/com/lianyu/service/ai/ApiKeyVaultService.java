@@ -156,7 +156,8 @@ public class ApiKeyVaultService {
     /**
      * 对话时解析可用 Vault：
      * 1) provider 指定且非 platform：仅查用户私有配置；
-     * 2) provider 为空或 platform：先用户私有（最近更新），再平台默认池（DEFAULT + provider=platform，轮询）。
+     * 2) provider 为空或 platform：仅走平台默认池（DEFAULT + provider=platform，轮询），
+     *    不再回退到用户最近更新的私有 Vault，避免 UI 选「平台默认」仍走自定义 Key。
      */
     public VaultEntryResponse resolveForChat(Long userId, String provider) {
         String target = trimToNull(provider);
@@ -173,19 +174,6 @@ public class ApiKeyVaultService {
             log.info("AI vault resolve: branch=USER_SPECIFIC, userId={}, provider={}, vaultId={}",
                     userId, target, userVault.getId());
             return toInternalResponse(userVault);
-        }
-
-        ApiKeyVault preferredUserVault = vaultMapper.selectOne(new LambdaQueryWrapper<ApiKeyVault>()
-                .eq(ApiKeyVault::getUserId, userId)
-                .eq(ApiKeyVault::getVaultScope, USER_SCOPE)
-                .eq(ApiKeyVault::getEnabled, 1)
-                .orderByDesc(ApiKeyVault::getUpdatedAt)
-                .last("LIMIT 1"));
-        if (preferredUserVault != null) {
-            log.info("AI vault resolve: branch=USER_PREFERRED, userId={}, vaultId={}, provider={}, baseUrl={}",
-                    userId, preferredUserVault.getId(), preferredUserVault.getProvider(),
-                    preferredUserVault.getBaseUrl());
-            return toInternalResponse(preferredUserVault);
         }
 
         List<ApiKeyVault> defaults = vaultMapper.selectList(new LambdaQueryWrapper<ApiKeyVault>()

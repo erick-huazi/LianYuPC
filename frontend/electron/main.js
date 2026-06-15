@@ -99,6 +99,20 @@ function isApiHostname(hostname) {
   }
 }
 
+/** Electron cert.fingerprint 为 sha256/<base64>，构建注入为冒号分隔 hex */
+function normalizeCertFingerprint(fingerprint) {
+  if (!fingerprint) return ''
+  const raw = String(fingerprint).trim()
+  if (/^sha256\//i.test(raw)) {
+    try {
+      return Buffer.from(raw.slice(7), 'base64').toString('hex').toLowerCase()
+    } catch {
+      return ''
+    }
+  }
+  return raw.replace(/:/g, '').toLowerCase()
+}
+
 function certificateMatchesPin(cert) {
   if (!cert) return false
   try {
@@ -109,7 +123,7 @@ function certificateMatchesPin(cert) {
   }
   if (!EXPECTED_CERT_FINGERPRINT) return false
   const expectedFp = EXPECTED_CERT_FINGERPRINT.replace(/:/g, '').toLowerCase()
-  const actualFp = (cert.fingerprint || '').toLowerCase()
+  const actualFp = normalizeCertFingerprint(cert.fingerprint)
   return actualFp.length > 0 && actualFp === expectedFp
 }
 
@@ -125,24 +139,26 @@ function configureCertificatePinning() {
       return
     }
 
+    if (certificateMatchesPin(certificate)) {
+      callback(0)
+      return
+    }
+
     try {
       const spki = getSPKIHash(certificate)
-      if (spki === PINNED_SPKI) {
-        callback(0)
-        return
-      }
       log(`cert SPKI mismatch for ${hostname}: got ${spki}, expected ${PINNED_SPKI}`)
     } catch (e) {
       log(`cert SPKI compute failed for ${hostname}: ${e.message}`)
     }
 
     if (ALLOW_SYSTEM_CA) {
-      log(`cert SPKI mismatch for ${hostname}, falling back to system CA (LIANYU_ALLOW_SYSTEM_CA=1)`)
+      log(`cert pin mismatch for ${hostname}, falling back to system CA (LIANYU_ALLOW_SYSTEM_CA=1)`)
       callback(-3)
       return
     }
-    log(`cert REJECTED for ${hostname}: SPKI pin mismatch`)
-    callback(-2)
+    // 自签名证书：交给 certificate-error 二次校验（避免指纹格式差异误杀）
+    log(`cert pin mismatch for ${hostname}, defer to certificate-error handler`)
+    callback(-3)
   })
 
   // 方式二（兜底）：certificate-error 仅 pin 匹配时放行
@@ -163,7 +179,7 @@ function configureCertificatePinning() {
       cb(true)
       return
     }
-    log(`cert-error REJECTED: url=${url} issuer=${cert.issuerName} subject=${cert.subjectName}`)
+    log(`cert-error REJECTED: url=${url} issuer=${cert.issuerName} subject=${cert.subjectName} fp=${normalizeCertFingerprint(cert.fingerprint)}`)
     if (ALLOW_SYSTEM_CA) {
       event.preventDefault()
       cb(true)
@@ -211,7 +227,9 @@ function verifyAsarIntegrity() {
 function configureContentSecurityPolicy() {
   const csp = [
     "default-src 'self'",
-    "script-src 'self'",
+    // vue-i18n 运行时用 new Function 编译带参数的翻译文案，需放开 unsafe-eval；
+    // 桌面端脚本源仍限定为 'self'，无外部脚本注入面，风险可控。
+    "script-src 'self' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
@@ -416,10 +434,12 @@ function isMainWindowOccupyingDesktop() {
   return mainWindow.isVisible()
 }
 
-function isPositionWithinAnyWorkArea(x, y) {
+function isPositionWithinAnyWorkArea(x, y, width = LAUNCHER_WINDOW.width, height = LAUNCHER_WINDOW.height) {
+  const right = x + width
+  const bottom = y + height
   return screen.getAllDisplays().some((display) => {
     const area = display.workArea
-    return x >= area.x && y >= area.y && x < area.x + area.width && y < area.y + area.height
+    return x >= area.x && y >= area.y && right <= area.x + area.width && bottom <= area.y + area.height
   })
 }
 
@@ -456,17 +476,23 @@ function resetLauncherCompactSize() {
 function clampLauncherToWorkArea() {
   if (!launcherWindow || launcherWindow.isDestroyed() || launcherIsDragging) return
   const bounds = launcherWindow.getBounds()
-  const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y })
+  const winWidth = LAUNCHER_WINDOW.width
+  const winHeight = LAUNCHER_WINDOW.height
+  const centerX = bounds.x + winWidth / 2
+  const centerY = bounds.y + winHeight / 2
+  const display = screen.getDisplayNearestPoint({ x: centerX, y: centerY })
   const area = display.workArea
   let x = bounds.x
   let y = bounds.y
-  if (x + bounds.width > area.x + area.width) x = area.x + area.width - bounds.width
-  if (y + bounds.height > area.y + area.height) y = area.y + area.height - bounds.height
+  if (x + winWidth > area.x + area.width) x = area.x + area.width - winWidth
+  if (y + winHeight > area.y + area.height) y = area.y + area.height - winHeight
   if (x < area.x) x = area.x
   if (y < area.y) y = area.y
   if (x !== bounds.x || y !== bounds.y) {
+    launcherSuppressMoveSave = true
     launcherWindow.setPosition(Math.round(x), Math.round(y))
     writeLauncherPosition(x, y)
+    launcherSuppressMoveSave = false
   }
 }
 
@@ -741,7 +767,7 @@ function createMainWindow() {
     hideMainToTray()
   })
 
-  loadRoute(win, '#/app')
+  loadRoute(win, '#/')
   if (isDev) {
     win.webContents.openDevTools({ mode: 'detach' })
   }
@@ -1176,17 +1202,13 @@ function registerIpcHandlers() {
       return
     }
     launcherIsDragging = false
-    // 不在此时写位置：clampLauncherToWorkArea 会写入正确值；
-    // 且 Windows 上 setPosition 可能异步，getBounds 可能返回旧值。
+    launcherSuppressMoveSave = true
     clampLauncherToWorkArea()
     repositionPickerNearLauncher()
     resetLauncherInteraction()
-    // 兜底：延迟再 clamp + 存一次，防 setPosition 异步导致漏 clamp
     setTimeout(() => {
-      if (launcherWindow && !launcherWindow.isDestroyed() && !launcherIsDragging) {
-        clampLauncherToWorkArea()
-      }
-    }, 200)
+      launcherSuppressMoveSave = false
+    }, 250)
   })
 
   ipcMain.handle('desktop:set-launcher-screen-position', (_event, { x, y }) => {

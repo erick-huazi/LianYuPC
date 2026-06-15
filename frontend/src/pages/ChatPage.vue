@@ -65,6 +65,8 @@
         >
           <el-icon :size="18"><ArrowDown /></el-icon>
         </button>
+        <div v-if="loadingOlder" class="gal-load-more">{{ t('common.loading') }}</div>
+        <div v-else-if="hasMoreOlder" class="gal-load-more gal-load-more--hint">{{ t('chat.loadMore') }}</div>
         <template v-for="item in messageTimeline" :key="item._key">
           <div v-if="item.type === 'time'" class="msg-time-divider">
             <span>{{ item.label }}</span>
@@ -259,7 +261,15 @@ const activeCharacter = ref(null)
 const emotionState = ref(null)
 const msgListRef = ref(null)
 const scrollAnchor = ref(null)
-const { isUserScrolledUp, scrollToBottom, jumpToBottom } = useChatScroll(msgListRef, scrollAnchor)
+const oldestLoadedSeq = ref(null)
+const hasMoreOlder = ref(false)
+const loadingOlder = ref(false)
+const MESSAGE_PAGE_SIZE = 50
+const { isUserScrolledUp, scrollToBottom, jumpToBottom } = useChatScroll(msgListRef, scrollAnchor, {
+  hasMoreOlder,
+  loadingOlder,
+  onReachTop: () => { void loadOlderMessages() },
+})
 const fileInputRef = ref(null)
 const galBgRef = ref(null)
 
@@ -309,12 +319,21 @@ function restoreCharProviderPref() {
   const saved = loadCharProviderPref(charId)
   restoringProviderPref = true
   if (saved && saved.provider) {
-    currentProvider.value = saved.provider
-    currentModel.value = saved.model || ''
-    if (saved.provider !== PLATFORM_PROVIDER) {
-      loadModels(saved.provider)
+    const providerStillExists = saved.provider === PLATFORM_PROVIDER
+      || providersStore.vaults.some(v => v.provider === saved.provider)
+    if (providerStillExists) {
+      currentProvider.value = saved.provider
+      currentModel.value = saved.model || ''
+      if (saved.provider !== PLATFORM_PROVIDER) {
+        loadModels(saved.provider)
+      } else {
+        currentModel.value = PLATFORM_MODEL
+        loadModels(PLATFORM_PROVIDER)
+      }
     } else {
+      currentProvider.value = PLATFORM_PROVIDER
       currentModel.value = PLATFORM_MODEL
+      saveCharProviderPref(charId, PLATFORM_PROVIDER, PLATFORM_MODEL)
       loadModels(PLATFORM_PROVIDER)
     }
   } else {
@@ -523,35 +542,116 @@ async function loadEmotionState() {
   }
 }
 
-async function loadAllMessages(convId) {
-  const all = []
-  let beforeSeq = null
-  let hasMore = true
-  while (hasMore) {
-    const page = await getMessages(convId, { limit: 50, beforeSeq })
-    const batch = page?.records || []
-    all.unshift(...batch)
-    hasMore = !!page?.hasMore
-    beforeSeq = page?.nextBeforeSeq ?? null
-    if (!hasMore || beforeSeq == null) {
-      break
+async function loadRecentMessages(convId) {
+  const page = await getMessages(convId, { limit: MESSAGE_PAGE_SIZE })
+  const batch = (page?.records || []).map(normalizeMessageRole)
+  messages.value = batch
+  hasMoreOlder.value = !!page?.hasMore
+  oldestLoadedSeq.value = page?.nextBeforeSeq ?? (batch[0]?.seq ?? null)
+  if (!batch.length) {
+    hasMoreOlder.value = false
+    oldestLoadedSeq.value = null
+  }
+}
+
+async function loadOlderMessages() {
+  const convId = currentConvId.value
+  if (!convId || loadingOlder.value || !hasMoreOlder.value) return
+  const beforeSeq = oldestLoadedSeq.value
+  if (beforeSeq == null) return
+
+  loadingOlder.value = true
+  const el = msgListRef.value
+  const prevHeight = el?.scrollHeight ?? 0
+
+  try {
+    const page = await getMessages(convId, { limit: MESSAGE_PAGE_SIZE, beforeSeq })
+    const batch = (page?.records || []).map(normalizeMessageRole)
+    if (!batch.length) {
+      hasMoreOlder.value = false
+      return
+    }
+    const existingIds = new Set(messages.value.map(m => m.id).filter(Boolean))
+    const toPrepend = batch.filter(m => !m.id || !existingIds.has(m.id))
+    if (toPrepend.length) {
+      messages.value = [...toPrepend, ...messages.value]
+    }
+    hasMoreOlder.value = !!page?.hasMore
+    oldestLoadedSeq.value = page?.nextBeforeSeq ?? (toPrepend[0]?.seq ?? oldestLoadedSeq.value)
+    await nextTick()
+    if (el) {
+      el.scrollTop += el.scrollHeight - prevHeight
+    }
+  } catch {
+    // ignore load errors
+  } finally {
+    loadingOlder.value = false
+  }
+}
+
+function mergePolledMessages(incoming) {
+  if (!incoming.length) {
+    return false
+  }
+
+  let changed = false
+  const byId = new Map(messages.value.filter(m => m.id).map(m => [m.id, m]))
+
+  for (const msg of incoming) {
+    if (!msg.id) continue
+    const existing = byId.get(msg.id)
+    if (existing) {
+      if (existing.content !== msg.content || existing.role !== msg.role || existing.imageUrl !== msg.imageUrl) {
+        Object.assign(existing, msg)
+        changed = true
+      }
+      continue
+    }
+    const lastSeq = messages.value.reduce((max, m) => Math.max(max, m.seq || 0), 0)
+    if ((msg.seq ?? 0) >= lastSeq || messages.value.length === 0) {
+      messages.value.push(msg)
+      byId.set(msg.id, msg)
+      changed = true
     }
   }
-  return all
+
+  const localPending = messages.value.filter(m => m._tempId && m._tempId.startsWith('u'))
+  const stillPending = localPending.filter(m =>
+    !incoming.some(s =>
+      s.role === 'user' && s.content === m.content
+      && Math.abs(new Date(s.createdAt).getTime() - new Date(m.createdAt).getTime()) < 5000
+    )
+  )
+  if (stillPending.length) {
+    const merged = [...messages.value.filter(m => !(m._tempId && m._tempId.startsWith('u')))]
+    const insertAfter = merged.findLastIndex(m => m.role === 'user')
+    const pos = insertAfter >= 0 ? insertAfter + 1 : merged.length
+    merged.splice(pos, 0, ...stillPending)
+    if (merged.length !== messages.value.length) {
+      messages.value = merged
+      changed = true
+    }
+  }
+
+  return changed
 }
 
 async function loadConversation(convId) {
   currentConvId.value = convId
+  oldestLoadedSeq.value = null
+  hasMoreOlder.value = false
+  loadingOlder.value = false
   notificationsStore.markConversationRead(convId)
   try {
     const conv = await getConversation(convId)
     await resolveActiveCharacter(conv.characterId, conv)
-    const serverMessages = await loadAllMessages(convId)
-    messages.value = serverMessages.map(normalizeMessageRole)
+    await loadRecentMessages(convId)
   } catch {
     messages.value = []
     activeCharacter.value = null
     awaitingOpening.value = false
+    oldestLoadedSeq.value = null
+    hasMoreOlder.value = false
     stopFastPolling()
   }
   await nextTick()
@@ -657,33 +757,17 @@ async function pollCurrentConversationMessages(force) {
     return
   }
   try {
-    const page = await getMessages(convId, { limit: 50 }, { silent: true })
-    const serverMessages = page?.records || []
-    const normalized = serverMessages.map(normalizeMessageRole)
-    const changed =
-      force ||
-      normalized.length !== messages.value.length ||
-      normalized.at(-1)?.id !== messages.value.at(-1)?.id
+    const page = await getMessages(convId, { limit: MESSAGE_PAGE_SIZE }, { silent: true })
+    const incoming = (page?.records || []).map(normalizeMessageRole)
+    let changed = false
+    if (force && messages.value.length === 0 && incoming.length > 0) {
+      messages.value = incoming
+      changed = true
+    } else {
+      changed = mergePolledMessages(incoming)
+    }
     if (changed) {
       skipBounceOnce = true
-      // 保留本地 push 后服务端尚未持久化的用户消息，防止竞态条件导致消息"闪现"消失又出现
-      const localPending = messages.value.filter(m => m._tempId && m._tempId.startsWith('u'))
-      const stillPending = localPending.filter(m => {
-        // 通过 content+createdAt 近似匹配判断服务端是否已持久化该消息
-        return !normalized.some(s =>
-          s.role === 'user' && s.content === m.content && Math.abs(new Date(s.createdAt).getTime() - new Date(m.createdAt).getTime()) < 5000
-        )
-      })
-      if (stillPending.length > 0) {
-        // 将尚未持久化的本地消息插入到服务端列表末尾之前（保持时间顺序，倒序插入保持正确位置）
-        const merged = [...normalized]
-        const insertAfter = merged.findLastIndex(m => m.role === 'user')
-        const pos = insertAfter >= 0 ? insertAfter + 1 : merged.length
-        merged.splice(pos, 0, ...stillPending)
-        messages.value = merged
-      } else {
-        messages.value = normalized
-      }
       notificationsStore.markConversationRead(convId)
       syncAwaitingOpening()
       if (!awaitingOpening.value) {
@@ -1091,6 +1175,19 @@ function formatTime(ts) {
     border-radius: $radius-full;
     background: rgba($color-bg-surface, 0.75);
     border: 1px solid rgba($color-pink-rgb, 0.08);
+  }
+}
+
+.gal-load-more {
+  align-self: center;
+  padding: $space-2 $space-4;
+  margin-bottom: $space-2;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  text-align: center;
+
+  &--hint {
+    opacity: 0.75;
   }
 }
 

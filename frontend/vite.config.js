@@ -40,6 +40,8 @@ export default defineConfig({
     minify: 'esbuild',
     rollupOptions: {
       output: {
+        // file:// 下懒加载分包易失败（顶栏有、子页面空白），Electron 构建合并为单包
+        inlineDynamicImports: process.env.ELECTRON_BUILD === '1',
         compact: true,
         generatedCode: { preset: 'es2015' },
       },
