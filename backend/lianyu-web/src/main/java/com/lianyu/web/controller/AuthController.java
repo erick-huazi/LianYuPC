@@ -48,7 +48,8 @@ public class AuthController {
         CaptchaService.CaptchaChallenge challenge = captchaService.generate();
         return Result.ok(Map.of(
                 "captchaId", challenge.id(),
-                "imageBase64", challenge.imageBase64()
+                "imageBase64", challenge.imageBase64(),
+                "expression", challenge.expression()
         ));
     }
 

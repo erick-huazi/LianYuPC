@@ -91,7 +91,9 @@
                 alt="验证码"
                 class="captcha-image"
                 @click="refreshCaptcha"
+                @error="onCaptchaImgError"
               />
+              <span v-else-if="captchaExpression" class="captcha-expr">{{ captchaExpression }}</span>
               <span v-else class="captcha-expr">{{ captchaHint }}</span>
               <button
                 type="button"
@@ -153,7 +155,32 @@ useAuthPageGsap(pageRef)
 
 const captchaId = ref('')
 const captchaImageSrc = ref('')
+const captchaExpression = ref('')
 const captchaHint = ref('加载中...')
+
+function applyCaptchaResponse(res) {
+  captchaId.value = res?.captchaId ?? ''
+  const b64 = typeof res?.imageBase64 === 'string' ? res.imageBase64.trim() : ''
+  const expr = typeof res?.expression === 'string' ? res.expression.trim() : ''
+  captchaExpression.value = expr
+  if (b64) {
+    captchaImageSrc.value = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`
+    captchaHint.value = ''
+    return
+  }
+  captchaImageSrc.value = ''
+  captchaHint.value = expr ? '' : '获取失败，点击刷新'
+}
+
+function onCaptchaImgError() {
+  if (captchaExpression.value) {
+    captchaImageSrc.value = ''
+    captchaHint.value = ''
+    return
+  }
+  captchaImageSrc.value = ''
+  captchaHint.value = '验证码加载失败，点击刷新'
+}
 
 const form = reactive({
   username: '',
@@ -193,11 +220,10 @@ onMounted(() => {
 async function refreshCaptcha() {
   try {
     const res = await getCaptcha()
-    captchaId.value = res.captchaId
-    captchaImageSrc.value = res.imageBase64 ? `data:image/png;base64,${res.imageBase64}` : ''
-    captchaHint.value = captchaImageSrc.value ? '' : '获取失败，点击刷新'
+    applyCaptchaResponse(res)
   } catch {
     captchaImageSrc.value = ''
+    captchaExpression.value = ''
     captchaHint.value = '获取失败，点击刷新'
     ElMessage.error('无法连接服务器，请确认网络正常且后端已启动')
   }
