@@ -315,6 +315,7 @@ export default {
     today: '今天',
     yesterdayLabel: '昨天',
     yesterday: '昨天 {time}',
+    dateTime: '{month}月{day}日 {time}',
     commentCount: '{n} 条评论',
     moreComments: '还有 {n} 条评论',
     addComment: '写评论',

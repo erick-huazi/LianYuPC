@@ -35,7 +35,7 @@
             </div>
             <div class="feed-card__meta">
               <span class="feed-card__name">{{ diary.characterName }}</span>
-              <span class="feed-card__time">{{ formatFeedTime(diary.createdAt, t) }}</span>
+              <span class="feed-card__time">{{ formatFeedTime(diary.createdAt, t, locale) }}</span>
             </div>
             <span class="feed-card__badge feed-card__badge--diary">{{ t('diary.badge') }}</span>
           </div>
@@ -57,7 +57,7 @@ import { listAllDiaries } from '@/api/characterState'
 import { resolveMediaUrl } from '@/utils/media'
 import { feedDateKey, formatFeedDateLabel, formatFeedTime } from '@/utils/feedTime'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 
 const loading = ref(true)

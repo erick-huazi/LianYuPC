@@ -306,7 +306,7 @@ import { truncateText } from '@/utils/text'
 import { useOpenSingleChat } from '@/composables/useOpenSingleChat'
 import AtmospherePanel from '@/components/AtmospherePanel.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -720,7 +720,7 @@ function typeLabel(type) {
 }
 
 function formatTime(iso) {
-  return formatFeedTime(iso, t)
+  return formatFeedTime(iso, t, locale.value)
 }
 
 function goChat(post) {

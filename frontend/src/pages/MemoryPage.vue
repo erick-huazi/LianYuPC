@@ -107,7 +107,7 @@ import { listMemories, getMemory, deleteMemory } from '@/api/memory'
 import { Loading, Collection, ArrowDown, ArrowRight, RefreshRight, Delete, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
-import { dateLocaleForUi } from '@/utils/dateLocale'
+import { formatSmartTime } from '@/utils/feedTime'
 
 const { t, locale } = useI18n()
 const charactersStore = useCharactersStore()
@@ -185,15 +185,11 @@ async function confirmDeleteMem(mem) {
 }
 
 function formatDate(ts) {
-  if (!ts) return ''
-  return new Date(ts).toLocaleDateString(dateLocaleForUi(locale.value), {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  })
+  return formatSmartTime(ts, { t, locale: locale.value })
 }
 
 function formatTime(ts) {
-  if (!ts) return ''
-  return new Date(ts).toLocaleTimeString(dateLocaleForUi(locale.value), { hour: '2-digit', minute: '2-digit' })
+  return formatSmartTime(ts, { t, locale: locale.value })
 }
 </script>
 

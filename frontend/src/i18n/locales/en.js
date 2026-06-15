@@ -313,6 +313,7 @@ export default {
     today: 'Today',
     yesterdayLabel: 'Yesterday',
     yesterday: 'Yesterday {time}',
+    dateTime: '{month}/{day} {time}',
     commentCount: '{n} comments',
     moreComments: '{n} more comments',
     addComment: 'Comment',

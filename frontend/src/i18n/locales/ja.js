@@ -307,6 +307,7 @@ export default {
     today: '今日',
     yesterdayLabel: '昨日',
     yesterday: '昨日 {time}',
+    dateTime: '{month}月{day}日 {time}',
     commentCount: 'コメント {n}件',
     moreComments: '他 {n}件',
     addComment: 'コメント',

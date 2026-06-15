@@ -69,6 +69,7 @@ export default {
     today: '今天',
     yesterdayLabel: '昨天',
     yesterday: '昨天 {time}',
+    dateTime: '{month}月{day}日 {time}',
     commentCount: '{n} 則評論',
     moreComments: '還有 {n} 則評論',
     addComment: '寫評論',

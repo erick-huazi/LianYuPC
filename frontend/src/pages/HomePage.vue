@@ -161,7 +161,7 @@ import { useOpenSingleChat } from '@/composables/useOpenSingleChat'
 import AtmospherePanel from '@/components/AtmospherePanel.vue'
 import EmotionBadge from '@/components/EmotionBadge.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const userStore = useUserStore()
 const charactersStore = useCharactersStore()
@@ -293,7 +293,7 @@ async function loadFeedPreview() {
 }
 
 function formatFeedItemTime(iso) {
-  return formatFeedTime(iso, t)
+  return formatFeedTime(iso, t, locale.value)
 }
 
 function openFeedItem(item) {

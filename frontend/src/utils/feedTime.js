@@ -1,3 +1,5 @@
+import { dateLocaleForUi } from '@/utils/dateLocale'
+
 /**
  * API returns LocalDateTime without offset (Asia/Shanghai business time).
  */
@@ -13,32 +15,67 @@ export function parseFeedDateTime(iso) {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+function resolveDate(input) {
+  if (input == null || input === '') return null
+  if (typeof input === 'number') {
+    const d = new Date(input)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  return parseFeedDateTime(input) ?? (() => {
+    const d = new Date(input)
+    return Number.isNaN(d.getTime()) ? null : d
+  })()
+}
+
+function formatClock(d, locale) {
+  const loc = dateLocaleForUi(locale) || 'zh-CN'
+  return d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 /**
- * Relative / friendly timestamps for social feed surfaces.
+ * WeChat-style timestamps: today HH:mm, yesterday 昨天 HH:mm, older M月D日 HH:mm.
  */
-export function formatFeedTime(iso, t) {
-  const d = parseFeedDateTime(iso)
-  if (!d) return iso || ''
+export function formatSmartTime(input, { t, locale } = {}) {
+  const d = resolveDate(input)
+  if (!d) return typeof input === 'string' ? input : ''
 
   const now = new Date()
-  const sameDay = d.toDateString() === now.toDateString()
-  if (sameDay) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const time = formatClock(d, locale)
+
+  if (d.toDateString() === now.toDateString()) {
+    return time
   }
 
   const yesterday = new Date(now)
   yesterday.setDate(yesterday.getDate() - 1)
   if (d.toDateString() === yesterday.toDateString()) {
-    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    return t ? t('feed.yesterday', { time }) : `Yesterday ${time}`
+    return t ? t('feed.yesterday', { time }) : `昨天 ${time}`
   }
 
-  return d.toLocaleString([], {
-    month: 'short',
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  if (t) {
+    return t('feed.dateTime', { month, day, time })
+  }
+
+  const loc = dateLocaleForUi(locale) || 'zh-CN'
+  if (loc.startsWith('zh')) {
+    return `${month}月${day}日 ${time}`
+  }
+  return d.toLocaleString(loc, {
+    month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    hour12: false,
   })
+}
+
+/**
+ * Relative / friendly timestamps for social feed surfaces.
+ */
+export function formatFeedTime(iso, t, locale) {
+  return formatSmartTime(iso, { t, locale })
 }
 
 export function formatFeedDateLabel(iso, t) {

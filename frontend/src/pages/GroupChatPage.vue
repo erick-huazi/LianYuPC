@@ -310,7 +310,7 @@ import { Plus, ChatDotRound, ArrowLeft, ArrowDown, User, UserFilled, Promotion, 
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
 import { humanizeError } from '@/utils/errorMessage'
-import { dateLocaleForUi } from '@/utils/dateLocale'
+import { formatSmartTime } from '@/utils/feedTime'
 import { resolveGroupDisplayTitle } from '@/utils/groupTitle'
 import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
 import AssistantMessageContent from '@/components/AssistantMessageContent.vue'
@@ -831,9 +831,7 @@ function parseMessageTime(msg) {
 }
 
 function formatTimeDivider(ms) {
-  const d = new Date(ms)
-  const loc = dateLocaleForUi(locale.value)
-  return d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false })
+  return formatSmartTime(ms, { t, locale: locale.value })
 }
 
 function isUserMessage(msg) {

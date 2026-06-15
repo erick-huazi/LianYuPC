@@ -241,7 +241,7 @@ import { setActiveChatConversationId, setActiveChatRefreshHandler } from '@/comp
 import { splitAssistantReply, resolveMaxRepliesPerTurn } from '@/utils/assistantReplySplit'
 import { getElectronAPI } from '@/utils/electron'
 import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
-import { dateLocaleForUi } from '@/utils/dateLocale'
+import { formatSmartTime } from '@/utils/feedTime'
 import AssistantMessageContent from '@/components/AssistantMessageContent.vue'
 import { stripInnerThoughts, resolveShowInnerThoughts } from '@/utils/innerThoughtFilter'
 
@@ -1020,15 +1020,11 @@ function parseMessageTime(msg) {
 }
 
 function formatTimeDivider(ms) {
-  const d = new Date(ms)
-  const loc = dateLocaleForUi(locale.value)
-  return d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false })
+  return formatSmartTime(ms, { t, locale: locale.value })
 }
 
 function formatTime(ts) {
-  if (!ts) return ''
-  const d = new Date(ts)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return formatSmartTime(ts, { t, locale: locale.value })
 }
 </script>
 
