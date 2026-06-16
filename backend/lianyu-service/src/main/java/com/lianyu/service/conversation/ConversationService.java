@@ -715,7 +715,7 @@ public class ConversationService {
         return dto;
     }
 
-    private record PreparedUserTurn(Message userMsg, String memoryQuery, String aiUserContent, String rawLanguageSample) {}
+    private record PreparedUserTurn(Message userMsg, String aiUserContent, String rawLanguageSample) {}
 
     private PreparedUserTurn prepareUserTurn(Long conversationId,
                                              Long characterId,
@@ -743,9 +743,8 @@ public class ConversationService {
             request.setModelContentForAi(aiUserContent);
         }
 
-        String memoryQuery = hasImage && text.isBlank() ? "用户发送了一张图片" : aiUserContent;
         String rawLanguageSample = hasImage && text.isBlank() ? "用户发送了一张图片" : text;
-        return new PreparedUserTurn(userMsg, memoryQuery, aiUserContent, rawLanguageSample);
+        return new PreparedUserTurn(userMsg, aiUserContent, rawLanguageSample);
     }
 
     private AiChatRequest buildChatRequest(SendMessageRequest request,
