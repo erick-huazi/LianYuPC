@@ -3,7 +3,6 @@
     <router-link
       to="/app"
       class="header-brand"
-      :class="{ 'header-brand--window-drag': isElectron }"
     >
       <img :src="APP_LOGO" alt="LianYu" class="header-logo" />
       <span class="header-wordmark">LianYu</span>
@@ -117,9 +116,8 @@ import { useI18n } from 'vue-i18n'
 import { APP_LOGO } from '@/constants/brand.js'
 import { resolveMediaUrl } from '@/utils/media'
 import { useNotificationNavigation } from '@/composables/useNotificationNavigation'
-import { isElectronRuntime } from '@/utils/runtime'
 
-const isElectron = isElectronRuntime()
+const router = useRouter()
 const userStore = useUserStore()
 const notificationsStore = useNotificationsStore()
 const { t } = useI18n()
@@ -178,11 +176,6 @@ async function handleUserMenu(command) {
   border-bottom: 1px solid rgba($color-pink-rgb, 0.1);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   overflow: visible;
-  -webkit-app-region: no-drag;
-}
-
-.header-brand--window-drag {
-  -webkit-app-region: drag;
 }
 
 .header-brand,

@@ -566,6 +566,7 @@ public class MomentsCommentOrchestrator {
         user.setContent(instruction);
         messages.add(user);
         req.setMessages(messages);
+        req.setExpectedLanguage(lang);
 
         try {
             ChatResult result = aiChatService.chatBlocking(userId, req);

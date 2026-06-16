@@ -24,4 +24,7 @@ public class AiChatRequest {
 
     /** 角色 settings，供 get_weather 等解析默认城市 */
     private Map<String, Object> toolCharacterSettings;
+
+    /** 期望的回复语言（zh / zh-TW / ja / en）；非空时启用输出语言门控 */
+    private String expectedLanguage;
 }

@@ -137,6 +137,7 @@ body.electron-app {
     box-shadow: none;
     border-bottom: 1px solid rgba($color-pink-rgb, 0.08);
     z-index: 10001;
+    -webkit-app-region: drag;
   }
 
   .gal-header {
@@ -181,7 +182,6 @@ body.electron-app {
   right: var(--electron-caption-controls-width);
   height: var(--electron-caption-height);
   z-index: 9999;
-  pointer-events: none;
   -webkit-app-region: drag;
 }
 

@@ -57,6 +57,29 @@ public class OutputLanguageService {
         return cached != null && !cached.isBlank();
     }
 
+    /**
+     * 判断模型输出是否符合期望语言（仅分类，不修改文本）。
+     */
+    public boolean matchesExpected(String content, String expectedLangCode) {
+        if (content == null || content.isBlank()) {
+            return true;
+        }
+        if (expectedLangCode == null || expectedLangCode.isBlank()) {
+            return true;
+        }
+        OutputLanguage expected = OutputLanguage.fromCode(expectedLangCode);
+        OutputLanguage detected = detectFromText(content);
+        return languageMatches(expected, detected);
+    }
+
+    private static boolean languageMatches(OutputLanguage expected, OutputLanguage detected) {
+        return switch (expected) {
+            case ZH, ZH_TW -> detected == OutputLanguage.ZH || detected == OutputLanguage.ZH_TW;
+            case JA -> detected == OutputLanguage.JA;
+            case EN -> detected == OutputLanguage.EN;
+        };
+    }
+
     private static OutputLanguage detectFromText(String text) {
         int ja = 0;
         int en = 0;

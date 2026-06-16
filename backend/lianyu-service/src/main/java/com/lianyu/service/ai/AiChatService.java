@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lianyu.common.base.ErrorCode;
 import com.lianyu.common.constant.AiConstants;
 import com.lianyu.common.exception.BusinessException;
+import com.lianyu.common.i18n.OutputLanguage;
 import com.lianyu.common.util.CharacterSettingsUtils;
 import com.lianyu.common.util.OutboundUrlValidator;
 import com.lianyu.common.util.UserInputSanitizer;
@@ -17,6 +18,7 @@ import com.lianyu.service.dto.VaultEntryResponse;
 import com.lianyu.service.rules.PromptRuleEngine;
 import com.lianyu.service.rules.PromptRuleSlot;
 import com.lianyu.service.rules.PromptRuleContext;
+import com.lianyu.service.support.OutputLanguageService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.tools.ChatToolContext;
 import com.lianyu.service.tools.ToolManager;
@@ -76,6 +78,7 @@ public class AiChatService {
     private final CircuitBreaker circuitBreaker;
     private final ScheduledExecutorService scheduler;
     private final PromptRuleEngine promptRuleEngine;
+    private final OutputLanguageService outputLanguageService;
 
     @Value("${spring.ai.openai.chat.options.model:}")
     private String defaultModel;
@@ -107,6 +110,8 @@ public class AiChatService {
     private static final Duration EMPTY_CACHE_BASE_TTL = Duration.ofMinutes(2);
     private static final Duration CACHE_LOCK_TTL = Duration.ofSeconds(10);
     private static final String RESILIENCE_NAME = "ai-chat";
+    private static final int LANGUAGE_GATE_MAX_RETRIES = 2;
+
     public AiChatService(ApiKeyVaultService vaultService,
                          FileStorageService fileStorageService,
                          ToolManager toolManager,
@@ -116,7 +121,8 @@ public class AiChatService {
                          TimeLimiterRegistry timeLimiterRegistry,
                          CircuitBreakerRegistry circuitBreakerRegistry,
                          ScheduledExecutorService scheduler,
-                         PromptRuleEngine promptRuleEngine) {
+                         PromptRuleEngine promptRuleEngine,
+                         OutputLanguageService outputLanguageService) {
         this.vaultService = vaultService;
         this.fileStorageService = fileStorageService;
         this.toolManager = toolManager;
@@ -127,6 +133,7 @@ public class AiChatService {
         this.circuitBreaker = circuitBreakerRegistry.circuitBreaker(RESILIENCE_NAME);
         this.scheduler = scheduler;
         this.promptRuleEngine = promptRuleEngine;
+        this.outputLanguageService = outputLanguageService;
     }
 
     public SseEmitter chatStream(Long userId, AiChatRequest request) {
@@ -164,7 +171,27 @@ public class AiChatService {
                                 }
                             })
                             .doOnComplete(() -> {
-                                finishSseSuccess(emitter, contentBuffer.toString(), callback);
+                                try {
+                                    String finalContent = contentBuffer.toString();
+                                    String corrected = enforceExpectedLanguage(
+                                            userId,
+                                            request,
+                                            vault,
+                                            model,
+                                            chatModel,
+                                            finalContent);
+                                    if (corrected != null
+                                            && !corrected.equals(finalContent)
+                                            && !corrected.isBlank()) {
+                                        sendSseReplace(emitter, corrected);
+                                        finishSseSuccess(emitter, corrected, callback);
+                                        return;
+                                    }
+                                    finishSseSuccess(emitter, finalContent, callback);
+                                } catch (Exception e) {
+                                    log.error("SSE language correction failed", e);
+                                    finishSseSuccess(emitter, contentBuffer.toString(), callback);
+                                }
                             })
                             .onErrorResume(e -> {
                                 log.error("AI stream error", e);
@@ -209,6 +236,13 @@ public class AiChatService {
                                             throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR,
                                                     "对方没有回复内容，请重试");
                                         }
+                                        content = enforceExpectedLanguage(
+                                                userId,
+                                                request,
+                                                vault,
+                                                model,
+                                                chatModel,
+                                                content);
 
                                         ChatResult.ChatResultBuilder builder = ChatResult.builder().content(content);
                                         if (response.getMetadata() != null && response.getMetadata().getUsage() != null) {
@@ -898,6 +932,87 @@ public class AiChatService {
         Map<String, String> payload = new LinkedHashMap<>();
         payload.put("content", text);
         emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(payload)));
+    }
+
+    private void sendSseReplace(SseEmitter emitter, String text) throws IOException {
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("replace", text);
+        emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(payload)));
+    }
+
+    private String enforceExpectedLanguage(Long userId,
+                                           AiChatRequest request,
+                                           VaultEntryResponse vault,
+                                           String model,
+                                           ChatModel chatModel,
+                                           String content) {
+        String expected = request.getExpectedLanguage();
+        if (expected == null || expected.isBlank() || content == null || content.isBlank()) {
+            return content;
+        }
+        if (outputLanguageService.matchesExpected(content, expected)) {
+            return content;
+        }
+
+        String current = content;
+        List<MessageDto> retryMessages = copyMessageDtos(request.getMessages());
+        int retries = 0;
+        while (retries < LANGUAGE_GATE_MAX_RETRIES) {
+            log.info("Language gate retry {}: userId={}, expected={}", retries + 1, userId, expected);
+            appendLanguageCorrectionMessages(retryMessages, current, expected);
+            List<Message> messages = toSpringMessages(retryMessages);
+            Prompt prompt = buildPrompt(request, vault, messages);
+            ChatResponse response = chatModel.call(prompt);
+            String regenerated = extractStreamDelta(response);
+            if (regenerated == null || regenerated.isBlank()) {
+                break;
+            }
+            current = regenerated;
+            if (outputLanguageService.matchesExpected(current, expected)) {
+                return current;
+            }
+            retries++;
+        }
+        log.warn("Language gate exhausted retries: userId={}, expected={}", userId, expected);
+        return current;
+    }
+
+    private static List<MessageDto> copyMessageDtos(List<MessageDto> source) {
+        List<MessageDto> copy = new ArrayList<>();
+        if (source == null) {
+            return copy;
+        }
+        for (MessageDto dto : source) {
+            MessageDto item = new MessageDto();
+            item.setRole(dto.getRole());
+            item.setContent(dto.getContent());
+            item.setImageUrl(dto.getImageUrl());
+            copy.add(item);
+        }
+        return copy;
+    }
+
+    private static void appendLanguageCorrectionMessages(List<MessageDto> messages,
+                                                         String assistantContent,
+                                                         String expectedLang) {
+        MessageDto assistant = new MessageDto();
+        assistant.setRole("assistant");
+        assistant.setContent(assistantContent);
+        messages.add(assistant);
+
+        MessageDto correction = new MessageDto();
+        correction.setRole("user");
+        correction.setContent(buildLanguageCorrectionInstruction(expectedLang));
+        messages.add(correction);
+    }
+
+    private static String buildLanguageCorrectionInstruction(String expectedLang) {
+        return switch (OutputLanguage.fromCode(expectedLang)) {
+            case ZH -> "上一条回复用了英文，请用简体中文完整重写，意思不变，只改语言，不要解释。";
+            case ZH_TW -> "上一條回覆用了英文，請用繁體中文完整重寫，意思不變，只改語言，不要解釋。";
+            case JA -> "前の返信が英語になっていました。日本語で書き直してください。意味は変えず、言語だけ直してください。";
+            case EN -> "Your last reply was not in English. Please rewrite entirely in English without explanation.";
+        };
     }
 
     private void finishSseSuccess(SseEmitter emitter, String fullContent, StreamCallback callback) {

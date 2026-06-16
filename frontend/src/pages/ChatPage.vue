@@ -931,6 +931,9 @@ async function drainAssistantStream(response) {
         if (payload.content) {
           fullContent += payload.content
         }
+        if (payload.replace) {
+          fullContent = payload.replace
+        }
       } catch (e) {
         if (e instanceof SyntaxError) continue
         throw e

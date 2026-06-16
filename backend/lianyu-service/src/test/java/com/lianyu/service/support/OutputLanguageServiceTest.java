@@ -1,6 +1,8 @@
 package com.lianyu.service.support;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -52,5 +54,21 @@ class OutputLanguageServiceTest {
 
         assertEquals("en", service.resolveForRequest(1L,
                 "I am really tired today and want to talk about work stress only"));
+    }
+
+    @Test
+    void matchesExpected_acceptsChineseReplyWhenExpectingZh() {
+        assertTrue(service.matchesExpected("今天天气真好，要不要一起出去走走？", "zh"));
+    }
+
+    @Test
+    void matchesExpected_rejectsEnglishReplyWhenExpectingZh() {
+        assertFalse(service.matchesExpected(
+                "I am really tired today and want to talk about work stress only", "zh"));
+    }
+
+    @Test
+    void matchesExpected_acceptsMixedChineseWithSomeEnglish() {
+        assertTrue(service.matchesExpected("今天好累啊，just tired", "zh"));
     }
 }

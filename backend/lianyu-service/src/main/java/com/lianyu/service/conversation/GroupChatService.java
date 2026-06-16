@@ -275,6 +275,7 @@ public class GroupChatService {
         };
         allMsgs.add(buildUserMessage(proactiveInstruction + "\n\n最近气氛参考：" + warmHint));
         aiReq.setMessages(allMsgs);
+        aiReq.setExpectedLanguage(outputLang);
 
         try {
             ChatResult result = aiChatService.chatBlocking(userId, aiReq);
@@ -510,6 +511,7 @@ public class GroupChatService {
                 allMsgs.add(dto);
             }
             aiReq.setMessages(allMsgs);
+            aiReq.setExpectedLanguage(outputLang);
 
             ChatResult result = aiChatService.chatBlocking(userId, aiReq);
             String cleanedContent = sanitizeGroupReply(result.getContent(), character.getName(), members, nameMap);

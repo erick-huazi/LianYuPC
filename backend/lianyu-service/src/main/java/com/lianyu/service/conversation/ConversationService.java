@@ -232,6 +232,7 @@ public class ConversationService {
 
         AiChatRequest aiRequest = buildChatRequest(
                 request, character, systemPrompt, history, turn.userMsg().getId(), turn.aiUserContent());
+        aiRequest.setExpectedLanguage(outputLanguageService.resolveForRequest(userId, turn.memoryQuery()));
 
         ChatResult chatResult = aiChatService.chatBlocking(userId, aiRequest);
 
@@ -288,6 +289,7 @@ public class ConversationService {
 
         AiChatRequest aiRequest = buildChatRequest(
                 request, character, systemPrompt, history, turn.userMsg().getId(), turn.aiUserContent());
+        aiRequest.setExpectedLanguage(outputLanguageService.resolveForRequest(userId, turn.memoryQuery()));
 
         final Character streamCharacter = character;
         return aiChatService.chatStream(userId, aiRequest, (fullContent, error) -> {
