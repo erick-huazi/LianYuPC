@@ -53,6 +53,13 @@ def main() -> None:
 
     run(client, "cd /opt/lianyu && git pull origin main")
     run(client, "cd /opt/lianyu && docker compose up -d --build backend api-gateway", timeout=1200)
+    run(
+        client,
+        "cd /opt/lianyu && set -a && . ./.env && set +a && "
+        'docker exec lianyu-redis sh -c '
+        '"redis-cli -a \\"${REDIS_PASSWORD}\\" --scan --pattern \'lianyu:user:output_lang:*\' '
+        '| xargs -r redis-cli -a \\"${REDIS_PASSWORD}\\" del"',
+    )
     import time
     for attempt in range(12):
         _, stdout, _ = client.exec_command(
@@ -67,11 +74,6 @@ def main() -> None:
             time.sleep(15)
     else:
         raise SystemExit(56)
-    run(
-        client,
-        "docker exec lianyu-redis redis-cli --scan --pattern 'lianyu:user:output_lang:*' "
-        "| xargs -r docker exec -i lianyu-redis redis-cli del",
-    )
     run(client, "docker ps --format 'table {{.Names}}\\t{{.Status}}' | head -8")
 
     client.close()
