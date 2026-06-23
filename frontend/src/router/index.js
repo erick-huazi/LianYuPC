@@ -143,7 +143,7 @@ router.beforeEach(async (to, from, next) => {
   await readToken()
   const token = syncToken()
   const userStore = useUserStore()
-  const hasValidSession = !!(token && userStore.userId)
+  const hasValidSession = !!(token && userStore.isLoggedIn)
 
   if (to.meta.guest) {
     if (hasValidSession) {

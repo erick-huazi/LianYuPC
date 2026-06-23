@@ -1,7 +1,17 @@
 import { useUserStore } from '@/stores/user'
+import router from '@/router/index.js'
 
-/** 应用挂载前恢复并校验登录态，避免路由守卫在 token 解密完成前误判未登录 */
+const AUTO_ENTRY_PATHS = new Set(['/', '/login', '/register'])
+
+/** 应用挂载前恢复并校验登录态，有效凭证则跳过落地页直接进入主界面 */
 export async function bootstrapAuth(pinia) {
   const userStore = useUserStore(pinia)
-  return userStore.restoreSession()
+  const restored = await userStore.restoreSession()
+  if (restored) {
+    const hashPath = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
+    if (AUTO_ENTRY_PATHS.has(hashPath)) {
+      await router.replace('/app')
+    }
+  }
+  return restored
 }

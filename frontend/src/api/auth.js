@@ -22,8 +22,8 @@ export async function logout() {
   clearTokenStorage()
 }
 
-export function getProfile() {
-  return http.get('/auth/me')
+export function getProfile(config = {}) {
+  return http.get('/auth/me', config)
 }
 
 export function updateProfile(data) {
