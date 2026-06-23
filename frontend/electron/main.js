@@ -656,10 +656,48 @@ function showMainWindow(hash = '') {
 }
 
 const CAPTION_BAR_HEIGHT = 52
-const WIN_TITLE_BAR_OVERLAY = {
-  color: '#0a0a10',
-  symbolColor: '#d4d4d8',
-  height: CAPTION_BAR_HEIGHT,
+
+/** Windows 标题栏右侧系统按钮区背景 — 须与 AppHeader / 落地页顶栏一致 */
+const TITLE_BAR_PRESETS = {
+  dark: { color: '#0a0a10', symbolColor: '#d4d4d8' },
+  light: { color: '#ffffff', symbolColor: '#1a1a1e' },
+  landing: { color: '#06080f', symbolColor: '#e8eaef' },
+}
+
+let currentTitleBarPreset = 'dark'
+
+function resolveTitleBarOverlay(presetKey = currentTitleBarPreset) {
+  const preset = TITLE_BAR_PRESETS[presetKey] || TITLE_BAR_PRESETS.dark
+  return {
+    color: preset.color,
+    symbolColor: preset.symbolColor,
+    height: CAPTION_BAR_HEIGHT,
+  }
+}
+
+function applyTitleBarOverlayToWindow(win, presetKey = currentTitleBarPreset) {
+  if (process.platform !== 'win32' || !win || win.isDestroyed()) return
+  try {
+    win.setTitleBarOverlay(resolveTitleBarOverlay(presetKey))
+    pushCaptionMetrics(win)
+  } catch (e) {
+    log(`setTitleBarOverlay failed: ${e.message}`)
+  }
+}
+
+function applyTitleBarOverlayToAllWindows(presetKey) {
+  currentTitleBarPreset = presetKey in TITLE_BAR_PRESETS ? presetKey : 'dark'
+  applyTitleBarOverlayToWindow(mainWindow, currentTitleBarPreset)
+  for (const win of quickChatWindows.values()) {
+    applyTitleBarOverlayToWindow(win, currentTitleBarPreset)
+  }
+}
+
+function resolveTitleBarPresetKey({ surface, theme }) {
+  if (surface === 'landing' || surface === 'auth') {
+    return 'landing'
+  }
+  return theme === 'light' ? 'light' : 'dark'
 }
 
 function resolveCaptionMetrics(win) {
@@ -698,7 +736,7 @@ function buildCaptionWindowOptions() {
   if (process.platform === 'win32') {
     return {
       titleBarStyle: 'hidden',
-      titleBarOverlay: WIN_TITLE_BAR_OVERLAY,
+      titleBarOverlay: resolveTitleBarOverlay(currentTitleBarPreset),
     }
   }
   if (process.platform === 'darwin') {
@@ -1066,6 +1104,12 @@ function registerIpcHandlers() {
   ipcMain.handle('desktop:get-caption-metrics', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return resolveCaptionMetrics(win)
+  })
+
+  ipcMain.handle('desktop:set-title-bar-appearance', (_event, payload = {}) => {
+    const presetKey = resolveTitleBarPresetKey(payload)
+    applyTitleBarOverlayToAllWindows(presetKey)
+    return { ok: true, preset: presetKey }
   })
 
   ipcMain.handle('desktop:set-login-state', (_event, loggedIn) => {

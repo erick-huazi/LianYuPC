@@ -20,6 +20,7 @@ import { useUserStore } from '@/stores/user'
 import { useSettingsStore } from '@/stores/settings'
 import { isElectronRuntime } from '@/utils/runtime'
 import { getElectronAPI } from '@/utils/electron'
+import { syncElectronTitleBar } from '@/utils/electronCaption'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import ja from 'element-plus/es/locale/lang/ja'
 import en from 'element-plus/es/locale/lang/en'
@@ -37,8 +38,24 @@ const isLauncherSurface = computed(() => route.name === 'Launcher' || route.name
 const usesAppHeader = computed(() => route.path.startsWith('/app') || route.path.startsWith('/quick'))
 const pageTransitionName = computed(() => (isElectron ? '' : 'page'))
 const pageTransitionMode = computed(() => (isElectron ? undefined : 'out-in'))
-/** 主界面由 AppHeader 充当标题栏；仅营销/登录页保留顶部拖拽条 */
-const showElectronCaptionDrag = computed(() => isElectron && !isLauncherSurface.value && !usesAppHeader.value)
+const usesIntegratedCaption = computed(() => {
+  if (usesAppHeader.value) return true
+  const name = route.name
+  return name === 'Landing' || name === 'Login' || name === 'Register'
+})
+/** 主界面 / 落地页 / 登录注册由页面顶栏充当标题栏，不再单独顶出拖拽条 */
+const showElectronCaptionDrag = computed(() => (
+  isElectron && !isLauncherSurface.value && !usesIntegratedCaption.value
+))
+
+function syncElectronChrome() {
+  if (!isElectron) return
+  syncElectronTitleBar({
+    routeName: route.name,
+    routePath: route.path,
+    theme: settingsStore.theme,
+  })
+}
 
 function syncElectronCaptionClass(enabled) {
   document.body.classList.toggle('electron-app', !!enabled)
@@ -73,6 +90,7 @@ onMounted(async () => {
     }
     applyCaptionMetrics(metrics)
     api?.onCaptionMetrics?.(applyCaptionMetrics)
+    syncElectronChrome()
   }
 
   if (userStore.isLoggedIn && !userStore.userId) {
@@ -88,4 +106,9 @@ watch(isLauncherSurface, (launcher) => {
   if (!isElectron) return
   syncElectronCaptionClass(!launcher)
 })
+
+watch(
+  () => [route.name, route.path, settingsStore.theme],
+  () => syncElectronChrome(),
+)
 </script>

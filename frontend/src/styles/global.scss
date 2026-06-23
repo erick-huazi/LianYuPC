@@ -79,8 +79,10 @@ body.electron-app {
     box-sizing: border-box;
   }
 
-  /* 主界面 AppHeader 与系统标题栏同一行，不再额外顶出空白 */
-  &:has(.app-header) #app {
+  /* 主界面 / 落地页 / 登录注册顶栏与标题栏同一行，不再额外顶出空白 */
+  &:has(.app-header) #app,
+  &:has(.landing-nav) #app,
+  &:has(.auth-page) #app {
     padding-top: 0;
   }
 
@@ -97,14 +99,21 @@ body.electron-app {
     pointer-events: none;
   }
 
-  &:has(.app-header)::before {
+  &:has(.app-header)::before,
+  &:has(.landing-nav)::before,
+  &:has(.auth-page)::before {
     display: none;
   }
 
   /* fixed / sticky 顶栏需下移，且右侧为窗口控制按钮留白 */
   .landing-nav {
-    top: var(--electron-caption-height);
+    top: 0;
+    min-height: var(--electron-caption-height);
+    box-sizing: border-box;
     -webkit-app-region: drag;
+    background: rgba(6, 8, 15, 0.72);
+    backdrop-filter: blur(16px) saturate(1.15);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .landing-nav__inner,
@@ -185,7 +194,9 @@ body.electron-app {
   -webkit-app-region: drag;
 }
 
-body.electron-app:has(.app-header) .electron-caption-drag {
+body.electron-app:has(.app-header) .electron-caption-drag,
+body.electron-app:has(.landing-nav) .electron-caption-drag,
+body.electron-app:has(.auth-page) .electron-caption-drag {
   display: none;
 }
 

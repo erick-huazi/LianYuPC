@@ -412,7 +412,7 @@ function goRegister() {
 /* Nav */
 .landing-nav {
   position: fixed;
-  top: var(--electron-caption-height, 0px);
+  top: 0;
   left: 0;
   right: 0;
   z-index: 100;
