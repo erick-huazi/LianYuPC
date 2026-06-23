@@ -1,7 +1,7 @@
 <template>
   <el-popover
     placement="bottom-end"
-    :width="300"
+    :width="280"
     trigger="click"
     popper-class="theme-color-popover"
     @show="$emit('open')"
@@ -9,7 +9,7 @@
     <template #reference>
       <button class="theme-trigger" type="button" title="主题配色">
         <span class="theme-trigger__preview" aria-hidden="true">
-          <span class="swatch-bg" :style="{ background: settingsStore.backgroundColor }" />
+          <span class="swatch-mode" :class="{ 'is-light': settingsStore.theme === 'light' }" />
           <span class="swatch-accent" :style="{ background: settingsStore.accentColor }" />
         </span>
       </button>
@@ -17,55 +17,32 @@
 
     <div class="theme-panel">
       <p class="theme-panel-title">主题配色</p>
-      <p class="theme-panel-desc">背景偏冷 · 按钮偏暖，可分别调整</p>
+      <p class="theme-panel-desc">切换外观模式 · 调整强调色</p>
 
-      <p class="section-label">快捷组合</p>
-      <div class="combo-row">
+      <div class="mode-segment">
         <button
-          v-for="preset in THEME_PRESETS"
-          :key="preset.name"
           type="button"
-          class="combo-chip"
-          :class="{ active: isActiveCombo(preset) }"
-          :title="preset.name"
-          @click="settingsStore.applyThemePreset(preset.bg, preset.accent)"
+          class="mode-segment__btn"
+          :class="{ active: settingsStore.theme === 'dark' }"
+          @click="settingsStore.setAppearanceMode('dark')"
         >
-          <span class="chip-bg" :style="{ background: preset.bg }" />
-          <span class="chip-accent" :style="{ background: preset.accent }" />
-          <span class="chip-name">{{ preset.name }}</span>
+          <el-icon :size="16"><Moon /></el-icon>
+          <span>深色</span>
+        </button>
+        <button
+          type="button"
+          class="mode-segment__btn"
+          :class="{ active: settingsStore.theme === 'light' }"
+          @click="settingsStore.setAppearanceMode('light')"
+        >
+          <el-icon :size="16"><Sunny /></el-icon>
+          <span>浅色</span>
         </button>
       </div>
 
       <div class="section-block">
         <p class="section-label">
-          <span class="label-dot label-dot--cool" />背景 · 偏冷
-        </p>
-        <div class="preset-row">
-          <button
-            v-for="preset in BG_PRESETS"
-            :key="preset.color"
-            type="button"
-            class="preset-dot preset-dot--cool"
-            :class="{ active: isActiveBg(preset.color) }"
-            :title="preset.name"
-            :style="{ background: preset.color }"
-            @click="settingsStore.setBackgroundColor(preset.color)"
-          />
-        </div>
-        <div class="custom-row">
-          <el-color-picker
-            :model-value="settingsStore.backgroundColor"
-            color-format="hex"
-            :predefine="bgPredefine"
-            @change="onBgChange"
-          />
-          <span class="custom-hex">{{ settingsStore.backgroundColor }}</span>
-        </div>
-      </div>
-
-      <div class="section-block">
-        <p class="section-label">
-          <span class="label-dot label-dot--warm" />按钮 · 偏暖
+          <span class="label-dot label-dot--warm" />强调色
         </p>
         <div class="preset-row">
           <button
@@ -90,7 +67,7 @@
         </div>
       </div>
 
-      <el-button text size="small" class="btn-reset" @click="settingsStore.resetTheme">
+      <el-button text size="small" class="btn-reset" @click="settingsStore.resetAppearance">
         恢复默认
       </el-button>
     </div>
@@ -99,38 +76,18 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Moon, Sunny } from '@element-plus/icons-vue'
 import { useSettingsStore } from '@/stores/settings'
-import {
-  THEME_PRESETS,
-  BG_PRESETS,
-  ACCENT_PRESETS,
-  normalizeHex
-} from '@/utils/themeColor'
+import { ACCENT_PRESETS, normalizeHex } from '@/utils/themeColor'
 
 const settingsStore = useSettingsStore()
 
 defineEmits(['open'])
 
-const bgPredefine = computed(() => BG_PRESETS.map(p => p.color))
 const accentPredefine = computed(() => ACCENT_PRESETS.map(p => p.color))
-
-function isActiveBg(color) {
-  return normalizeHex(settingsStore.backgroundColor) === normalizeHex(color)
-}
 
 function isActiveAccent(color) {
   return normalizeHex(settingsStore.accentColor) === normalizeHex(color)
-}
-
-function isActiveCombo(preset) {
-  return (
-    isActiveBg(preset.bg) &&
-    isActiveAccent(preset.accent)
-  )
-}
-
-function onBgChange(val) {
-  if (val) settingsStore.setBackgroundColor(val)
 }
 
 function onAccentChange(val) {
@@ -167,10 +124,15 @@ function onAccentChange(val) {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
-.swatch-bg {
+.swatch-mode {
   flex: 1;
   min-width: 0;
+  background: #121820;
   pointer-events: none;
+
+  &.is-light {
+    background: #f7f7f9;
+  }
 }
 
 .swatch-accent {
@@ -193,6 +155,39 @@ function onAccentChange(val) {
   margin-bottom: $space-4;
 }
 
+.mode-segment {
+  display: flex;
+  padding: 3px;
+  margin-bottom: $space-4;
+  border-radius: $radius-md;
+  background: rgba(var(--ly-bg-surface-rgb), 0.5);
+  border: 1px solid rgba(var(--ly-accent-rgb), 0.08);
+  gap: 2px;
+}
+
+.mode-segment__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  padding: 6px 8px;
+  border-radius: calc(#{$radius-md} - 2px);
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  transition: all $transition-fast;
+
+  &:hover {
+    color: $color-text-primary;
+  }
+
+  &.active {
+    color: $color-text-primary;
+    background: rgba(var(--ly-accent-rgb), 0.12);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+}
+
 .section-label {
   display: flex;
   align-items: center;
@@ -209,62 +204,11 @@ function onAccentChange(val) {
   border-radius: $radius-full;
   flex-shrink: 0;
 
-  &--cool { background: #7a9ec4; }
   &--warm { background: #f4a6b5; }
 }
 
 .section-block {
   margin-bottom: $space-4;
-}
-
-.combo-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $space-2;
-  margin-bottom: $space-4;
-}
-
-.combo-chip {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 4px 8px 4px 4px;
-  border-radius: $radius-pill;
-  background: rgba(var(--ly-bg-surface-rgb), 0.6);
-  border: 1px solid rgba(var(--ly-accent-rgb), 0.1);
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  &:hover {
-    border-color: rgba(var(--ly-accent-rgb), 0.25);
-  }
-
-  &.active {
-    border-color: var(--ly-accent);
-    box-shadow: 0 0 0 1px rgba(var(--ly-accent-rgb), 0.2);
-  }
-}
-
-.chip-bg,
-.chip-accent {
-  width: 14px;
-  height: 14px;
-  display: inline-block;
-}
-
-.chip-bg {
-  border-radius: 4px 0 0 4px;
-}
-
-.chip-accent {
-  border-radius: 0 4px 4px 0;
-  margin-right: $space-2;
-}
-
-.chip-name {
-  font-size: 11px;
-  color: $color-text-secondary;
-  white-space: nowrap;
 }
 
 .preset-row {
@@ -286,10 +230,6 @@ function onAccentChange(val) {
 
   &.active {
     border-color: $color-text-primary;
-  }
-
-  &--cool.active {
-    box-shadow: 0 0 0 2px rgba(122, 158, 196, 0.45);
   }
 
   &--warm.active {

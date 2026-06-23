@@ -11,6 +11,17 @@
     <div class="header-actions">
       <LanguagePicker />
       <div class="header-guide-cluster">
+        <button
+          type="button"
+          class="header-btn header-btn--mode"
+          :title="settingsStore.theme === 'dark' ? '切换浅色模式' : '切换深色模式'"
+          @click="settingsStore.toggleAppearanceMode()"
+        >
+          <el-icon :size="18">
+            <Sunny v-if="settingsStore.theme === 'dark'" />
+            <Moon v-else />
+          </el-icon>
+        </button>
         <div class="theme-entry">
           <ThemeColorPicker @open="dismissThemeHint" />
         </div>
@@ -105,9 +116,10 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell, Lock, Setting, SwitchButton, User, UserFilled } from '@element-plus/icons-vue'
+import { Bell, Lock, Moon, Setting, Sunny, SwitchButton, User, UserFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useSettingsStore } from '@/stores/settings'
 import ThemeColorPicker from '@/components/ThemeColorPicker.vue'
 import LanguagePicker from '@/components/LanguagePicker.vue'
 import OnboardingHintBubble from '@/components/OnboardingHintBubble.vue'
@@ -120,6 +132,7 @@ import { useNotificationNavigation } from '@/composables/useNotificationNavigati
 const router = useRouter()
 const userStore = useUserStore()
 const notificationsStore = useNotificationsStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const { visible: showThemeHint, dismiss: dismissThemeHint } = useOnboardingHint('theme-color')
 const { navigateToNotification } = useNotificationNavigation()

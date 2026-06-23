@@ -16,6 +16,10 @@
   overflow: hidden;
 }
 
+:global(html:not(.dark)) .app-atmosphere {
+  display: none;
+}
+
 .app-atmosphere__mesh {
   position: absolute;
   inset: 0;

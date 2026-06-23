@@ -19,10 +19,15 @@ public class MemoryExtractionHeuristics {
     public record HeuristicMemory(String summary, MemoryType memoryType, Long sourceMsgId, double importance) {}
 
     public List<HeuristicMemory> extractAll(List<Message> messages) {
+        List<HeuristicMemory> profile = extractProfileFacts(messages);
+        List<HeuristicMemory> relationship = extractRelationshipMemories(messages);
+        Set<Long> covered = new LinkedHashSet<>();
+        covered.addAll(coveredMessageIds(profile));
+        covered.addAll(coveredMessageIds(relationship));
         List<HeuristicMemory> result = new ArrayList<>();
-        result.addAll(extractProfileFacts(messages));
-        result.addAll(extractRelationshipMemories(messages));
-        result.addAll(extractKeywordMemories(messages));
+        result.addAll(profile);
+        result.addAll(relationship);
+        result.addAll(extractKeywordMemories(messages, covered));
         return result;
     }
 
@@ -46,11 +51,14 @@ public class MemoryExtractionHeuristics {
             if (text.isEmpty()) {
                 continue;
             }
-            matchAndAdd(facts, msg.getId(), "姓名", text, "我叫([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "我叫\\s*([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "请叫我\\s*([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "以后(?:你|大家)?(?:可以)?叫我\\s*([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "(?i)(?:my name is|i am|i'm|call me)\\s+([\\p{L}A-Za-z0-9_·]{1,20})");
             matchAndAdd(facts, msg.getId(), "姓名", text, "我是([\\p{L}A-Za-z0-9_·]{1,20})");
-            matchAndAdd(facts, msg.getId(), "姓名", text, "现在(?:我)?叫([\\p{L}A-Za-z0-9_·]{1,20})");
-            matchAndAdd(facts, msg.getId(), "姓名", text, "改名(?:叫|为|成)([\\p{L}A-Za-z0-9_·]{1,20})");
-            matchAndAdd(facts, msg.getId(), "姓名", text, "名字(?:是|叫)([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "现在(?:我)?叫\\s*([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "改名(?:叫|为|成)\\s*([\\p{L}A-Za-z0-9_·]{1,20})");
+            matchAndAdd(facts, msg.getId(), "姓名", text, "名字(?:是|叫)\\s*([\\p{L}A-Za-z0-9_·]{1,20})");
             matchAndAdd(facts, msg.getId(), "爱好", text, "我喜欢([^，。！？；\\n]{1,30})");
             matchAndAdd(facts, msg.getId(), "忌口", text, "我不吃([^，。！？；\\n]{1,30})");
             matchAndAdd(facts, msg.getId(), "忌口", text, "我对([^，。！？；\\n]{1,30})过敏");
@@ -82,7 +90,17 @@ public class MemoryExtractionHeuristics {
             if (text.isEmpty()) {
                 continue;
             }
-            if (text.contains("只给你叫") || text.contains("以后你可以叫我") || text.contains("专属")) {
+            String ritualName = null;
+            Matcher ritualNameMatcher = Pattern.compile(
+                    "以后(?:你|大家)?(?:可以)?叫我\\s*([\\p{L}A-Za-z0-9_·]{1,20})").matcher(text);
+            if (ritualNameMatcher.find()) {
+                ritualName = normalizeFactValue(ritualNameMatcher.group(1));
+            }
+            if (text.contains("只给你叫") || ritualName != null || text.contains("专属")) {
+                if (ritualName != null && !ritualName.isBlank() && isValidFactValue(text, ritualName)) {
+                    result.add(new HeuristicMemory(
+                            profilePrefix("姓名") + ritualName, MemoryType.FACT, msg.getId(), 0.8));
+                }
                 result.add(new HeuristicMemory("你们形成了专属称呼锚点", MemoryType.RITUAL, msg.getId(), 0.75));
             }
             if (text.contains("我今天很崩溃") || text.contains("我有点难受") || text.contains("我有点害怕")
@@ -99,10 +117,14 @@ public class MemoryExtractionHeuristics {
         return result;
     }
 
-    public List<HeuristicMemory> extractKeywordMemories(List<Message> messages) {
+    public List<HeuristicMemory> extractKeywordMemories(List<Message> messages, Set<Long> coveredMsgIds) {
         List<HeuristicMemory> result = new ArrayList<>();
+        Set<Long> covered = coveredMsgIds != null ? coveredMsgIds : Set.of();
         for (Message msg : messages) {
             if (!"USER".equalsIgnoreCase(msg.getRole()) || msg.getContent() == null) {
+                continue;
+            }
+            if (msg.getId() != null && covered.contains(msg.getId())) {
                 continue;
             }
             String text = msg.getContent().trim();

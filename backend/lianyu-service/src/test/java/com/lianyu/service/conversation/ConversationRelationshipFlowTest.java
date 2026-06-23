@@ -89,7 +89,8 @@ class ConversationRelationshipFlowTest {
                 relationshipStateService,
                 proactiveUnrepliedThrottle,
                 timeTool,
-                sessionSummaryService);
+                sessionSummaryService,
+                mock(com.lianyu.service.character.CharacterRecentActivityService.class));
 
         Field contextWindow = ConversationService.class.getDeclaredField("contextWindow");
         contextWindow.setAccessible(true);

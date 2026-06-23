@@ -10,8 +10,7 @@ import {
 } from '@/constants/language'
 import {
   DEFAULT_ACCENT,
-  DEFAULT_BACKGROUND,
-  applyTheme,
+  applyAppearance,
   normalizeHex
 } from '@/utils/themeColor'
 
@@ -30,14 +29,23 @@ function loadChatBackgrounds() {
   }
 }
 
+function loadAppearanceMode() {
+  const saved = localStorage.getItem(STORAGE_THEME)
+  if (saved === 'light' || saved === 'dark') return saved
+  return 'dark'
+}
+
+function loadAccentColor() {
+  const savedAccent = normalizeHex(localStorage.getItem(STORAGE_ACCENT))
+  if (savedAccent) return savedAccent
+  localStorage.removeItem(STORAGE_BG)
+  return DEFAULT_ACCENT
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   const sidebarCollapsed = ref(localStorage.getItem(STORAGE_SIDEBAR) === 'collapsed')
-  const theme = ref(localStorage.getItem(STORAGE_THEME) || 'dark')
-
-  const savedAccent = normalizeHex(localStorage.getItem(STORAGE_ACCENT))
-  const savedBg = normalizeHex(localStorage.getItem(STORAGE_BG))
-  const accentColor = ref(savedAccent || DEFAULT_ACCENT)
-  const backgroundColor = ref(savedBg || DEFAULT_BACKGROUND)
+  const theme = ref(loadAppearanceMode())
+  const accentColor = ref(loadAccentColor())
 
   const uiLanguage = ref(
     normalizeLanguage(localStorage.getItem(STORAGE_UI_LANGUAGE), DEFAULT_UI_LANGUAGE)
@@ -51,24 +59,30 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(STORAGE_SIDEBAR, val ? 'collapsed' : 'expanded')
   })
 
-  watch(theme, val => {
-    localStorage.setItem(STORAGE_THEME, val)
-    document.documentElement.classList.toggle('dark', val === 'dark')
-  })
-
   function persistAndApply() {
-    const bg = normalizeHex(backgroundColor.value)
     const accent = normalizeHex(accentColor.value)
-    if (!bg || !accent) return
-    localStorage.setItem(STORAGE_BG, bg)
+    if (!accent) return
     localStorage.setItem(STORAGE_ACCENT, accent)
-    applyTheme(bg, accent)
+    applyAppearance(theme.value, accent)
   }
 
-  watch([backgroundColor, accentColor], persistAndApply)
+  watch(theme, val => {
+    localStorage.setItem(STORAGE_THEME, val)
+    persistAndApply()
+  })
+
+  watch(accentColor, persistAndApply)
 
   function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+
+  function setAppearanceMode(mode) {
+    theme.value = mode === 'light' ? 'light' : 'dark'
+  }
+
+  function toggleAppearanceMode() {
+    setAppearanceMode(theme.value === 'dark' ? 'light' : 'dark')
   }
 
   function setAccentColor(color) {
@@ -76,29 +90,16 @@ export const useSettingsStore = defineStore('settings', () => {
     if (normalized) accentColor.value = normalized
   }
 
-  function setBackgroundColor(color) {
-    const normalized = normalizeHex(color)
-    if (normalized) backgroundColor.value = normalized
-  }
-
-  function applyThemePreset(bg, accent) {
-    const normalizedBg = normalizeHex(bg)
-    const normalizedAccent = normalizeHex(accent)
-    if (normalizedBg) backgroundColor.value = normalizedBg
-    if (normalizedAccent) accentColor.value = normalizedAccent
-  }
-
-  function resetTheme() {
-    backgroundColor.value = DEFAULT_BACKGROUND
+  function resetAppearance() {
+    theme.value = 'dark'
     accentColor.value = DEFAULT_ACCENT
-    localStorage.removeItem(STORAGE_BG)
     localStorage.removeItem(STORAGE_ACCENT)
-    applyTheme(DEFAULT_BACKGROUND, DEFAULT_ACCENT)
+    localStorage.removeItem(STORAGE_BG)
+    applyAppearance('dark', DEFAULT_ACCENT)
   }
 
-  function initTheme() {
-    document.documentElement.classList.toggle('dark', theme.value === 'dark')
-    applyTheme(backgroundColor.value, accentColor.value)
+  function initAppearance() {
+    applyAppearance(theme.value, accentColor.value)
   }
 
   function initLanguage() {
@@ -150,21 +151,22 @@ export const useSettingsStore = defineStore('settings', () => {
     sidebarCollapsed,
     theme,
     accentColor,
-    backgroundColor,
     uiLanguage,
     modelOutputLanguage,
     toggleSidebar,
+    setAppearanceMode,
+    toggleAppearanceMode,
     setAccentColor,
-    setBackgroundColor,
-    applyThemePreset,
-    resetTheme,
-    initTheme,
+    resetAppearance,
+    initAppearance,
     initLanguage,
     setUiLanguage,
     setModelOutputLanguage,
     getChatBackground,
     setChatBackground,
-    /** @deprecated */
-    resetAccentColor: resetTheme
+    /** @deprecated use resetAppearance */
+    resetAccentColor: resetAppearance,
+    /** @deprecated use initAppearance */
+    initTheme: initAppearance
   }
 })
