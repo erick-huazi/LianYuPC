@@ -14,7 +14,7 @@ $color-pink-light: var(--ly-accent-light, #f8c8d8);
 $color-pink-dark: var(--ly-accent-dark, #d48494);
 $color-pink-muted: var(--ly-accent-muted, #6b4a52);
 $color-pink-glow: var(--ly-accent-glow, rgba(244, 166, 181, 0.2));
-$color-pink-rgb: var(--ly-accent-rgb);
+$color-pink-rgb: var(--ly-accent-rgb, 244, 166, 181);
 
 // Text
 $color-text-primary: var(--ly-text-primary, #e8edf2);

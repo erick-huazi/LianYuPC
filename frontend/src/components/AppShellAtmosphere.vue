@@ -1,11 +1,19 @@
 <template>
-  <div class="app-atmosphere" aria-hidden="true">
+  <div v-if="isDark" class="app-atmosphere" aria-hidden="true">
     <div class="app-atmosphere__mesh" />
     <div class="app-atmosphere__orb app-atmosphere__orb--a" />
     <div class="app-atmosphere__orb app-atmosphere__orb--b" />
     <div class="app-atmosphere__grain" />
   </div>
 </template>
+
+<script setup>
+import { computed } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
+
+const settingsStore = useSettingsStore()
+const isDark = computed(() => settingsStore.theme === 'dark')
+</script>
 
 <style lang="scss" scoped>
 .app-atmosphere {
@@ -14,10 +22,6 @@
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
-}
-
-:global(html:not(.dark)) .app-atmosphere {
-  display: none;
 }
 
 .app-atmosphere__mesh {

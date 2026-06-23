@@ -10,6 +10,7 @@ import {
 } from '@/constants/language'
 import {
   DEFAULT_ACCENT,
+  DEFAULT_BACKGROUND,
   applyAppearance,
   normalizeHex
 } from '@/utils/themeColor'
@@ -37,8 +38,11 @@ function loadAppearanceMode() {
 
 function loadAccentColor() {
   const savedAccent = normalizeHex(localStorage.getItem(STORAGE_ACCENT))
-  if (savedAccent) return savedAccent
+  if (savedAccent && savedAccent !== DEFAULT_BACKGROUND) {
+    return savedAccent
+  }
   localStorage.removeItem(STORAGE_BG)
+  localStorage.setItem(STORAGE_ACCENT, DEFAULT_ACCENT)
   return DEFAULT_ACCENT
 }
 
@@ -60,8 +64,10 @@ export const useSettingsStore = defineStore('settings', () => {
   })
 
   function persistAndApply() {
-    const accent = normalizeHex(accentColor.value)
-    if (!accent) return
+    const accent = normalizeHex(accentColor.value) || DEFAULT_ACCENT
+    if (accent !== accentColor.value) {
+      accentColor.value = accent
+    }
     localStorage.setItem(STORAGE_ACCENT, accent)
     applyAppearance(theme.value, accent)
   }
