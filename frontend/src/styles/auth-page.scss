@@ -33,6 +33,20 @@
   pointer-events: none;
 }
 
+body.electron-app .auth-page::before {
+  right: var(--electron-caption-controls-width, 0px);
+  -webkit-app-region: drag;
+  pointer-events: auto;
+}
+
+body.electron-app .auth-page .auth-container,
+body.electron-app .auth-page .auth-page__mesh,
+body.electron-app .auth-page .auth-page__grain,
+body.electron-app .auth-page .auth-page__grid,
+body.electron-app .auth-page .bg-orb {
+  -webkit-app-region: no-drag;
+}
+
 .auth-page__mesh {
   position: fixed;
   inset: 0;

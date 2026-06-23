@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notifyProactiveMessage: (payload) => ipcRenderer.invoke('desktop:notify-proactive-message', payload),
   getCaptionBarHeight: () => ipcRenderer.invoke('desktop:get-caption-height'),
   getCaptionMetrics: () => ipcRenderer.invoke('desktop:get-caption-metrics'),
+  setTitleBarAppearance: (payload) => ipcRenderer.invoke('desktop:set-title-bar-appearance', payload),
   onCaptionMetrics: (callback) => {
     const handler = (_event, metrics) => callback(metrics)
     ipcRenderer.on('desktop:caption-metrics', handler)
