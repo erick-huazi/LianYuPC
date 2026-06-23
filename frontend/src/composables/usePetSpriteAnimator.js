@@ -89,6 +89,20 @@ export function usePetSpriteAnimator(canvasRef) {
     renderFrame()
   }
 
+  /** 先用单帧 idle0 占位，spritesheet 解码完成后再切 setSpriteImage */
+  function setIdleFrame(url) {
+    if (!url) return
+    setupCanvasSize()
+    const img = new Image()
+    img.onload = () => {
+      const context = ensureCtx()
+      if (!context) return
+      context.clearRect(0, 0, PET_FRAME_W, PET_FRAME_H)
+      context.drawImage(img, 0, 0, PET_FRAME_W, PET_FRAME_H)
+    }
+    img.src = url
+  }
+
   function playAnim(name, { loop, onComplete } = {}) {
     const def = PET_ANIMATIONS[name]
     if (!def) return
@@ -165,5 +179,5 @@ export function usePetSpriteAnimator(canvasRef) {
     ctx = null
   })
 
-  return { playAnim, playAnimOnce, returnToIdle, setSpriteImage }
+  return { playAnim, playAnimOnce, returnToIdle, setSpriteImage, setIdleFrame }
 }

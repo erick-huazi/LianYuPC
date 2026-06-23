@@ -9,7 +9,10 @@ import com.lianyu.dao.entity.SquareComment;
 import com.lianyu.dao.mapper.CharacterSquareTemplateMapper;
 import com.lianyu.dao.mapper.SquareCommentMapper;
 import com.lianyu.service.dto.SquareCommentResponse;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,37 @@ public class SquareCommentService {
         return rows.stream()
                 .map(row -> toResponse(row, viewerUserId))
                 .toList();
+    }
+
+    public Map<Long, List<SquareCommentResponse>> listByTemplateIds(
+            List<Long> templateIds, Long viewerUserId) {
+        if (templateIds == null || templateIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = templateIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .limit(50)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<SquareComment> rows = squareCommentMapper.selectList(
+                new LambdaQueryWrapper<SquareComment>()
+                        .in(SquareComment::getTemplateId, ids)
+                        .orderByDesc(SquareComment::getCreatedAt));
+        Map<Long, List<SquareCommentResponse>> grouped = new LinkedHashMap<>();
+        for (Long id : ids) {
+            grouped.put(id, new ArrayList<>());
+        }
+        for (SquareComment row : rows) {
+            List<SquareCommentResponse> bucket = grouped.get(row.getTemplateId());
+            if (bucket == null || bucket.size() >= MAX_LIST) {
+                continue;
+            }
+            bucket.add(toResponse(row, viewerUserId));
+        }
+        return grouped;
     }
 
     @Transactional

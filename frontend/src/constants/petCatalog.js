@@ -188,6 +188,11 @@ export function getPetPreviewUrl(pet) {
   return resolveStaticAsset(pet.preview)
 }
 
+export function getPetIdleUrl(petId) {
+  const pet = getPetById(petId)
+  return getPetPreviewUrl(pet)
+}
+
 export function getPetPersona(pet) {
   return pet?.persona || ''
 }

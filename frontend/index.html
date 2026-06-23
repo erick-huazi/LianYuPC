@@ -7,9 +7,55 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; media-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
     <title>LianYu - 恋语</title>
     <script src="/theme-boot.js"></script>
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--boot-bg, #0a0a10);
+        color: var(--boot-text, #e8edf2);
+      }
+      #app-boot {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.25rem;
+        font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+      }
+      #app-boot__logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(244, 166, 181, 0.25);
+      }
+      #app-boot__title {
+        margin: 0;
+        font-size: 1.125rem;
+        letter-spacing: 0.18em;
+        font-weight: 600;
+      }
+      #app-boot__spinner {
+        width: 28px;
+        height: 28px;
+        border: 2px solid rgba(244, 166, 181, 0.18);
+        border-top-color: var(--boot-accent, #f4a6b5);
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="app-boot" aria-hidden="true">
+        <img id="app-boot__logo" src="/logo.png" alt="" />
+        <p id="app-boot__title">LianYu</p>
+        <div id="app-boot__spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

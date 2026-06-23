@@ -1,6 +1,7 @@
 package com.lianyu.service.storage;
 
 import com.lianyu.common.util.ImageUploadValidator;
+import com.lianyu.storage.minio.MinioImageProcessor;
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
 import io.minio.MinioClient;
@@ -31,6 +32,8 @@ public class FileStorageService {
     private static final String AVATAR_PATH = "avatars/";
     private static final String CHAT_IMAGE_PATH = "chat-images/";
     private static final String SQUARE_AVATAR_PATH = "square-avatars/";
+    private static final String SQUARE_AVATAR_THUMB_PATH = "square-avatars-thumb/";
+    private static final int SQUARE_AVATAR_THUMB_SIZE = 296;
     private static final long AVATAR_MAX_BYTES = ImageUploadValidator.MAX_BYTES;
     private static final String AVATAR_CONTENT_TYPE = "image/png";
     private static final long CHAT_IMAGE_MAX_BYTES = 5L * 1024 * 1024;
@@ -38,7 +41,7 @@ public class FileStorageService {
             "image/jpeg", "image/png", "image/webp", "image/gif"
     );
     private static final Pattern SAFE_OBJECT_KEY = Pattern.compile(
-            "^(avatars/[a-zA-Z0-9._-]+|chat-images/[a-zA-Z0-9._-]+|square-avatars/[a-z0-9._-]+)$"
+            "^(avatars/[a-zA-Z0-9._-]+|chat-images/[a-zA-Z0-9._-]+|square-avatars/[a-z0-9._-]+|square-avatars-thumb/[a-z0-9._-]+)$"
     );
 
     public String uploadAvatar(MultipartFile file) {
@@ -173,12 +176,94 @@ public class FileStorageService {
                             .contentType(contentType != null ? contentType : "image/jpeg")
                             .build()
             );
+            uploadSquareAvatarThumbIfMissing(slug, bytes);
             log.info("Square avatar uploaded: slug={} -> {}", slug, objectName);
             return objectName;
         } catch (Exception e) {
             log.error("Square avatar upload failed: slug={}", slug, e);
             throw new com.lianyu.common.exception.BusinessException(
                     com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "广场头像上传失败，请稍后再试");
+        }
+    }
+
+    /** 根据原图 object key 推断缩略图 key（统一为 .jpg） */
+    public String resolveSquareAvatarThumbObjectKey(String avatarObjectKey) {
+        if (avatarObjectKey == null || !avatarObjectKey.startsWith(SQUARE_AVATAR_PATH)) {
+            return null;
+        }
+        String base = avatarObjectKey.substring(SQUARE_AVATAR_PATH.length());
+        int dot = base.lastIndexOf('.');
+        String slugPart = dot >= 0 ? base.substring(0, dot) : base;
+        return SQUARE_AVATAR_THUMB_PATH + slugPart + ".jpg";
+    }
+
+    public String resolveSquareAvatarThumbPublicUrl(String storedAvatar) {
+        String objectKey = extractObjectKey(storedAvatar);
+        if (objectKey == null || !objectKey.startsWith(SQUARE_AVATAR_PATH)) {
+            return resolvePublicUrl(storedAvatar);
+        }
+        String thumbKey = resolveSquareAvatarThumbObjectKey(objectKey);
+        if (thumbKey != null && objectExists(thumbKey)) {
+            return toPublicUrl(thumbKey);
+        }
+        return resolvePublicUrl(storedAvatar);
+    }
+
+    /** 启动同步 / 回填：原图存在但缩略图缺失时补生成 */
+    public boolean ensureSquareAvatarThumb(String avatarObjectKey) {
+        if (avatarObjectKey == null || avatarObjectKey.isBlank()) {
+            return false;
+        }
+        String objectKey = extractObjectKey(avatarObjectKey);
+        if (objectKey == null || !objectKey.startsWith(SQUARE_AVATAR_PATH)) {
+            return false;
+        }
+        String thumbKey = resolveSquareAvatarThumbObjectKey(objectKey);
+        if (thumbKey == null || objectExists(thumbKey)) {
+            return false;
+        }
+        try {
+            byte[] source = readObjectBytes(objectKey);
+            uploadSquareAvatarThumbFromSource(objectKey, source);
+            return true;
+        } catch (Exception e) {
+            log.warn("Square avatar thumb backfill failed for {}: {}", objectKey, e.getMessage());
+            return false;
+        }
+    }
+
+    private void uploadSquareAvatarThumbIfMissing(String slug, byte[] sourceBytes) {
+        String thumbKey = SQUARE_AVATAR_THUMB_PATH + slug + ".jpg";
+        if (objectExists(thumbKey)) {
+            return;
+        }
+        uploadSquareAvatarThumbBytes(thumbKey, sourceBytes);
+    }
+
+    private void uploadSquareAvatarThumbFromSource(String avatarObjectKey, byte[] sourceBytes) {
+        String thumbKey = resolveSquareAvatarThumbObjectKey(avatarObjectKey);
+        if (thumbKey == null) {
+            return;
+        }
+        uploadSquareAvatarThumbBytes(thumbKey, sourceBytes);
+    }
+
+    private void uploadSquareAvatarThumbBytes(String thumbKey, byte[] sourceBytes) {
+        byte[] thumbBytes = MinioImageProcessor.cropSquareThumb(sourceBytes, SQUARE_AVATAR_THUMB_SIZE);
+        try {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(minioConfig.getBucket())
+                            .object(thumbKey)
+                            .stream(new java.io.ByteArrayInputStream(thumbBytes), thumbBytes.length, -1)
+                            .contentType("image/jpeg")
+                            .build()
+            );
+            log.info("Square avatar thumb uploaded: {}", thumbKey);
+        } catch (Exception e) {
+            log.error("Square avatar thumb upload failed: {}", thumbKey, e);
+            throw new com.lianyu.common.exception.BusinessException(
+                    com.lianyu.common.base.ErrorCode.UPLOAD_FAILED, "广场头像缩略图生成失败");
         }
     }
 
@@ -280,7 +365,7 @@ public class FileStorageService {
         if (SAFE_OBJECT_KEY.matcher(stored).matches()) {
             return stored;
         }
-        for (String prefix : new String[]{AVATAR_PATH, CHAT_IMAGE_PATH, SQUARE_AVATAR_PATH}) {
+        for (String prefix : new String[]{AVATAR_PATH, CHAT_IMAGE_PATH, SQUARE_AVATAR_PATH, SQUARE_AVATAR_THUMB_PATH}) {
             int idx = stored.indexOf(prefix);
             if (idx >= 0) {
                 String key = stored.substring(idx);
@@ -320,7 +405,7 @@ public class FileStorageService {
         }
         String lowerKey = objectKey.toLowerCase();
         if (lowerKey.startsWith(AVATAR_PATH) || lowerKey.startsWith(CHAT_IMAGE_PATH)
-                || lowerKey.startsWith(SQUARE_AVATAR_PATH)) {
+                || lowerKey.startsWith(SQUARE_AVATAR_PATH) || lowerKey.startsWith(SQUARE_AVATAR_THUMB_PATH)) {
             if (storedContentType != null) {
                 String normalized = storedContentType.toLowerCase();
                 if (normalized.startsWith("image/")) {

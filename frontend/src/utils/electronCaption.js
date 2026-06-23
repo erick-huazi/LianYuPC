@@ -19,4 +19,8 @@ export function syncElectronTitleBar({ routeName = '', routePath = '', theme = '
     surface,
     theme: theme === 'light' ? 'light' : 'dark',
   })
+
+  if (api.saveAppearance) {
+    void api.saveAppearance(theme === 'light' ? 'light' : 'dark')
+  }
 }

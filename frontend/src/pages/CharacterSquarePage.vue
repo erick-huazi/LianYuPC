@@ -44,9 +44,19 @@
       </el-check-tag>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <el-icon class="is-loading" :size="24"><Loading /></el-icon>
-      <span>{{ t('common.loading') }}</span>
+    <div v-if="loading && templates.length === 0" class="template-grid">
+      <div
+        v-for="n in 8"
+        :key="`sk-${n}`"
+        class="template-card template-card--skeleton glass stagger-item"
+        aria-hidden="true"
+      >
+        <div class="card-media skeleton-block" />
+        <div class="card-body">
+          <div class="skeleton-line skeleton-line--title" />
+          <div class="skeleton-line skeleton-line--summary" />
+        </div>
+      </div>
     </div>
 
     <div v-else-if="searchNoMatch" class="empty-state glass stagger-item">
@@ -70,17 +80,19 @@
         v-for="(item, idx) in templates"
         :key="item.id"
         class="template-card glass stagger-item"
+        :class="{ 'template-card--loading': loading }"
         :style="{ animationDelay: `${idx * 0.05}s`, '--shine-delay': `${(idx % 6) * 0.65}s` }"
       >
         <span v-if="isMostLiked(item.id)" class="most-liked-badge">{{ t('characterSquare.mostLiked') }}</span>
         <span class="template-card__shine" aria-hidden="true" />
         <div class="card-media">
           <img
-            v-if="item.avatarUrl && !brokenAvatars[item.id]"
-            :src="resolveMediaUrl(item.avatarUrl)"
+            v-if="avatarSrc(item) && !brokenAvatars[item.id]"
+            :src="resolveMediaUrl(avatarSrc(item))"
             class="avatar-img"
             :alt="item.name"
-            loading="lazy"
+            :loading="idx < 8 ? 'eager' : 'lazy'"
+            :fetchpriority="idx < 8 ? 'high' : 'auto'"
             decoding="async"
             @error="markAvatarBroken(item.id)"
           />
@@ -152,7 +164,7 @@
       </div>
     </div>
 
-    <div v-if="!loading && !searchNoMatch && total > PAGE_SIZE" class="square-pagination">
+    <div v-if="!searchNoMatch && total > PAGE_SIZE" class="square-pagination">
       <el-pagination
         background
         layout="prev, pager, next"
@@ -233,7 +245,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Loading, Search, Shop, Star, StarFilled, User } from '@element-plus/icons-vue'
+import { ChatDotRound, Search, Shop, Star, StarFilled, User } from '@element-plus/icons-vue'
 import { useCharacterSquareStore } from '@/stores/characterSquare'
 import { createConversation } from '@/api/conversation'
 import { getSavedUserCity, saveUserCity } from '@/utils/userCity'
@@ -241,7 +253,11 @@ import { resolveMediaUrl } from '@/utils/media'
 import CharacterCityModeForm from '@/components/CharacterCityModeForm.vue'
 import SquareCommentInput from '@/components/SquareCommentInput.vue'
 import SquareDanmakuLayer from '@/components/SquareDanmakuLayer.vue'
-import { fetchSquareComments } from '@/api/characterSquare'
+import {
+  fetchSquareComments,
+  fetchSquareCommentsBatch,
+  fetchSquareTemplateDetail,
+} from '@/api/characterSquare'
 import { useUserStore } from '@/stores/user'
 import { normalizeSquareComments } from '@/utils/squareComment'
 
@@ -250,19 +266,21 @@ const router = useRouter()
 const squareStore = useCharacterSquareStore()
 const userStore = useUserStore()
 
-const PAGE_SIZE = 12
-const CATALOG_SIZE = 100
+const PAGE_SIZE = 24
+const FETCH_SIZE = 24
 
 const loading = ref(true)
-const catalog = ref([])
+const templates = ref([])
 const allTags = ref([])
 const activeTag = ref('')
 const searchQuery = ref('')
 const page = ref(1)
+const total = ref(0)
 const addingId = ref(null)
 const likingId = ref(null)
 const previewVisible = ref(false)
 const previewItem = ref(null)
+const previewLoading = ref(false)
 const addDialogVisible = ref(false)
 const addCityMode = ref('real')
 const addCity = ref('')
@@ -270,68 +288,65 @@ const commentsByTemplateId = ref({})
 const brokenAvatars = ref({})
 let commentLoadTimer = null
 let commentLoadSeq = 0
+let searchDebounceTimer = null
+let catalogRequestSeq = 0
 
-const filteredCatalog = computed(() => {
-  let list = catalog.value
-  const tag = activeTag.value?.trim()
-  if (tag) {
-    list = list.filter(item => item.tags?.includes(tag))
-  }
-  const q = searchQuery.value.trim().toLowerCase()
-  if (q) {
-    list = list.filter(item => (item.name || '').toLowerCase().includes(q))
-  }
-  return sortByLikes(list)
-})
-
-function sortByLikes(list) {
-  return [...list].sort((a, b) => {
-    const likeDiff = (b.likeCount ?? 0) - (a.likeCount ?? 0)
-    if (likeDiff !== 0) return likeDiff
-    return (a.id ?? 0) - (b.id ?? 0)
-  })
+function avatarSrc(item) {
+  return item?.avatarThumbUrl || item?.avatarUrl || ''
 }
 
 function isMostLiked(templateId) {
-  return sortByLikes(filteredCatalog.value)
-    .slice(0, 3)
-    .some(item => item.id === templateId)
+  return squareStore.isMostLiked(templateId, templates.value)
 }
 
-const total = computed(() => filteredCatalog.value.length)
-
 const searchNoMatch = computed(
-  () => !loading.value && searchQuery.value.trim() !== '' && filteredCatalog.value.length === 0,
+  () => !loading.value && (searchQuery.value.trim() !== '' || activeTag.value) && templates.value.length === 0,
 )
-
-const templates = computed(() => {
-  const list = filteredCatalog.value
-  const from = (page.value - 1) * PAGE_SIZE
-  return list.slice(from, from + PAGE_SIZE)
-})
 
 watch(activeTag, () => {
   page.value = 1
+  void loadCatalog()
 })
 
 watch(searchQuery, () => {
   page.value = 1
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    void loadCatalog()
+  }, 280)
 })
-
-watch(templates, (list) => {
-  scheduleCommentsForTemplates(list.map(item => item.id))
-}, { immediate: false })
 
 onUnmounted(() => {
   if (commentLoadTimer) {
     clearTimeout(commentLoadTimer)
     commentLoadTimer = null
   }
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
 })
 
 function markAvatarBroken(templateId) {
   if (!templateId) return
   brokenAvatars.value = { ...brokenAvatars.value, [templateId]: true }
+}
+
+function prefetchThumbUrls(items = []) {
+  const run = () => {
+    for (const item of items) {
+      const url = avatarSrc(item)
+      if (!url) continue
+      const img = new Image()
+      img.decoding = 'async'
+      img.src = resolveMediaUrl(url)
+    }
+  }
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(run, { timeout: 2000 })
+  } else {
+    setTimeout(run, 120)
+  }
 }
 
 /** 翻页后先让浏览器拉头像，再异步加载弹幕评论，避免同域并发挤占连接。 */
@@ -349,44 +364,59 @@ function scheduleCommentsForTemplates(templateIds = []) {
 onMounted(() => loadCatalog())
 
 async function loadCatalog(force = false) {
+  const seq = ++catalogRequestSeq
   loading.value = true
   try {
     const data = await squareStore.fetchTemplates({
-      page: 1,
-      size: CATALOG_SIZE,
-      tag: '',
+      page: page.value,
+      size: FETCH_SIZE,
+      tag: activeTag.value?.trim() || '',
+      keyword: searchQuery.value.trim() || '',
       force,
     })
-    catalog.value = sortByLikes(data?.records || [])
+    if (seq !== catalogRequestSeq) return
+    templates.value = data?.records || []
     allTags.value = data?.tags || []
-    page.value = 1
+    total.value = data?.total ?? templates.value.length
+    scheduleCommentsForTemplates(templates.value.map(item => item.id))
+    prefetchNextPageThumbs()
   } finally {
-    loading.value = false
+    if (seq === catalogRequestSeq) {
+      loading.value = false
+    }
   }
+}
+
+function prefetchNextPageThumbs() {
+  if (page.value * PAGE_SIZE >= total.value) return
+  void squareStore.fetchTemplates({
+    page: page.value + 1,
+    size: FETCH_SIZE,
+    tag: activeTag.value?.trim() || '',
+    keyword: searchQuery.value.trim() || '',
+  }).then((data) => {
+    prefetchThumbUrls(data?.records || [])
+  }).catch(() => {})
 }
 
 function onPageChange(nextPage) {
   page.value = nextPage
+  void loadCatalog()
 }
 
 async function loadCommentsForTemplates(templateIds = []) {
   const ids = [...new Set(templateIds.filter(Boolean))]
   if (!ids.length) return
-  const entries = await Promise.all(
-    ids.map(async (templateId) => {
-      try {
-        const list = await fetchSquareComments(templateId)
-        return [templateId, normalizeSquareComments(list, userStore.userId)]
-      } catch {
-        return [templateId, []]
-      }
-    }),
-  )
-  const next = { ...commentsByTemplateId.value }
-  for (const [templateId, list] of entries) {
-    next[templateId] = list
+  try {
+    const batch = await fetchSquareCommentsBatch(ids)
+    const next = { ...commentsByTemplateId.value }
+    for (const templateId of ids) {
+      next[templateId] = normalizeSquareComments(batch?.[templateId] || batch?.[String(templateId)] || [], userStore.userId)
+    }
+    commentsByTemplateId.value = next
+  } catch {
+    /* interceptor */
   }
-  commentsByTemplateId.value = next
 }
 
 async function reloadComments(templateId) {
@@ -402,9 +432,18 @@ async function reloadComments(templateId) {
   }
 }
 
-function openPreview(item) {
-  previewItem.value = item
+async function openPreview(item) {
+  previewItem.value = { ...item }
   previewVisible.value = true
+  previewLoading.value = true
+  try {
+    const detail = await fetchSquareTemplateDetail(item.id)
+    previewItem.value = { ...item, ...detail, avatarUrl: detail?.avatarUrl || item.avatarUrl }
+  } catch {
+    /* keep card data */
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 /** @type {((value: object | null) => void) | null} */
@@ -481,7 +520,7 @@ async function handleAdd(item) {
 }
 
 function markAddedLocal(templateId, characterId) {
-  catalog.value = catalog.value.map(item =>
+  templates.value = templates.value.map(item =>
     item.id === templateId
       ? { ...item, added: true, addedCharacterId: characterId ?? item.addedCharacterId }
       : item,
@@ -495,12 +534,10 @@ async function handleLike(item) {
     const result = await squareStore.toggleLike(item.id)
     item.liked = !!result?.liked
     item.likeCount = result?.likeCount ?? item.likeCount ?? 0
-    catalog.value = sortByLikes(
-      catalog.value.map(row =>
-        row.id === item.id
-          ? { ...row, liked: item.liked, likeCount: item.likeCount }
-          : row,
-      ),
+    templates.value = templates.value.map(row =>
+      row.id === item.id
+        ? { ...row, liked: item.liked, likeCount: item.likeCount }
+        : row,
     )
   } finally {
     likingId.value = null
@@ -637,6 +674,45 @@ async function startChat(characterId) {
 
 .filter-tag {
   cursor: pointer;
+}
+
+.template-card--skeleton {
+  pointer-events: none;
+}
+
+.skeleton-block {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: $radius-lg;
+  background: linear-gradient(
+    90deg,
+    rgba($color-pink-rgb, 0.06) 25%,
+    rgba($color-pink-rgb, 0.12) 50%,
+    rgba($color-pink-rgb, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: square-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: $radius-full;
+  margin-bottom: $space-2;
+  background: rgba($color-pink-rgb, 0.08);
+}
+
+.skeleton-line--title {
+  width: 55%;
+  height: 16px;
+}
+
+.skeleton-line--summary {
+  width: 85%;
+}
+
+@keyframes square-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .loading-state,

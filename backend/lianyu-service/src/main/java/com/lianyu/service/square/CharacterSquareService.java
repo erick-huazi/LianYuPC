@@ -12,6 +12,7 @@ import com.lianyu.service.character.CharacterCitySettingsService;
 import com.lianyu.service.character.CharacterService;
 import com.lianyu.service.dto.CharacterResponse;
 import com.lianyu.service.dto.CharacterSquarePageResponse;
+import com.lianyu.service.dto.CharacterSquareTemplateCardResponse;
 import com.lianyu.service.dto.CharacterSquareTemplateResponse;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.support.OutputLanguageService;
@@ -52,11 +53,11 @@ public class CharacterSquareService {
         int safePage = Math.max(1, page);
         int safeSize = Math.min(SQUARE_PAGE_SIZE_MAX, Math.max(1, size));
         String uiLang = OutputLanguage.fromCode(uiLanguageCode).getCode();
-        List<CharacterSquareTemplateResponse> all = buildTemplateList(userId, uiLang);
+        List<CharacterSquareTemplateCardResponse> all = buildCardList(userId, uiLang);
         List<String> allTags = collectTagLabels(all);
         String tagFilter = tag != null ? tag.trim() : "";
         String keywordFilter = keyword != null ? keyword.trim() : "";
-        List<CharacterSquareTemplateResponse> filtered = all;
+        List<CharacterSquareTemplateCardResponse> filtered = all;
         if (!tagFilter.isEmpty()) {
             filtered = filtered.stream()
                     .filter(item -> item.getTags() != null && item.getTags().contains(tagFilter))
@@ -71,7 +72,7 @@ public class CharacterSquareService {
         }
         long total = filtered.size();
         int from = (safePage - 1) * safeSize;
-        List<CharacterSquareTemplateResponse> records;
+        List<CharacterSquareTemplateCardResponse> records;
         if (from >= filtered.size()) {
             records = List.of();
         } else {
@@ -88,7 +89,29 @@ public class CharacterSquareService {
                 .build();
     }
 
-    private List<CharacterSquareTemplateResponse> buildTemplateList(Long userId, String uiLang) {
+    public CharacterSquareTemplateResponse getTemplateDetail(
+            Long userId, Long templateId, String uiLanguageCode) {
+        CharacterSquareTemplate template = templateMapper.selectById(templateId);
+        if (template == null || template.getIsEnabled() == null || template.getIsEnabled() != 1) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
+        }
+        String slug = normalizeSlug(template);
+        if (slug == null || !CharacterSquareCatalog.isKnownSlug(slug)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
+        }
+        String uiLang = OutputLanguage.fromCode(uiLanguageCode).getCode();
+        Map<Long, Long> likeCounts = squareLikeService.getLikeCounts();
+        Set<Long> userLikes = squareLikeService.getUserLikes(userId);
+        Map<Long, Character> addedByTemplateId = loadAddedCharacters(userId);
+        return toTemplateResponse(
+                template,
+                addedByTemplateId.get(template.getId()),
+                uiLang,
+                likeCounts.getOrDefault(template.getId(), 0L),
+                userLikes.contains(template.getId()));
+    }
+
+    private List<CharacterSquareTemplateCardResponse> buildCardList(Long userId, String uiLang) {
         List<CharacterSquareTemplate> templates = templateMapper.selectList(
                 new LambdaQueryWrapper<CharacterSquareTemplate>()
                         .eq(CharacterSquareTemplate::getIsEnabled, 1)
@@ -111,7 +134,7 @@ public class CharacterSquareService {
 
         return bySlug.values().stream()
                 .sorted(likeCountComparator(likeCounts))
-                .map(t -> toTemplateResponse(
+                .map(t -> toCardResponse(
                         t,
                         addedByTemplateId.get(t.getId()),
                         uiLang,
@@ -136,9 +159,9 @@ public class CharacterSquareService {
         };
     }
 
-    private List<String> collectTagLabels(List<CharacterSquareTemplateResponse> templates) {
+    private List<String> collectTagLabels(List<CharacterSquareTemplateCardResponse> templates) {
         LinkedHashSet<String> tags = new LinkedHashSet<>();
-        for (CharacterSquareTemplateResponse item : templates) {
+        for (CharacterSquareTemplateCardResponse item : templates) {
             if (item.getTags() == null) {
                 continue;
             }
@@ -217,6 +240,46 @@ public class CharacterSquareService {
         return added.stream()
                 .filter(c -> c.getSourceTemplateId() != null)
                 .collect(Collectors.toMap(Character::getSourceTemplateId, c -> c, (a, b) -> a));
+    }
+
+    private CharacterSquareTemplateCardResponse toCardResponse(
+            CharacterSquareTemplate template,
+            Character added,
+            String uiLang,
+            long likeCount,
+            boolean liked) {
+        String slug = normalizeSlug(template);
+        CharacterSquareCatalog.LocalePack pack = CharacterSquareCatalog.resolve(slug, uiLang);
+        String thumbUrl = fileStorageService.resolveSquareAvatarThumbPublicUrl(template.getAvatarUrl());
+        if (pack == null) {
+            return CharacterSquareTemplateCardResponse.builder()
+                    .id(template.getId())
+                    .slug(slug)
+                    .name(template.getName())
+                    .summary(template.getSummary())
+                    .avatarThumbUrl(thumbUrl)
+                    .tags(parseTagLabels(template.getTagsJson()))
+                    .added(added != null)
+                    .addedCharacterId(added != null ? added.getId() : null)
+                    .likeCount(likeCount)
+                    .liked(liked)
+                    .build();
+        }
+
+        List<String> tagLabels = pack.tags().stream().map(CharacterSquareCatalog.Tag::label).toList();
+
+        return CharacterSquareTemplateCardResponse.builder()
+                .id(template.getId())
+                .slug(slug)
+                .name(pack.name())
+                .summary(pack.summary())
+                .avatarThumbUrl(thumbUrl)
+                .tags(tagLabels)
+                .added(added != null)
+                .addedCharacterId(added != null ? added.getId() : null)
+                .likeCount(likeCount)
+                .liked(liked)
+                .build();
     }
 
     private CharacterSquareTemplateResponse toTemplateResponse(

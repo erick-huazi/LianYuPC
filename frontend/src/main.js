@@ -7,7 +7,7 @@ import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
 import { initAntiDebug } from './utils/antiDebug'
-import { bootstrapAuth } from './auth/bootstrap'
+import { prepareAuthRoute, bootstrapAuth } from './auth/bootstrap'
 import './styles/theme.scss'
 import './styles/global.scss'
 import './styles/app-shell.scss'
@@ -42,10 +42,10 @@ const settingsStore = useSettingsStore(pinia)
 settingsStore.initLanguage()
 settingsStore.initAppearance()
 
-// 反调试（生产环境 Electron 专用）
 initAntiDebug()
 
 ;(async () => {
-  await bootstrapAuth(pinia)
+  await prepareAuthRoute(pinia)
   app.mount('#app')
+  void bootstrapAuth(pinia)
 })()
