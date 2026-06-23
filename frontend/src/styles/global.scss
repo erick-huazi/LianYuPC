@@ -205,6 +205,35 @@ body.electron-app:has(.app-header) .electron-caption-drag {
 }
 
 html:not(.dark) {
+  color-scheme: light;
+
+  body {
+    background: var(--ly-bg-deepest, #ffffff);
+    color: var(--ly-text-primary, #1a1a1e);
+  }
+
+  #app {
+    background: var(--ly-bg-primary, #f7f7f9);
+
+    &::before {
+      display: none;
+    }
+  }
+
+  body.electron-app {
+    &::before {
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .app-header {
+      background: rgba(255, 255, 255, 0.92) !important;
+      backdrop-filter: blur(12px) saturate(110%);
+      -webkit-backdrop-filter: blur(12px) saturate(110%);
+      border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+  }
+
   .glass {
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px) saturate(110%);

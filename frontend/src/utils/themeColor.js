@@ -206,19 +206,9 @@ export function buildAppearancePalette(modeOrBg, accentHex) {
   return { ...bg, accent }
 }
 
-function applyCssVariables({ accent, backgrounds, glass, glassStrong, text, bgRgb }, accentHex) {
-  const accentRgb = hexToRgb(accent.primary)
-  if (!accentRgb) return
-
+function applyCssVariables({ accent, backgrounds, glass, glassStrong, text, bgRgb }) {
   const root = document.documentElement
-  const accentRgbStr = `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`
-
-  root.style.setProperty('--ly-accent', accent.primary)
-  root.style.setProperty('--ly-accent-light', accent.light)
-  root.style.setProperty('--ly-accent-dark', accent.dark)
-  root.style.setProperty('--ly-accent-muted', accent.muted)
-  root.style.setProperty('--ly-accent-rgb', accentRgbStr)
-  root.style.setProperty('--ly-accent-glow', `rgba(${accentRgbStr}, 0.2)`)
+  const resolvedAccent = accentVariants(accent?.primary || DEFAULT_ACCENT)
 
   root.style.setProperty('--ly-bg-deepest', backgrounds.deepest)
   root.style.setProperty('--ly-bg-primary', backgrounds.primary)
@@ -235,13 +225,25 @@ function applyCssVariables({ accent, backgrounds, glass, glassStrong, text, bgRg
   root.style.setProperty('--ly-text-muted', text.muted)
   root.style.setProperty('--ly-text-inverse', text.inverse)
 
-  root.style.setProperty('--el-color-primary', accent.primary)
-  root.style.setProperty('--el-color-primary-light-3', accent.light)
+  const accentRgb = hexToRgb(resolvedAccent.primary) || hexToRgb(DEFAULT_ACCENT)
+  if (!accentRgb) return
+
+  const accentRgbStr = `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`
+
+  root.style.setProperty('--ly-accent', resolvedAccent.primary)
+  root.style.setProperty('--ly-accent-light', resolvedAccent.light)
+  root.style.setProperty('--ly-accent-dark', resolvedAccent.dark)
+  root.style.setProperty('--ly-accent-muted', resolvedAccent.muted)
+  root.style.setProperty('--ly-accent-rgb', accentRgbStr)
+  root.style.setProperty('--ly-accent-glow', `rgba(${accentRgbStr}, 0.2)`)
+
+  root.style.setProperty('--el-color-primary', resolvedAccent.primary)
+  root.style.setProperty('--el-color-primary-light-3', resolvedAccent.light)
   root.style.setProperty('--el-color-primary-light-5', `rgba(${accentRgbStr}, 0.5)`)
   root.style.setProperty('--el-color-primary-light-7', `rgba(${accentRgbStr}, 0.3)`)
   root.style.setProperty('--el-color-primary-light-8', `rgba(${accentRgbStr}, 0.2)`)
   root.style.setProperty('--el-color-primary-light-9', `rgba(${accentRgbStr}, 0.1)`)
-  root.style.setProperty('--el-color-primary-dark-2', accent.dark)
+  root.style.setProperty('--el-color-primary-dark-2', resolvedAccent.dark)
 
   root.style.setProperty('--el-bg-color', backgrounds.primary)
   root.style.setProperty('--el-bg-color-page', backgrounds.deepest)
@@ -253,15 +255,30 @@ function applyCssVariables({ accent, backgrounds, glass, glassStrong, text, bgRg
   root.style.setProperty('--el-text-color-regular', text.secondary)
   root.style.setProperty('--el-text-color-secondary', text.muted)
   root.style.setProperty('--el-text-color-placeholder', text.muted)
+
+  if (typeof document !== 'undefined' && document.body) {
+    document.body.style.backgroundColor = backgrounds.deepest
+    document.body.style.color = text.primary
+  }
 }
 
 /** Apply appearance mode (dark/light) + accent; legacy applyTheme(bgHex, accent) still works */
 export function applyAppearance(modeOrBg, accentHex) {
   const normalizedMode = resolveAppearanceMode(modeOrBg)
-  const palette = buildAppearancePalette(normalizedMode, accentHex)
-  applyCssVariables(palette, accentHex)
-  document.documentElement.classList.toggle('dark', normalizedMode === 'dark')
-  document.documentElement.dataset.appearance = normalizedMode
+  const accent = normalizeHex(accentHex) || DEFAULT_ACCENT
+  const palette = buildAppearancePalette(normalizedMode, accent)
+  applyCssVariables(palette)
+  const root = document.documentElement
+  root.classList.toggle('dark', normalizedMode === 'dark')
+  root.classList.toggle('light', normalizedMode === 'light')
+  root.dataset.appearance = normalizedMode
+  root.style.colorScheme = normalizedMode
+  if (typeof document !== 'undefined') {
+    const appRoot = document.getElementById('app')
+    if (appRoot) {
+      appRoot.style.backgroundColor = palette.backgrounds.primary
+    }
+  }
   return {
     mode: normalizedMode,
     accent: palette.accent.primary

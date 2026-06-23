@@ -21,3 +21,32 @@
   --ly-text-muted: #8a727c;
   --ly-text-inverse: #2d1f24;
 }
+
+html:not(.dark),
+html.light {
+  color-scheme: light;
+
+  --ly-bg-deepest: #ffffff;
+  --ly-bg-primary: #f7f7f9;
+  --ly-bg-secondary: #ececee;
+  --ly-bg-surface: #e0e0e3;
+  --ly-bg-elevated: #d4d4d8;
+  --ly-bg-glass: rgba(255, 255, 255, 0.92);
+  --ly-bg-glass-strong: rgba(255, 255, 255, 0.96);
+  --ly-bg-surface-rgb: 224, 224, 227;
+
+  --ly-text-primary: #1a1a1e;
+  --ly-text-secondary: #4a4a52;
+  --ly-text-muted: #8a8a96;
+  --ly-text-inverse: #ffffff;
+
+  --el-bg-color: var(--ly-bg-primary);
+  --el-bg-color-page: var(--ly-bg-deepest);
+  --el-bg-color-overlay: var(--ly-bg-surface);
+  --el-fill-color: var(--ly-bg-secondary);
+  --el-fill-color-blank: var(--ly-bg-primary);
+  --el-fill-color-light: var(--ly-bg-surface);
+  --el-text-color-primary: var(--ly-text-primary);
+  --el-text-color-regular: var(--ly-text-secondary);
+  --el-text-color-secondary: var(--ly-text-muted);
+}
