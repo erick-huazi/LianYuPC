@@ -95,9 +95,12 @@ onMounted(async () => {
 
   if (userStore.isLoggedIn && !userStore.userId) {
     try {
-      await userStore.fetchProfile()
-    } catch {
-      await userStore.clearAuth({ keepUsername: true })
+      await userStore.fetchProfile({ skipGlobalError: true })
+    } catch (err) {
+      const msg = err?.message || ''
+      if (/401|登录已过期|unauthorized/i.test(msg)) {
+        await userStore.clearAuth({ keepUsername: true })
+      }
     }
   }
 })

@@ -45,6 +45,11 @@ export function getLastUsername() {
   return localStorage.getItem(LAST_USERNAME_KEY) || ''
 }
 
+function isSessionExpiredError(err) {
+  const msg = err?.message || ''
+  return /401|登录已过期|unauthorized/i.test(msg)
+}
+
 export const useUserStore = defineStore('user', () => {
   const token = ref(syncToken() || '')
   const tokenName = ref('lianyu-token')
@@ -110,26 +115,31 @@ export const useUserStore = defineStore('user', () => {
     }
 
     token.value = session.token
-    tokenName.value = session.tokenName || ''
+    tokenName.value = session.tokenName || 'lianyu-token'
+    syncSetTokenCache(session.token)
     if (session.userId || session.username) {
       applyProfile(session)
     }
     await storeToken(session.token)
 
     try {
-      const profile = await getProfile()
+      const profile = await getProfile({ skipGlobalError: true })
       if (!profile) {
         throw new Error('profile empty')
       }
       applyProfile(profile)
       await persistSession()
-      getElectronAPI()?.setLoginState?.(true)
-      return true
-    } catch {
-      rememberUsername(session.username || username.value)
-      await clearAuth({ keepUsername: true })
-      return false
+    } catch (err) {
+      if (isSessionExpiredError(err)) {
+        rememberUsername(session.username || username.value)
+        await clearAuth({ keepUsername: true })
+        return false
+      }
+      // 网络/服务暂不可用：保留本地 token，允许直接进入主界面
     }
+
+    getElectronAPI()?.setLoginState?.(true)
+    return true
   }
 
   function setAuth(t, tn, user) {
@@ -199,8 +209,8 @@ export const useUserStore = defineStore('user', () => {
     await clearAuth()
   }
 
-  async function fetchProfile() {
-    const res = await getProfile()
+  async function fetchProfile(options = {}) {
+    const res = await getProfile(options)
     if (res) {
       applyProfile(res)
       await persistSession()
