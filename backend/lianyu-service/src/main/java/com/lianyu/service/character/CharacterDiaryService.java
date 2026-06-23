@@ -67,6 +67,7 @@ public class CharacterDiaryService {
     private final ObjectMapper objectMapper;
     private final RelationshipStateService relationshipStateService;
     private final NotificationService notificationService;
+    private final CharacterRecentActivityService characterRecentActivityService;
 
     @Value("${lianyu.diary.enabled:true}")
     private boolean diaryEnabled;
@@ -328,6 +329,7 @@ public class CharacterDiaryService {
             diary.setMood(null);
             diary.setConversationId(conversation.getId());
             diaryMapper.insert(diary);
+            characterRecentActivityService.evictCache(userId, characterId);
 
             String preview = title;
             if (preview == null || preview.isBlank()) {

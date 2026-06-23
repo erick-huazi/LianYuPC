@@ -204,6 +204,22 @@ body.electron-app:has(.app-header) .electron-caption-drag {
   border: 1px solid rgba($color-pink-rgb, 0.1);
 }
 
+html:not(.dark) {
+  .glass {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px) saturate(110%);
+    -webkit-backdrop-filter: blur(12px) saturate(110%);
+    border-color: rgba(0, 0, 0, 0.06);
+  }
+
+  .glass-strong {
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(16px) saturate(115%);
+    -webkit-backdrop-filter: blur(16px) saturate(115%);
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+}
+
 .filter-select,
 .toolbar-select {
   width: min(160px, 45vw);
@@ -434,6 +450,17 @@ html.dark {
   &:active {
     transform: translateY(0);
     box-shadow: 0 2px 10px rgba($color-pink-rgb, 0.22);
+  }
+}
+
+html:not(.dark) .el-button--primary {
+  background: var(--ly-accent) !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(var(--ly-accent-rgb), 0.22);
+
+  &:hover {
+    background: var(--ly-accent-light) !important;
+    box-shadow: 0 4px 14px rgba(var(--ly-accent-rgb), 0.28);
   }
 }
 

@@ -19,6 +19,9 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -34,6 +37,8 @@ public class MemoryWriter {
     private static final String EXCHANGE = "lianyu.exchange";
     private static final String ROUTING_KEY = "memory.summary";
     private static final String ENQUEUE_DEBOUNCE_PREFIX = "memory:summary:debounce:";
+    private static final Duration DEBOUNCE_TTL = Duration.ofSeconds(30);
+    private static final long RESCHEDULE_DELAY_SECONDS = 5L;
 
     private final MessageMapper messageMapper;
     private final MemoryMetaMapper memoryMetaMapper;
@@ -43,16 +48,22 @@ public class MemoryWriter {
     private final MemoryVectorStore memoryVectorStore;
     private final MemoryMilvusSyncService memoryMilvusSyncService;
     private final StringRedisTemplate redisTemplate;
+    private final ScheduledExecutorService rescheduleExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "memory-summary-reschedule");
+        t.setDaemon(true);
+        return t;
+    });
 
     public void enqueueSummary(Long conversationId, Long characterId, Long userId) {
-        String debounceKey = ENQUEUE_DEBOUNCE_PREFIX + conversationId + ":" + characterId;
-        Boolean first = redisTemplate.opsForValue().setIfAbsent(debounceKey, "1", Duration.ofSeconds(30));
+        String debounceKey = debounceKey(conversationId, characterId);
+        Boolean first = redisTemplate.opsForValue().setIfAbsent(debounceKey, "0", DEBOUNCE_TTL);
         if (Boolean.FALSE.equals(first)) {
-            log.debug("Memory summary debounced: conversationId={}, characterId={}", conversationId, characterId);
+            redisTemplate.opsForValue().set(debounceKey, "1", DEBOUNCE_TTL);
+            log.debug("Memory summary debounce pending reschedule: conversationId={}, characterId={}",
+                    conversationId, characterId);
             return;
         }
-        MemorySummaryTask task = new MemorySummaryTask(conversationId, characterId, userId);
-        rabbitTemplate.convertAndSend(EXCHANGE, ROUTING_KEY, task);
+        sendSummaryTask(new MemorySummaryTask(conversationId, characterId, userId));
         log.info("Memory summary enqueued: conversationId={}, characterId={}", conversationId, characterId);
     }
 
@@ -111,7 +122,33 @@ public class MemoryWriter {
         } catch (Exception e) {
             log.error("Memory processing failed for conversation {}", task.conversationId(), e);
             throw new RuntimeException("memory summary process failed, convId=" + task.conversationId(), e);
+        } finally {
+            maybeReschedule(task);
         }
+    }
+
+    private void sendSummaryTask(MemorySummaryTask task) {
+        rabbitTemplate.convertAndSend(EXCHANGE, ROUTING_KEY, task);
+    }
+
+    private void maybeReschedule(MemorySummaryTask task) {
+        String debounceKey = debounceKey(task.conversationId(), task.characterId());
+        String pending = redisTemplate.opsForValue().get(debounceKey);
+        redisTemplate.delete(debounceKey);
+        if (!"1".equals(pending)) {
+            return;
+        }
+        rescheduleExecutor.schedule(
+                () -> sendSummaryTask(new MemorySummaryTask(
+                        task.conversationId(), task.characterId(), task.userId())),
+                RESCHEDULE_DELAY_SECONDS,
+                TimeUnit.SECONDS);
+        log.info("Memory summary rescheduled: conversationId={}, characterId={}",
+                task.conversationId(), task.characterId());
+    }
+
+    private static String debounceKey(Long conversationId, Long characterId) {
+        return ENQUEUE_DEBOUNCE_PREFIX + conversationId + ":" + characterId;
     }
 
     public void deleteVectors(List<String> vectorIds) {

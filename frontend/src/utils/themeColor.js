@@ -1,7 +1,7 @@
 /** Warm accent — buttons, links, highlights */
 export const DEFAULT_ACCENT = '#F4A6B5'
 
-/** Cool background seed — page / sidebar / cards */
+/** @deprecated background seed no longer user-configurable */
 export const DEFAULT_BACKGROUND = '#7A9EC4'
 
 export const DEFAULT_BACKGROUNDS = {
@@ -12,25 +12,13 @@ export const DEFAULT_BACKGROUNDS = {
   elevated: '#252F3C'
 }
 
-/** Combined quick themes */
-export const THEME_PRESETS = [
-  { name: '粉恋星夜', bg: '#7A9EC4', accent: '#F4A6B5' },
-  { name: '薰衣草暖', bg: '#8B7EC8', accent: '#E8A0B4' },
-  { name: '薄荷暖阳', bg: '#6B9090', accent: '#FFB088' },
-  { name: '深海珊瑚', bg: '#5B7A9E', accent: '#FF9A7A' },
-  { name: '冷灰杏粉', bg: '#8899AA', accent: '#F4C4A0' },
-  { name: '墨青玫瑰', bg: '#4A6670', accent: '#F4A6B5' }
-]
-
-/** Cool — background tint */
-export const BG_PRESETS = [
-  { name: '星夜蓝', color: '#7A9EC4' },
-  { name: '深紫蓝', color: '#8B7EC8' },
-  { name: '墨青', color: '#6B9090' },
-  { name: '深海', color: '#5B7A9E' },
-  { name: '冷灰', color: '#8899AA' },
-  { name: '靛蓝', color: '#6B7EC4' }
-]
+export const LIGHT_BACKGROUNDS = {
+  deepest: '#FFFFFF',
+  primary: '#F7F7F9',
+  secondary: '#ECECEE',
+  surface: '#E0E0E3',
+  elevated: '#D4D4D8'
+}
 
 /** Warm — button / accent */
 export const ACCENT_PRESETS = [
@@ -151,70 +139,76 @@ export function accentVariants(hex) {
   }
 }
 
-/** Background stack + text from cool seed color */
-export function buildBackgroundPalette(bgSeedHex) {
-  const seed = normalizeHex(bgSeedHex) || DEFAULT_BACKGROUND
-  const rgb = hexToRgb(seed)
-  if (!rgb) {
-    return {
-      backgrounds: { ...DEFAULT_BACKGROUNDS },
-      glass: 'rgba(30, 39, 50, 0.75)',
-      text: {
-        primary: '#E8EDF2',
-        secondary: '#A8B4C0',
-        muted: '#728090',
-        inverse: '#141A22'
-      },
-      bgRgb: '30, 39, 50'
-    }
-  }
-
-  const { h, s } = rgbToHsl(rgb.r, rgb.g, rgb.b)
-  const bgSat = clamp(s * 0.42 + 0.08, 0.08, 0.28)
-  const textSat = clamp(s * 0.18 + 0.04, 0.04, 0.14)
-
-  const backgrounds = {
-    deepest: hslToHex(h, bgSat * 0.7, 0.06),
-    primary: hslToHex(h, bgSat, 0.088),
-    secondary: hslToHex(h, bgSat, 0.115),
-    surface: hslToHex(h, bgSat * 0.95, 0.145),
-    elevated: hslToHex(h, bgSat * 0.9, 0.175)
-  }
-
+function buildDarkBackgroundPalette() {
+  const backgrounds = { ...DEFAULT_BACKGROUNDS }
   const surfaceRgb = hexToRgb(backgrounds.surface)
   const glass = surfaceRgb
     ? `rgba(${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}, 0.75)`
     : 'rgba(30, 39, 50, 0.75)'
-
   const text = {
-    primary: hslToHex(h, textSat, 0.92),
-    secondary: hslToHex(h, textSat * 0.85, 0.7),
-    muted: hslToHex(h, textSat * 0.7, 0.48),
-    inverse: hslToHex(h, bgSat + 0.04, 0.12)
+    primary: '#E8EDF2',
+    secondary: '#A8B4C0',
+    muted: '#728090',
+    inverse: '#FFFFFF'
   }
-
   return {
     backgrounds,
     glass,
+    glassStrong: glass,
     text,
     bgRgb: surfaceRgb ? `${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}` : '30, 39, 50'
   }
 }
 
-export function buildThemePalette(backgroundHex, accentHex) {
-  const bg = buildBackgroundPalette(backgroundHex)
+function buildLightBackgroundPalette() {
+  const backgrounds = { ...LIGHT_BACKGROUNDS }
+  const surfaceRgb = hexToRgb(backgrounds.surface)
+  const glass = 'rgba(255, 255, 255, 0.92)'
+  const glassStrong = 'rgba(255, 255, 255, 0.96)'
+  const text = {
+    primary: '#1A1A1E',
+    secondary: '#4A4A52',
+    muted: '#8A8A96',
+    inverse: '#FFFFFF'
+  }
+  return {
+    backgrounds,
+    glass,
+    glassStrong,
+    text,
+    bgRgb: surfaceRgb ? `${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}` : '224, 224, 227'
+  }
+}
+
+function resolveAppearanceMode(modeOrBg) {
+  if (modeOrBg === 'light' || modeOrBg === 'dark') {
+    return modeOrBg
+  }
+  if (normalizeHex(modeOrBg)) {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+    }
+    return 'dark'
+  }
+  return 'dark'
+}
+
+/** Background stack + text from appearance mode (legacy bg hex arg is ignored) */
+export function buildBackgroundPalette(modeOrBg = 'dark') {
+  const mode = resolveAppearanceMode(modeOrBg)
+  return mode === 'light' ? buildLightBackgroundPalette() : buildDarkBackgroundPalette()
+}
+
+export function buildAppearancePalette(modeOrBg, accentHex) {
+  const mode = resolveAppearanceMode(modeOrBg)
+  const bg = buildBackgroundPalette(mode)
   const accent = accentVariants(accentHex)
   return { ...bg, accent }
 }
 
-/** Apply full theme: cool backgrounds + warm accent */
-export function applyTheme(backgroundHex, accentHex) {
-  const { accent, backgrounds, glass, text, bgRgb } = buildThemePalette(
-    backgroundHex,
-    accentHex
-  )
+function applyCssVariables({ accent, backgrounds, glass, glassStrong, text, bgRgb }, accentHex) {
   const accentRgb = hexToRgb(accent.primary)
-  if (!accentRgb) return { background: DEFAULT_BACKGROUND, accent: DEFAULT_ACCENT }
+  if (!accentRgb) return
 
   const root = document.documentElement
   const accentRgbStr = `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`
@@ -232,9 +226,9 @@ export function applyTheme(backgroundHex, accentHex) {
   root.style.setProperty('--ly-bg-surface', backgrounds.surface)
   root.style.setProperty('--ly-bg-elevated', backgrounds.elevated)
   root.style.setProperty('--ly-bg-glass', glass)
-  root.style.setProperty('--ly-bg-glass-strong', glass)
+  root.style.setProperty('--ly-bg-glass-strong', glassStrong)
   root.style.setProperty('--ly-bg-surface-rgb', bgRgb)
-  root.style.setProperty('--ly-bg-seed', normalizeHex(backgroundHex) || DEFAULT_BACKGROUND)
+  root.style.setProperty('--ly-bg-seed', backgrounds.primary)
 
   root.style.setProperty('--ly-text-primary', text.primary)
   root.style.setProperty('--ly-text-secondary', text.secondary)
@@ -258,15 +252,36 @@ export function applyTheme(backgroundHex, accentHex) {
   root.style.setProperty('--el-text-color-primary', text.primary)
   root.style.setProperty('--el-text-color-regular', text.secondary)
   root.style.setProperty('--el-text-color-secondary', text.muted)
-  root.style.setProperty('--el-text-color-placeholder', accent.muted)
+  root.style.setProperty('--el-text-color-placeholder', text.muted)
+}
 
+/** Apply appearance mode (dark/light) + accent; legacy applyTheme(bgHex, accent) still works */
+export function applyAppearance(modeOrBg, accentHex) {
+  const normalizedMode = resolveAppearanceMode(modeOrBg)
+  const palette = buildAppearancePalette(normalizedMode, accentHex)
+  applyCssVariables(palette, accentHex)
+  document.documentElement.classList.toggle('dark', normalizedMode === 'dark')
+  document.documentElement.dataset.appearance = normalizedMode
   return {
-    background: normalizeHex(backgroundHex) || DEFAULT_BACKGROUND,
-    accent: accent.primary
+    mode: normalizedMode,
+    accent: palette.accent.primary
   }
 }
 
-/** @deprecated use applyTheme */
+/** @deprecated use applyAppearance(mode, accent) */
+export function applyTheme(_backgroundHex, accentHex) {
+  return applyAppearance(
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+    accentHex
+  )
+}
+
+/** @deprecated use buildAppearancePalette(mode, accent) */
+export function buildThemePalette(_backgroundHex, accentHex) {
+  return buildAppearancePalette('dark', accentHex)
+}
+
+/** @deprecated use applyAppearance */
 export function applyAccentColor(accentHex) {
-  return applyTheme(DEFAULT_BACKGROUND, accentHex).accent
+  return applyAppearance('dark', accentHex).accent
 }

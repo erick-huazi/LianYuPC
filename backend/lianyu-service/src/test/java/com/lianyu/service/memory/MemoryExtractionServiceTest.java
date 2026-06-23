@@ -48,6 +48,59 @@ class MemoryExtractionServiceTest {
     }
 
     @Test
+    void extract_nameVariants_writeStructuredProfile() {
+        when(llmExtractor.extract(any(), anyList())).thenReturn(List.of());
+
+        assertNameExtracted("请叫我小明", "【长期记忆/姓名】小明");
+        assertNameExtracted("my name is Bob", "【长期记忆/姓名】Bob");
+        assertNameExtracted("我叫 小明", "【长期记忆/姓名】小明");
+    }
+
+    @Test
+    void extract_nameFact_notOverwrittenByKeywordMemory() {
+        when(llmExtractor.extract(any(), anyList())).thenReturn(List.of());
+
+        Message msg = new Message();
+        msg.setId(20L);
+        msg.setRole("USER");
+        msg.setContent("我叫小明");
+
+        List<ExtractedMemory> result = service.extract(List.of(msg), new MemorySummaryTask(1L, 2L, 3L));
+
+        long nameMatches = result.stream()
+                .filter(m -> m.summary().contains("小明"))
+                .count();
+        assertEquals(1, nameMatches);
+        assertTrue(result.stream().anyMatch(m -> "【长期记忆/姓名】小明".equals(m.summary())));
+        assertTrue(result.stream().noneMatch(m -> "我叫小明".equals(m.summary())));
+    }
+
+    @Test
+    void extract_ritualNickname_alsoWritesName() {
+        when(llmExtractor.extract(any(), anyList())).thenReturn(List.of());
+
+        Message msg = new Message();
+        msg.setId(21L);
+        msg.setRole("USER");
+        msg.setContent("以后你可以叫我阿昼");
+
+        List<ExtractedMemory> result = service.extract(List.of(msg), new MemorySummaryTask(1L, 2L, 3L));
+
+        assertTrue(result.stream().anyMatch(m -> "【长期记忆/姓名】阿昼".equals(m.summary())));
+        assertTrue(result.stream().anyMatch(m -> "你们形成了专属称呼锚点".equals(m.summary())));
+    }
+
+    private void assertNameExtracted(String content, String expectedSummary) {
+        Message msg = new Message();
+        msg.setId(30L);
+        msg.setRole("USER");
+        msg.setContent(content);
+
+        List<ExtractedMemory> result = service.extract(List.of(msg), new MemorySummaryTask(1L, 2L, 3L));
+        assertTrue(result.stream().anyMatch(m -> expectedSummary.equals(m.summary())), content);
+    }
+
+    @Test
     void extract_filtersLowImportanceFromLlm() {
         when(llmExtractor.extract(eq(3L), anyList())).thenReturn(List.of(
                 new ExtractedMemory("临时琐事", MemoryType.FACT, 11L, 0.2)));

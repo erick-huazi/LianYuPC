@@ -40,7 +40,7 @@ app.use(ElementPlus, { size: 'default' })
 import { useSettingsStore } from '@/stores/settings'
 const settingsStore = useSettingsStore(pinia)
 settingsStore.initLanguage()
-settingsStore.initTheme()
+settingsStore.initAppearance()
 
 // 反调试（生产环境 Electron 专用）
 initAntiDebug()

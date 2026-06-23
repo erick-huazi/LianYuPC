@@ -9,6 +9,7 @@ import com.lianyu.dao.entity.MomentsPost;
 import com.lianyu.dao.mapper.CharacterMapper;
 import com.lianyu.dao.mapper.MomentsCommentMapper;
 import com.lianyu.dao.mapper.MomentsPostMapper;
+import com.lianyu.service.character.CharacterRecentActivityService;
 import com.lianyu.service.dto.*;
 import com.lianyu.service.notification.NotificationService;
 import com.lianyu.service.storage.FileStorageService;
@@ -36,6 +37,7 @@ public class MomentsCommentService {
     private final CharacterMapper characterMapper;
     private final NotificationService notificationService;
     private final FileStorageService fileStorageService;
+    private final CharacterRecentActivityService characterRecentActivityService;
 
     @Lazy
     private final MomentsCommentOrchestrator momentsCommentOrchestrator;
@@ -157,6 +159,7 @@ public class MomentsCommentService {
                     post.getId(), idempotencyKey, e.getMessage());
             return null;
         }
+        characterRecentActivityService.evictCache(post.getUserId(), character.getId());
         if (row.getRootId() == null && parentId == null) {
             row.setRootId(row.getId());
             momentsCommentMapper.updateById(row);

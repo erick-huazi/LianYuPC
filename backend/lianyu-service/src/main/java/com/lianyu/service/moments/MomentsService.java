@@ -17,6 +17,7 @@ import com.lianyu.dao.mapper.UserMapper;
 import com.lianyu.service.ai.AiChatService;
 import com.lianyu.service.ai.CharacterPromptBuilder;
 import com.lianyu.service.character.CharacterPreferenceResolver;
+import com.lianyu.service.character.CharacterRecentActivityService;
 import com.lianyu.service.dto.*;
 import com.lianyu.service.memory.MemoryRetriever;
 import com.lianyu.service.notification.NotificationService;
@@ -70,6 +71,7 @@ public class MomentsService {
     private final FileStorageService fileStorageService;
     private final MomentsCommentOrchestrator momentsCommentOrchestrator;
     private final RelationshipStateService relationshipStateService;
+    private final CharacterRecentActivityService characterRecentActivityService;
 
     @Value("${lianyu.moments.content-max-chars:180}")
     private int contentMaxChars;
@@ -243,6 +245,7 @@ public class MomentsService {
         post.setSourceHash(hash);
         try {
             momentsPostMapper.insert(post);
+            characterRecentActivityService.evictCache(userId, characterId);
         } catch (Exception e) {
             log.debug("Moments insert skipped (duplicate?): convId={}, reason={}", conversation.getId(), e.getMessage());
             return false;

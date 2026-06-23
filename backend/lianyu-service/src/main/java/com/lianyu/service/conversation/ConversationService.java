@@ -24,6 +24,7 @@ import com.lianyu.service.character.CharacterChatBehaviorResolver;
 import com.lianyu.service.ai.InnerThoughtFilter;
 import com.lianyu.service.character.CharacterCitySettingsService;
 import com.lianyu.service.character.CharacterPreferenceResolver;
+import com.lianyu.service.character.CharacterRecentActivityService;
 import com.lianyu.service.character.CharacterStateService;
 import com.lianyu.service.character.UserAddressingResolver;
 import com.lianyu.service.dto.*;
@@ -88,6 +89,7 @@ public class ConversationService {
     private final ProactiveUnrepliedThrottle proactiveUnrepliedThrottle;
     private final TimeTool timeTool;
     private final SessionSummaryService sessionSummaryService;
+    private final CharacterRecentActivityService characterRecentActivityService;
 
     @Lazy
     @Autowired
@@ -952,6 +954,7 @@ public class ConversationService {
         String lang = outputLanguageService.resolveForRequest(userId, userInput);
         String base = promptBuilder.buildSystemPrompt(character, memoryContext, lang, true);
         base = appendCurrentTimeContext(base);
+        base = appendRecentActivityContext(base, userId, character.getId(), lang);
         base = appendCurrentRealCityContext(base, character);
         base = appendGoodnightContextIfApplicable(base, userInput, lang);
         return enforceNaturalChatStyle(base, lang, character);
@@ -967,6 +970,14 @@ public class ConversationService {
                 """ + timeFact + """
                 
                 注意：上方对话记录中的消息可能发生在更早的时刻（例如昨晚）。判断「现在」是白天还是夜晚、今天星期几、是否跨天等，必须以本条中的当前真实时间为准，不要根据旧对话的语气或内容臆测当前时刻。""";
+    }
+
+    private String appendRecentActivityContext(String basePrompt, Long userId, Long characterId, String lang) {
+        String block = characterRecentActivityService.formatForPrompt(userId, characterId, lang);
+        if (block == null || block.isBlank()) {
+            return basePrompt;
+        }
+        return basePrompt + "\n\n" + block;
     }
 
     /** 现实城市模式：注入权威城市，避免历史对话中的旧城市误导模型。 */
