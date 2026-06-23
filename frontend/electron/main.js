@@ -30,6 +30,11 @@ import {
   clearAuthSession,
 } from './authSessionStore.js'
 import {
+  readAppearance,
+  writeAppearance,
+  resolveWindowBackgroundColor,
+} from './appearanceStore.js'
+import {
   startDesktopObserver,
   stopDesktopObserver,
   onWindowChanged,
@@ -633,11 +638,11 @@ function showLauncherWindow(options = {}) {
     win.show()
     win.moveTop()
   }
-  reveal()
   if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', reveal)
+    win.webContents.once('ready-to-show', reveal)
+  } else {
+    reveal()
   }
-  setTimeout(reveal, 120)
 }
 
 function showMainWindow(hash = '') {
@@ -760,6 +765,8 @@ function hideMainToTray() {
 }
 
 function createMainWindow() {
+  const appearanceMode = readAppearance()
+  currentTitleBarPreset = appearanceMode === 'light' ? 'light' : 'dark'
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -767,7 +774,7 @@ function createMainWindow() {
     minHeight: 640,
     title: 'LianYu - 恋语',
     icon: resolveDistPath('logo.png'),
-    backgroundColor: '#0a0a10',
+    backgroundColor: resolveWindowBackgroundColor(appearanceMode),
     ...buildCaptionWindowOptions(),
     show: false,
     webPreferences: { ...SHARED_WEB_PREFS },
@@ -784,9 +791,7 @@ function createMainWindow() {
   })
 
   win.on('minimize', () => {
-    setTimeout(() => {
-      showLauncherWindow({ center: true, force: true })
-    }, 50)
+    showLauncherWindow({ center: true, force: true })
   })
 
   win.on('close', (event) => {
@@ -1112,9 +1117,16 @@ function registerIpcHandlers() {
     return { ok: true, preset: presetKey }
   })
 
+  ipcMain.handle('desktop:save-appearance', (_event, mode) => {
+    const normalized = writeAppearance(mode)
+    return { ok: true, mode: normalized }
+  })
+
   ipcMain.handle('desktop:set-login-state', (_event, loggedIn) => {
     launcherLoggedIn = !!loggedIn
-    if (!launcherLoggedIn) {
+    if (launcherLoggedIn) {
+      prewarmLauncherWindow()
+    } else {
       hideLauncherWindow()
       closeCharacterPicker()
     }
@@ -1290,13 +1302,18 @@ app.whenReady().then(() => {
   createMainWindow()
   ensureTray()
 
+  if (readAuthSession()) {
+    launcherLoggedIn = true
+    prewarmLauncherWindow()
+  }
+
   // 电源事件：唤醒后通知窗口切换检测
   if (powerMonitor) {
     powerMonitor.on('resume', () => onWindowChanged())
     powerMonitor.on('unlock-screen', () => onWindowChanged())
   }
 
-  // 桌宠仅在用户登录 + 主窗口最小化/关闭后才出现，不在启动时预创建
+  // 桌宠在登录后预创建；启动时若已有 auth session 则并行预热
 
     if (isDebug) {
       globalShortcut.register('F12', () => {

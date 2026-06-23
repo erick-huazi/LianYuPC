@@ -5,8 +5,8 @@ import { useCharactersStore } from '@/stores/characters'
 
 const STALE_MS = 120_000
 
-function cacheKey(page, tag) {
-  return `${page}|${tag || ''}`
+function cacheKey(page, tag, keyword) {
+  return `${page}|${tag || ''}|${keyword || ''}`
 }
 
 function sortByLikes(records) {
@@ -27,8 +27,8 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
     pages.value = {}
   }
 
-  function getCached(page, tag) {
-    const entry = pages.value[cacheKey(page, tag)]
+  function getCached(page, tag, keyword) {
+    const entry = pages.value[cacheKey(page, tag, keyword)]
     if (!entry) return null
     if (Date.now() - entry.fetchedAt > STALE_MS) {
       return null
@@ -36,10 +36,10 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
     return entry
   }
 
-  async function fetchTemplates({ page = 1, size = 12, tag = '', force = false } = {}) {
-    const key = cacheKey(page, tag)
+  async function fetchTemplates({ page = 1, size = 12, tag = '', keyword = '', force = false } = {}) {
+    const key = cacheKey(page, tag, keyword)
     if (!force) {
-      const hit = getCached(page, tag)
+      const hit = getCached(page, tag, keyword)
       if (hit) {
         return hit
       }
@@ -50,7 +50,8 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
       const data = await listCharacterSquareTemplates({
         page,
         size,
-        tag: tag || undefined
+        tag: tag || undefined,
+        keyword: keyword || undefined,
       })
       const records = sortByLikes(data?.records || [])
       if (Array.isArray(data?.userLikes)) {
@@ -60,7 +61,7 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
           records.filter(item => item.liked).map(item => item.id),
         )
       }
-      if (page === 1 && !tag) {
+      if (page === 1 && !tag && !keyword) {
         catalogRecords.value = records
       }
       const entry = {

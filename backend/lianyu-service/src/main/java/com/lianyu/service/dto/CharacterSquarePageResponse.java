@@ -1,5 +1,6 @@
 package com.lianyu.service.dto;
 
+import com.lianyu.service.dto.CharacterSquareTemplateCardResponse;
 import java.util.List;
 import java.util.Set;
 import lombok.Builder;
@@ -8,7 +9,7 @@ import lombok.Data;
 @Data
 @Builder
 public class CharacterSquarePageResponse {
-    private List<CharacterSquareTemplateResponse> records;
+    private List<CharacterSquareTemplateCardResponse> records;
     private long total;
     private int page;
     private int size;

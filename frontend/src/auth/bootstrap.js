@@ -1,17 +1,43 @@
 import { useUserStore } from '@/stores/user'
 import router from '@/router/index.js'
+import { readToken, syncToken } from '@/utils/secureToken'
+import { PROFILE_CACHE_KEY } from '@/constants/authSession'
 
 const AUTO_ENTRY_PATHS = new Set(['/', '/login', '/register'])
 
-/** 应用挂载前恢复并校验登录态，有效凭证则跳过落地页直接进入主界面 */
-export async function bootstrapAuth(pinia) {
-  const userStore = useUserStore(pinia)
-  const restored = await userStore.restoreSession()
-  if (restored) {
-    const hashPath = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
-    if (AUTO_ENTRY_PATHS.has(hashPath)) {
-      await router.replace('/app')
-    }
+function hasCachedToken() {
+  try {
+    if (syncToken()) return true
+    const profileRaw = localStorage.getItem(PROFILE_CACHE_KEY)
+    if (profileRaw) return true
+    return !!localStorage.getItem('_ltt')
+  } catch {
+    return false
   }
-  return restored
+}
+
+/** mount 前：有本地凭证则先跳主界面，避免落地页一闪 */
+export async function prepareAuthRoute(pinia) {
+  await readToken()
+  const hashPath = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
+  if (!AUTO_ENTRY_PATHS.has(hashPath)) return
+
+  const userStore = useUserStore(pinia)
+  if (userStore.isLoggedIn || hasCachedToken()) {
+    await router.replace('/app')
+  }
+}
+
+/** mount 后后台恢复会话，不阻塞首屏 */
+export function bootstrapAuth(pinia) {
+  const userStore = useUserStore(pinia)
+  return userStore.restoreSession().then((restored) => {
+    if (restored) {
+      const hashPath = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
+      if (AUTO_ENTRY_PATHS.has(hashPath)) {
+        return router.replace('/app')
+      }
+    }
+    return restored
+  })
 }

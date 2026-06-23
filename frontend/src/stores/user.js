@@ -123,7 +123,7 @@ export const useUserStore = defineStore('user', () => {
     await storeToken(session.token)
 
     try {
-      const profile = await getProfile({ skipGlobalError: true })
+      const profile = await getProfile({ skipGlobalError: true, timeout: 8000 })
       if (!profile) {
         throw new Error('profile empty')
       }

@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCaptionBarHeight: () => ipcRenderer.invoke('desktop:get-caption-height'),
   getCaptionMetrics: () => ipcRenderer.invoke('desktop:get-caption-metrics'),
   setTitleBarAppearance: (payload) => ipcRenderer.invoke('desktop:set-title-bar-appearance', payload),
+  saveAppearance: (mode) => ipcRenderer.invoke('desktop:save-appearance', mode),
   onCaptionMetrics: (callback) => {
     const handler = (_event, metrics) => callback(metrics)
     ipcRenderer.on('desktop:caption-metrics', handler)

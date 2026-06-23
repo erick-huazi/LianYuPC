@@ -61,6 +61,26 @@ public class CharacterSquareAvatarSync implements ApplicationRunner {
             }
         }
         log.info("Character square avatar sync finished: uploaded={}, skipped={}", uploaded, skipped);
+        backfillMissingThumbs();
+    }
+
+    private void backfillMissingThumbs() {
+        List<CharacterSquareTemplate> templates = templateMapper.selectList(
+                new LambdaQueryWrapper<CharacterSquareTemplate>()
+                        .eq(CharacterSquareTemplate::getIsEnabled, 1)
+                        .isNotNull(CharacterSquareTemplate::getAvatarUrl));
+        if (templates.isEmpty()) {
+            return;
+        }
+        int generated = 0;
+        for (CharacterSquareTemplate template : templates) {
+            if (fileStorageService.ensureSquareAvatarThumb(template.getAvatarUrl())) {
+                generated++;
+            }
+        }
+        if (generated > 0) {
+            log.info("Square avatar thumb backfill generated={}", generated);
+        }
     }
 
     private Map<String, CharacterSquareTemplate> loadTemplatesBySlug(List<String> slugs) {
@@ -98,6 +118,7 @@ public class CharacterSquareAvatarSync implements ApplicationRunner {
             boolean sameBytes = remoteSize >= 0 && remoteSize == bytes.length;
             boolean dbAligned = existing == null || expectedKey.equals(existing.getAvatarUrl());
             if (sameBytes && dbAligned) {
+                fileStorageService.ensureSquareAvatarThumb(expectedKey);
                 return 0;
             }
             if (sameBytes && existing != null && !expectedKey.equals(existing.getAvatarUrl())) {

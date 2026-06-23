@@ -33,7 +33,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { gsap } from 'gsap'
 import { getElectronAPI } from '@/utils/electron'
-import { DEFAULT_PET_ID, getPetById, getPetSpriteUrl, getPetPersona } from '@/constants/petCatalog'
+import { DEFAULT_PET_ID, getPetById, getPetIdleUrl, getPetSpriteUrl, getPetPersona } from '@/constants/petCatalog'
 import { usePetSpriteAnimator } from '@/composables/usePetSpriteAnimator'
 
 const { t } = useI18n()
@@ -60,7 +60,7 @@ let pendingDx = 0
 let pendingDy = 0
 let greetingAudio = null
 
-const { playAnim, playAnimOnce, returnToIdle, setSpriteImage } = usePetSpriteAnimator(petRef)
+const { playAnim, playAnimOnce, returnToIdle, setSpriteImage, setIdleFrame } = usePetSpriteAnimator(petRef)
 
 function setIdleFloatPaused(paused) {
   if (!idleFloatTween) return
@@ -88,6 +88,7 @@ function scheduleDragFlush() {
 function applyPetId(petId) {
   currentPetId.value = petId || DEFAULT_PET_ID
   const pet = getPetById(currentPetId.value)
+  setIdleFrame(getPetIdleUrl(currentPetId.value))
   const url = getPetSpriteUrl(pet)
   const img = new Image()
   img.onload = () => {

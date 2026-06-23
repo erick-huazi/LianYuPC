@@ -14,6 +14,7 @@ import com.lianyu.service.dto.AddCharacterFromSquareRequest;
 import com.lianyu.service.dto.CreateCharacterRequest;
 import com.lianyu.service.dto.GenerateCharacterRequest;
 import com.lianyu.service.dto.CharacterSquarePageResponse;
+import com.lianyu.service.dto.CharacterSquareTemplateResponse;
 import com.lianyu.service.dto.SquareCommentRequest;
 import com.lianyu.service.dto.SquareCommentResponse;
 import com.lianyu.service.dto.SquareLikeToggleResponse;
@@ -73,6 +74,16 @@ public class CharacterController {
         return Result.ok(characterSquareService.listTemplatesPage(userId, uiLang, tag, keyword, page, pageSize));
     }
 
+    @Operation(summary = "角色广场模板详情（含 promptTemplate）")
+    @GetMapping("/square/{templateId}")
+    public Result<CharacterSquareTemplateResponse> getSquareTemplate(
+            @PathVariable("templateId") Long templateId,
+            HttpServletRequest request) {
+        long userId = StpUtil.getLoginIdAsLong();
+        String uiLang = request.getHeader(CharacterSquareService.HEADER_UI_LANGUAGE);
+        return Result.ok(characterSquareService.getTemplateDetail(userId, templateId, uiLang));
+    }
+
     @Operation(summary = "从角色广场加入我的角色")
     @PostMapping("/square/{templateId}/add")
     public Result<CharacterResponse> addFromSquare(@PathVariable("templateId") Long templateId,
@@ -89,6 +100,16 @@ public class CharacterController {
     public Result<SquareLikeToggleResponse> toggleSquareLike(@PathVariable("templateId") Long templateId) {
         long userId = StpUtil.getLoginIdAsLong();
         return Result.ok(squareLikeService.toggleLike(userId, templateId));
+    }
+
+    @Operation(summary = "角色广场评语批量列表")
+    @GetMapping("/square/comments")
+    public Result<Map<Long, List<SquareCommentResponse>>> listSquareCommentsBatch(
+            @RequestParam("ids") String ids,
+            HttpServletRequest request) {
+        long userId = StpUtil.getLoginIdAsLong();
+        List<Long> templateIds = parseTemplateIds(ids);
+        return Result.ok(squareCommentService.listByTemplateIds(templateIds, userId));
     }
 
     @Operation(summary = "角色广场评语列表")
@@ -170,5 +191,27 @@ public class CharacterController {
     public Result<Map<String, Object>> generate(@Valid @RequestBody GenerateCharacterRequest request) {
         long userId = StpUtil.getLoginIdAsLong();
         return Result.ok(aiChatService.generateCharacter(userId, request));
+    }
+
+    private static List<Long> parseTemplateIds(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        List<Long> ids = new java.util.ArrayList<>();
+        for (String part : raw.split(",")) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                long id = Long.parseLong(trimmed);
+                if (id > 0) {
+                    ids.add(id);
+                }
+            } catch (NumberFormatException ignored) {
+                // skip invalid token
+            }
+        }
+        return ids;
     }
 }
