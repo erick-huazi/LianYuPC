@@ -96,7 +96,7 @@
               extra-class="gal-bubble__text"
             />
             <span
-              v-if="item._lastOfGroup && !item._streamGroupId"
+              v-if="item._lastOfGroup && !item._streamGroupId && item._showTime !== false"
               class="gal-bubble__time"
             >{{ formatTime(item.createdAt) }}</span>
           </div>
@@ -227,7 +227,11 @@ import { normalizeHex } from '@/utils/themeColor'
 import EmotionBadge from '@/components/EmotionBadge.vue'
 import { getCharacterState } from '@/api/characterState'
 import { setActiveChatConversationId, setActiveChatRefreshHandler } from '@/composables/useActiveChatContext'
-import { splitAssistantReply, resolveMaxRepliesPerTurn } from '@/utils/assistantReplySplit'
+import {
+  splitAssistantReply,
+  splitAssistantReplyForDisplay,
+  resolveMaxRepliesPerTurn
+} from '@/utils/assistantReplySplit'
 import { getElectronAPI } from '@/utils/electron'
 import { useChatScroll, sleep, MIN_REPLY_DISPLAY_MS } from '@/composables/useChatScroll'
 import { formatSmartTime } from '@/utils/feedTime'
@@ -363,29 +367,58 @@ const headerTitle = computed(() => {
 
 const characterAvatarUrl = computed(() => activeCharacter.value?.avatarUrl || '')
 
+function expandAssistantForDisplay(msg) {
+  if (msg._streamGroupId) {
+    const displayContent = stripInnerThoughts(msg.content, showInnerThoughts.value)
+    if (!displayContent) return []
+    return [{
+      ...msg,
+      content: displayContent,
+      _key: msg._tempId || String(msg.id)
+    }]
+  }
+  const displayContent = stripInnerThoughts(msg.content, showInnerThoughts.value)
+  if (!displayContent) return []
+  const pieces = splitAssistantReplyForDisplay(displayContent)
+  if (pieces.length <= 1) {
+    return [{
+      ...msg,
+      content: displayContent,
+      _key: msg.id || msg._tempId
+    }]
+  }
+  return pieces.map((content, i) => ({
+    ...msg,
+    content,
+    _showTime: i === pieces.length - 1,
+    _key: `${msg.id || msg._tempId}-d${i}`
+  }))
+}
+
 const messageTimeline = computed(() => {
   const items = []
   let prevMs = null
   for (const msg of messages.value) {
-    const displayContent = msg.role === 'assistant'
-      ? stripInnerThoughts(msg.content, showInnerThoughts.value)
-      : msg.content
-    if (msg.role === 'assistant' && !displayContent) continue
-    const ms = parseMessageTime(msg)
-    if (prevMs != null && ms - prevMs > TIME_GAP_MS) {
+    const parts = msg.role === 'assistant'
+      ? expandAssistantForDisplay(msg)
+      : [{ ...msg, _key: msg.id || msg._tempId }]
+    for (const part of parts) {
+      if (!part.content && !part.imageUrl) continue
+      const ms = parseMessageTime(part)
+      if (prevMs != null && ms - prevMs > TIME_GAP_MS) {
+        items.push({
+          type: 'time',
+          _key: `time-${ms}`,
+          label: formatTimeDivider(ms)
+        })
+      }
       items.push({
-        type: 'time',
-        _key: `time-${ms}`,
-        label: formatTimeDivider(ms)
+        type: 'message',
+        ...part,
+        _key: part._key || part.id || part._tempId
       })
+      prevMs = ms
     }
-    items.push({
-      type: 'message',
-      ...msg,
-      content: displayContent,
-      _key: msg.id || msg._tempId
-    })
-    prevMs = ms
   }
   // 标记连续同发言人分组：组首显示头像/名字，组末显示时间，组内消息收紧间距
   for (let i = 0; i < items.length; i++) {

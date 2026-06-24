@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveMaxRepliesPerTurn, splitAssistantReply } from '../assistantReplySplit'
+import { resolveMaxRepliesPerTurn, splitAssistantReply, splitAssistantReplyForDisplay } from '../assistantReplySplit'
 
 describe('resolveMaxRepliesPerTurn', () => {
   it('uses speakingStyle profile when no explicit override', () => {
@@ -29,11 +29,23 @@ describe('splitAssistantReply', () => {
     const result = splitAssistantReply(sample, 2)
     expect(result).toHaveLength(2)
     expect(result[0]).toBe('钟离先生吗……当然认识。')
+    expect(result[1]).not.toContain('\n')
     expect(result[1]).toContain('往生堂的客卿')
     expect(result[1]).toContain('省了找人的功夫')
   })
 
   it('splits into three pieces when limit allows', () => {
     expect(splitAssistantReply(sample, 3)).toHaveLength(3)
+  })
+})
+
+describe('splitAssistantReplyForDisplay', () => {
+  it('splits newline-separated assistant text into separate display bubbles', () => {
+    const text = [
+      '炸鸡汉堡……（微微皱眉，又松开）',
+      '您倒是是有胃口。那些东西油重了些，我一般只尝一口就饱了。',
+      '不过——您吃得开心就好。晚上吃完记得喝点茶解腻。'
+    ].join('\n')
+    expect(splitAssistantReplyForDisplay(text)).toHaveLength(3)
   })
 })

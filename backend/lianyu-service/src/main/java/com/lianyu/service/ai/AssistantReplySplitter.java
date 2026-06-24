@@ -45,7 +45,7 @@ public class AssistantReplySplitter {
 
         if (pieces.size() > limit) {
             List<String> merged = new ArrayList<>(pieces.subList(0, limit - 1));
-            String tail = String.join("\n", pieces.subList(limit - 1, pieces.size()));
+            String tail = String.join(" ", pieces.subList(limit - 1, pieces.size()));
             merged.add(tail.trim());
             return merged;
         }

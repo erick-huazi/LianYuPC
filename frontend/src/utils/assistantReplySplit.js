@@ -18,7 +18,7 @@ function splitBySentenceBoundary(text) {
   return [text.trim()]
 }
 
-export function splitAssistantReply(fullContent, maxRepliesPerTurn = 3) {
+function collectReplyPieces(fullContent) {
   if (!fullContent || !String(fullContent).trim()) {
     return []
   }
@@ -37,14 +37,26 @@ export function splitAssistantReply(fullContent, maxRepliesPerTurn = 3) {
       pieces = sentencePieces
     }
   }
-
-  const limit = Math.max(1, Number(maxRepliesPerTurn) || 3)
-  if (pieces.length > limit) {
-    const head = pieces.slice(0, limit - 1)
-    const tail = pieces.slice(limit - 1).join('\n').trim()
-    return [...head, tail]
-  }
   return pieces
+}
+
+function capReplyPieces(pieces, limit) {
+  const capped = Math.max(1, Number(limit) || 3)
+  if (pieces.length <= capped) {
+    return pieces
+  }
+  const head = pieces.slice(0, capped - 1)
+  const tail = pieces.slice(capped - 1).join(' ').trim()
+  return [...head, tail]
+}
+
+export function splitAssistantReply(fullContent, maxRepliesPerTurn = 3) {
+  return capReplyPieces(collectReplyPieces(fullContent), maxRepliesPerTurn)
+}
+
+/** 展示层：按换行/句号拆成多条气泡，避免单条 DB 消息因 pre-wrap 露出多行 */
+export function splitAssistantReplyForDisplay(fullContent) {
+  return capReplyPieces(collectReplyPieces(fullContent), 5)
 }
 
 /** 与后端 {@code CharacterChatBehaviorResolver.StyleProfile} 默认条数一致 */
