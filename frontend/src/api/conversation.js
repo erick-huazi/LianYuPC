@@ -1,5 +1,6 @@
 import http from './index'
 import { applyOutputLanguageHeaders } from '@/utils/outputLanguageHeader'
+import { applyAttestationHeaders } from '@/utils/clientAttestation'
 import { apiBasePath } from '@/utils/runtime'
 import { syncToken } from '@/utils/secureToken'
 
@@ -53,14 +54,21 @@ export function updateGroupTitle(id, title) {
 }
 
 // Non-Axios SSE — fetch API handles streams better
-export function sendMessageStream(id, data) {
+export async function sendMessageStream(id, data) {
   const token = syncToken()
+  const bodyText = JSON.stringify(data)
+  let headers = applyOutputLanguageHeaders({
+    'Content-Type': 'application/json',
+    'lianyu-token': token || ''
+  })
+  headers = await applyAttestationHeaders(headers, {
+    method: 'POST',
+    url: `/conversation/${id}/messages/stream`,
+    data: bodyText,
+  })
   return fetch(`${apiBasePath()}/conversation/${id}/messages/stream`, {
     method: 'POST',
-    headers: applyOutputLanguageHeaders({
-      'Content-Type': 'application/json',
-      'lianyu-token': token || ''
-    }),
-    body: JSON.stringify(data)
+    headers,
+    body: bodyText
   })
 }

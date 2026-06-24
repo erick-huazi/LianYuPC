@@ -32,6 +32,12 @@ function sanitizeSession(raw) {
   if (raw.savedAt != null && Number.isFinite(Number(raw.savedAt))) {
     next.savedAt = Number(raw.savedAt)
   }
+  if (typeof raw.deviceId === 'string' && raw.deviceId.trim()) {
+    next.deviceId = raw.deviceId.trim()
+  }
+  if (typeof raw.deviceSecret === 'string' && raw.deviceSecret.trim()) {
+    next.deviceSecret = raw.deviceSecret.trim()
+  }
   return Object.keys(next).length ? next : null
 }
 

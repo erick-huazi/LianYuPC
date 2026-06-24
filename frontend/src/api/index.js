@@ -4,6 +4,7 @@ import { apiBasePath } from '@/utils/runtime'
 import { extractApiError, humanizeError } from '@/utils/errorMessage'
 import { readToken, clearTokenStorage } from '@/utils/secureToken'
 import { applyOutputLanguageHeaders } from '@/utils/outputLanguageHeader'
+import { applyAttestationHeaders } from '@/utils/clientAttestation'
 
 const http = axios.create({
   baseURL: apiBasePath(),
@@ -20,6 +21,11 @@ http.interceptors.request.use(async config => {
   const traceId = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36)
   config.headers['X-Trace-Id'] = traceId
   config.headers = applyOutputLanguageHeaders(config.headers)
+  config.headers = await applyAttestationHeaders(config.headers, {
+    method: config.method,
+    url: config.url,
+    data: config.data,
+  })
   return config
 })
 

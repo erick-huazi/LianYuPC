@@ -12,4 +12,7 @@ public class LoginResponse {
     private String username;
     private String nickname;
     private String avatarUrl;
+    /** Electron client attestation — only returned on login/register with valid X-LianYu-Client. */
+    private String deviceId;
+    private String deviceSecret;
 }

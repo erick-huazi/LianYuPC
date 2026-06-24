@@ -90,13 +90,101 @@ def extract_app_archive(app_7z: Path, out_dir: Path, seven_z: str) -> None:
         raise SystemExit(f"7z level2 failed:\n{proc.stderr}\n{proc.stdout}")
 
 
-def extract_asar(asar_path: Path, out_dir: Path) -> None:
+def extract_asar(asar_path: Path, out_dir: Path) -> dict:
+    """Returns {ok, useful, bloat_files, stderr, stdout}."""
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
     proc = run(["npx", "--yes", "@electron/asar", "extract", str(asar_path), str(out_dir)], cwd=ROOT)
+    ok = proc.returncode == 0
+    useful = ok and (out_dir / "package.json").is_file() and (out_dir / "dist" / "index.html").is_file()
+    bloat_files = 0
+    if ok and out_dir.is_dir():
+        for fp in out_dir.iterdir():
+            if fp.is_file() and re.fullmatch(r"[0-9a-f]{60,64}", fp.name):
+                bloat_files += 1
+    return {
+        "ok": ok,
+        "useful": useful,
+        "bloat_files": bloat_files,
+        "stderr": proc.stderr or "",
+        "stdout": proc.stdout or "",
+    }
+
+
+def extract_asar_file(asar_path: Path, internal_path: str, out_file: Path) -> bool:
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    proc = run(
+        ["npx", "--yes", "@electron/asar", "extract-file", str(asar_path), internal_path, str(out_file)],
+        cwd=ROOT,
+    )
+    return proc.returncode == 0 and out_file.is_file()
+
+
+def list_asar_entries(asar_path: Path) -> list[str]:
+    proc = run(["npx", "--yes", "@electron/asar", "list", str(asar_path)], cwd=ROOT)
     if proc.returncode != 0:
-        raise SystemExit(f"asar extract failed:\n{proc.stderr}\n{proc.stdout}")
+        return []
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def score_obfuscation(text: str) -> dict:
+    """Heuristic obfuscation score for a JS bundle."""
+    markers = {
+        "_0x": len(re.findall(r"_0x[0-9a-fA-F]+", text)),
+        "string_array_fn": len(re.findall(r"function\s+_0x", text)),
+        "base64_strings": len(re.findall(r"['\"][A-Za-z0-9+/=]{20,}['\"]", text)),
+        "control_flow": len(re.findall(r"while\s*\(\s*!\!\[\]", text)),
+        "mangled_vars": len(re.findall(r"const\s+[A-Za-z]{1,2}\s*=\s*[A-Za-z]{1,2}\b", text)),
+    }
+    score = min(
+        100,
+        markers["_0x"] * 2
+        + markers["string_array_fn"] * 5
+        + min(markers["base64_strings"], 20)
+        + markers["control_flow"] * 10
+        + min(markers["mangled_vars"], 10),
+    )
+    return {"score": score, "markers": markers, "obfuscated": score >= 15}
+
+
+def collect_obfuscation_scores(asar_path: Path, asar_dir: Path, extract_ok: bool) -> dict:
+    samples: dict[str, dict] = {}
+    renderer_dir = asar_dir / "dist" / "assets"
+    file_targets = {
+        "preload": asar_dir / "dist-electron" / "preload.cjs",
+        "main": asar_dir / "dist-electron" / "main.js",
+    }
+
+    if extract_ok and asar_dir.is_dir():
+        if renderer_dir.is_dir():
+            for js in renderer_dir.glob("*.js"):
+                samples["renderer"] = score_obfuscation(js.read_text(encoding="utf-8", errors="replace"))
+                break
+        for label, fp in file_targets.items():
+            if fp.is_file():
+                samples[label] = score_obfuscation(fp.read_text(encoding="utf-8", errors="replace"))
+    else:
+        entries = list_asar_entries(asar_path)
+        for entry in entries:
+            norm = entry.replace("\\", "/")
+            if norm.startswith("dist/assets/") and norm.endswith(".js") and "renderer" not in samples:
+                tmp = AUDIT_ROOT / "_tmp_extract" / "renderer.js"
+                if extract_asar_file(asar_path, entry, tmp):
+                    samples["renderer"] = score_obfuscation(tmp.read_text(encoding="utf-8", errors="replace"))
+            elif norm.endswith("dist-electron/preload.cjs") and "preload" not in samples:
+                tmp = AUDIT_ROOT / "_tmp_extract" / "preload.cjs"
+                if extract_asar_file(asar_path, entry, tmp):
+                    samples["preload"] = score_obfuscation(tmp.read_text(encoding="utf-8", errors="replace"))
+            elif norm.endswith("dist-electron/main.js") and "main" not in samples:
+                tmp = AUDIT_ROOT / "_tmp_extract" / "main.js"
+                if extract_asar_file(asar_path, entry, tmp):
+                    samples["main"] = score_obfuscation(tmp.read_text(encoding="utf-8", errors="replace"))
+    return samples
+
+
+def count_plain_ipc_channels(text: str) -> int:
+    return len(re.findall(r"['\"]desktop:[^'\"]+['\"]|['\"]auth:[^'\"]+['\"]", text))
 
 
 def beautify_js(files: list[Path]) -> None:
@@ -190,6 +278,10 @@ def write_report(
     extra_dist: Path | None,
     hits: list[dict],
     ipc_apis: list[str],
+    asar_extract: dict,
+    obfuscation: dict,
+    plain_ipc_count: int,
+    bytecode_present: bool,
     out_md: Path,
 ) -> None:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -234,11 +326,45 @@ def write_report(
         ]
 
     lines += [
-        "## 2. IPC surface (preload → main)",
+        "## 2. ASAR protection",
         "",
-        ", ".join(f"`{k}`" for k in ipc_apis) if ipc_apis else "(preload not found)",
+    ]
+    if not asar_extract["ok"]:
+        lines.append("- **Full `asar extract`**: FAILED (expected with asarmor patch)")
+    elif not asar_extract.get("useful", False):
+        lines.append("- **Full `asar extract`**: succeeded but payload unusable (dist/index.html missing — asarmor effective)")
+    else:
+        lines.append("- **Full `asar extract`**: succeeded with readable tree (patch adds bloat; rely on obfuscation + fuses)")
+    lines.append(f"- **Bloat/hash entries at extract root**: {asar_extract.get('bloat_files', 0)}")
+    if not asar_extract["ok"] and asar_extract.get("stderr"):
+        lines.append(f"- Extract stderr: `{asar_extract['stderr'][:200].strip()}`")
+    lines += [
         "",
-        "## 3. Secret / sensitive string scan",
+        "## 3. Obfuscation score",
+        "",
+        "| Bundle | Score | Obfuscated | _0x refs |",
+        "|--------|-------|------------|----------|",
+    ]
+    for label in ("renderer", "preload", "main"):
+        if label in obfuscation:
+            o = obfuscation[label]
+            m = o["markers"]
+            lines.append(
+                f"| {label} | {o['score']} | {'yes' if o['obfuscated'] else 'no'} | {m['_0x']} |"
+            )
+        else:
+            lines.append(f"| {label} | — | — | — |")
+    lines += [
+        "",
+        f"- Plain IPC channel literals in preload/main sample: **{plain_ipc_count}**",
+        "",
+        f"- **V8 bytecode (.jsc)**: {'present' if bytecode_present else 'missing'}",
+        "",
+        "## 4. IPC surface (preload → main)",
+        "",
+        ", ".join(f"`{k}`" for k in ipc_apis) if ipc_apis else "(preload obfuscated or not found)",
+        "",
+        "## 5. Secret / sensitive string scan",
         "",
         f"Total hits: **{len(hits)}** | Non-public config hits: **{len(critical)}**",
         "",
@@ -257,7 +383,7 @@ def write_report(
 
     lines += [
         "",
-        "## 4. Verdict",
+        "## 6. Verdict",
         "",
     ]
     if any(h["label"] in ("OpenAI-style sk- key", "Master key env", "Redis URL", "MySQL URL") for h in hits):
@@ -269,12 +395,117 @@ def write_report(
 
     lines += [
         "",
-        "- Vue/Electron JS is minified but recoverable (beautified in audit dir).",
+        "- Vue/Electron JS is obfuscated; full extract may fail under asarmor patch.",
         "- `.cursor/` rules are NOT in installer (not in electron-builder files list).",
         "",
     ]
     out_md.write_text("\n".join(lines), encoding="utf-8")
     print(f"Report written: {out_md}", flush=True)
+
+
+def audit_installer(installer: Path, *, version: str = "", out_md: Path | None = None) -> dict:
+    """Run full audit; returns structured result for verify gate."""
+    seven_z = find_7z()
+    if not seven_z:
+        raise SystemExit("7z not found. Install 7-Zip or add 7z to PATH.")
+
+    version = version or parse_version_from_installer(installer)
+    level1 = AUDIT_ROOT / version / "level1"
+    level2 = AUDIT_ROOT / version / "level2"
+    asar_dir = AUDIT_ROOT / version / "asar"
+
+    if (AUDIT_ROOT / version).exists():
+        shutil.rmtree(AUDIT_ROOT / version, ignore_errors=True)
+
+    print(f"=== Auditing {installer.name} ({version}) ===", flush=True)
+    extract_nsis(installer, level1, seven_z)
+
+    app_7z = find_app_7z(level1)
+    if not app_7z:
+        raise SystemExit("app-64.7z not found in NSIS extract")
+    extract_app_archive(app_7z, level2, seven_z)
+
+    asar_path = level2 / "resources" / "app.asar"
+    if not asar_path.is_file():
+        raise SystemExit(f"app.asar not found: {asar_path}")
+
+    asar_extract = extract_asar(asar_path, asar_dir)
+    extra_dist = level2 / "resources" / "dist"
+
+    js_targets: list[Path] = []
+    if asar_extract["ok"]:
+        for pattern in ("dist-electron/*.js", "dist-electron/*.cjs", "dist/assets/*.js"):
+            js_targets.extend(asar_dir.glob(pattern))
+        if extra_dist.is_dir():
+            js_targets.extend(extra_dist.glob("assets/*.js"))
+        beautify_js(js_targets)
+
+    obfuscation = collect_obfuscation_scores(asar_path, asar_dir, asar_extract["ok"])
+
+    ipc_text = ""
+    preload = asar_dir / "dist-electron" / "preload.cjs"
+    main_js = asar_dir / "dist-electron" / "main.js"
+    if preload.is_file():
+        ipc_text += preload.read_text(encoding="utf-8", errors="replace")
+    elif extract_asar_file(asar_path, "dist-electron/preload.cjs", AUDIT_ROOT / "_tmp_extract" / "preload.cjs"):
+        ipc_text += (AUDIT_ROOT / "_tmp_extract" / "preload.cjs").read_text(encoding="utf-8", errors="replace")
+    if main_js.is_file():
+        ipc_text += main_js.read_text(encoding="utf-8", errors="replace")
+    elif extract_asar_file(asar_path, "dist-electron/main.js", AUDIT_ROOT / "_tmp_extract" / "main.js"):
+        ipc_text += (AUDIT_ROOT / "_tmp_extract" / "main.js").read_text(encoding="utf-8", errors="replace")
+    plain_ipc_count = count_plain_ipc_channels(ipc_text)
+
+    scan_roots = [asar_dir] if asar_extract["ok"] else []
+    if extra_dist.is_dir():
+        scan_roots.append(extra_dist)
+    all_hits: list[dict] = []
+    for root in scan_roots:
+        for h in scan_secrets(root):
+            h["file"] = f"{root.name}/{h['file']}" if root != asar_dir else h["file"]
+            all_hits.append(h)
+
+    ipc_apis = list_ipc_exposed(preload) if preload.is_file() else []
+
+    bytecode_present = any(
+        "dist-electron/main.jsc" in e.replace("\\", "/") for e in list_asar_entries(asar_path)
+    ) and any(
+        "dist-electron/preload.jsc" in e.replace("\\", "/") for e in list_asar_entries(asar_path)
+    )
+
+    report_path = out_md or (ROOT / ".cortexloop" / f"audit-installer-{version}.md")
+    write_report(
+        installer=installer,
+        version=version,
+        level1=level1,
+        level2=level2,
+        asar_dir=asar_dir,
+        extra_dist=extra_dist if extra_dist.is_dir() else None,
+        hits=all_hits,
+        ipc_apis=ipc_apis,
+        asar_extract=asar_extract,
+        obfuscation=obfuscation,
+        plain_ipc_count=plain_ipc_count,
+        bytecode_present=bytecode_present,
+        out_md=report_path,
+    )
+
+    critical = [h for h in all_hits if h["label"] in (
+        "OpenAI-style sk- key", "Master key env", "Redis URL", "MySQL URL"
+    )]
+
+    return {
+        "version": version,
+        "report": report_path,
+        "asar_extract_blocked": not asar_extract["ok"],
+        "asar_extract_useful": asar_extract.get("useful", False),
+        "asar_bloat_files": asar_extract.get("bloat_files", 0),
+        "extra_dist_outside_asar": extra_dist.is_dir(),
+        "obfuscation": obfuscation,
+        "plain_ipc_count": plain_ipc_count,
+        "critical_hits": len(critical),
+        "total_hits": len(all_hits),
+        "bytecode_present": bytecode_present,
+    }
 
 
 def parse_version_from_installer(installer: Path) -> str:
@@ -297,63 +528,9 @@ def main() -> None:
     if not installer.is_file():
         raise SystemExit(f"Installer not found: {installer}")
 
-    seven_z = find_7z()
-    if not seven_z:
-        raise SystemExit("7z not found. Install 7-Zip or add 7z to PATH.")
-
     version = args.version or parse_version_from_installer(installer)
-    level1 = AUDIT_ROOT / version / "level1"
-    level2 = AUDIT_ROOT / version / "level2"
-    asar_dir = AUDIT_ROOT / version / "asar"
-
-    if AUDIT_ROOT.exists():
-        shutil.rmtree(AUDIT_ROOT / version, ignore_errors=True)
-
-    print(f"=== Auditing {installer.name} ({version}) ===", flush=True)
-    extract_nsis(installer, level1, seven_z)
-
-    app_7z = find_app_7z(level1)
-    if not app_7z:
-        raise SystemExit("app-64.7z not found in NSIS extract")
-    extract_app_archive(app_7z, level2, seven_z)
-
-    asar_path = level2 / "resources" / "app.asar"
-    if not asar_path.is_file():
-        raise SystemExit(f"app.asar not found: {asar_path}")
-    extract_asar(asar_path, asar_dir)
-
-    extra_dist = level2 / "resources" / "dist"
-    js_targets: list[Path] = []
-    for pattern in ("dist-electron/*.js", "dist/assets/*.js"):
-        js_targets.extend(asar_dir.glob(pattern))
-    if extra_dist.is_dir():
-        js_targets.extend(extra_dist.glob("assets/*.js"))
-    beautify_js(js_targets)
-
-    scan_roots = [asar_dir]
-    if extra_dist.is_dir():
-        scan_roots.append(extra_dist)
-    all_hits: list[dict] = []
-    for root in scan_roots:
-        for h in scan_secrets(root):
-            h["file"] = f"{root.name}/{h['file']}" if root != asar_dir else h["file"]
-            all_hits.append(h)
-
-    preload = asar_dir / "dist-electron" / "preload.cjs"
-    ipc_apis = list_ipc_exposed(preload)
-
-    out_md = Path(args.out_md) if args.out_md else ROOT / ".cortexloop" / f"audit-installer-{version}.md"
-    write_report(
-        installer=installer,
-        version=version,
-        level1=level1,
-        level2=level2,
-        asar_dir=asar_dir,
-        extra_dist=extra_dist if extra_dist.is_dir() else None,
-        hits=all_hits,
-        ipc_apis=ipc_apis,
-        out_md=out_md,
-    )
+    out_md = Path(args.out_md) if args.out_md else None
+    audit_installer(installer, version=version, out_md=out_md)
 
 
 if __name__ == "__main__":

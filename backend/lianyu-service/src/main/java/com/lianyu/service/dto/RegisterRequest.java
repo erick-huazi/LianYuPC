@@ -18,4 +18,6 @@ public class RegisterRequest {
     private String nickname;
     @Valid
     private CaptchaVerifyRequest captcha;
+    private String deviceId;
+    private String clientBuildId;
 }
