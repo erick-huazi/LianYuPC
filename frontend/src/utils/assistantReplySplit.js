@@ -47,19 +47,38 @@ export function splitAssistantReply(fullContent, maxRepliesPerTurn = 3) {
   return pieces
 }
 
+/** 与后端 {@code CharacterChatBehaviorResolver.StyleProfile} 默认条数一致 */
+const SPEAKING_STYLE_MAX_REPLIES = {
+  活泼: 3,
+  元气: 3,
+  温柔: 2,
+  傲娇: 2,
+  毒舌: 2,
+  冷静: 1,
+  成熟: 1,
+  慵懒: 1
+}
+
+function clampMaxReplies(n) {
+  return Math.min(5, Math.max(1, n))
+}
+
 export function resolveMaxRepliesPerTurn(character) {
   const settings = character?.settings
-  if (!settings || typeof settings !== 'object') {
-    return 3
+  if (settings && typeof settings === 'object') {
+    const nested = settings.chatBehavior
+    if (nested && typeof nested === 'object' && nested.maxRepliesPerTurn != null) {
+      const n = Number(nested.maxRepliesPerTurn)
+      if (Number.isFinite(n)) return clampMaxReplies(n)
+    }
+    if (settings.maxRepliesPerTurn != null) {
+      const n = Number(settings.maxRepliesPerTurn)
+      if (Number.isFinite(n)) return clampMaxReplies(n)
+    }
+    const style = String(settings.speakingStyle || '').trim()
+    if (style && SPEAKING_STYLE_MAX_REPLIES[style] != null) {
+      return SPEAKING_STYLE_MAX_REPLIES[style]
+    }
   }
-  const nested = settings.chatBehavior
-  if (nested && typeof nested === 'object' && nested.maxRepliesPerTurn != null) {
-    const n = Number(nested.maxRepliesPerTurn)
-    if (Number.isFinite(n)) return Math.min(5, Math.max(1, n))
-  }
-  if (settings.maxRepliesPerTurn != null) {
-    const n = Number(settings.maxRepliesPerTurn)
-    if (Number.isFinite(n)) return Math.min(5, Math.max(1, n))
-  }
-  return 3
+  return 2
 }

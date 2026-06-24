@@ -591,6 +591,20 @@ async function loadOlderMessages() {
   }
 }
 
+function compareMessagesForTimeline(a, b) {
+  const timeDiff = parseMessageTime(a) - parseMessageTime(b)
+  if (timeDiff !== 0) return timeDiff
+  if (a.seq != null && b.seq != null) return a.seq - b.seq
+  if (a.seq != null) return -1
+  if (b.seq != null) return 1
+  const roleOrder = { user: 0, assistant: 1 }
+  return (roleOrder[a.role] ?? 2) - (roleOrder[b.role] ?? 2)
+}
+
+function sortMessagesInTimelineOrder() {
+  messages.value.sort(compareMessagesForTimeline)
+}
+
 function mergePolledMessages(incoming) {
   if (!incoming.length) {
     return false
@@ -599,6 +613,21 @@ function mergePolledMessages(incoming) {
   let changed = false
   const byId = new Map(messages.value.filter(m => m.id).map(m => [m.id, m]))
   const lastLocalSeq = messages.value.reduce((max, m) => Math.max(max, m.seq || 0), 0)
+  const incomingUsers = incoming.filter(m => m.role === 'user')
+  const incomingAssistants = incoming.filter(m => m.role === 'assistant')
+  const replacedUserIds = new Set()
+  let addedServerAssistant = false
+
+  for (let i = 0; i < messages.value.length; i++) {
+    const local = messages.value[i]
+    if (!local._tempId?.startsWith('u')) continue
+    const serverMatch = incomingUsers.find(serverMsg => isSameRecentUserMessage(local, serverMsg))
+    if (!serverMatch?.id) continue
+    messages.value[i] = normalizeMessageRole({ ...serverMatch })
+    byId.set(serverMatch.id, messages.value[i])
+    replacedUserIds.add(serverMatch.id)
+    changed = true
+  }
 
   for (const msg of incoming) {
     if (!msg.id) continue
@@ -610,42 +639,44 @@ function mergePolledMessages(incoming) {
       }
       continue
     }
+    if (replacedUserIds.has(msg.id)) {
+      continue
+    }
     if ((msg.seq ?? 0) >= lastLocalSeq || messages.value.length === 0) {
-      messages.value.push(msg)
-      byId.set(msg.id, msg)
+      messages.value.push(normalizeMessageRole(msg))
+      byId.set(msg.id, messages.value[messages.value.length - 1])
+      if (msg.role === 'assistant') {
+        addedServerAssistant = true
+      }
       changed = true
     }
   }
 
-  const incomingUsers = incoming.filter(m => m.role === 'user')
-  const incomingAssistants = incoming.filter(m => m.role === 'assistant')
   const confirmedTempUsers = new Set()
-  const confirmedStreamAssistants = new Set()
-
+  const confirmedStreamGroups = new Set()
   for (const msg of messages.value) {
     if (msg._tempId?.startsWith('u') && incomingUsers.some(serverMsg => isSameRecentUserMessage(msg, serverMsg))) {
       confirmedTempUsers.add(msg._tempId)
     } else if (msg._streamGroupId && incomingAssistants.some(serverMsg => isSameAssistantMessage(msg, serverMsg))) {
-      confirmedStreamAssistants.add(msg._streamGroupId)
+      confirmedStreamGroups.add(msg._streamGroupId)
     }
   }
 
-  const stillPending = messages.value.filter(m =>
-    m._tempId?.startsWith('u') && !confirmedTempUsers.has(m._tempId)
-  )
-  if (confirmedTempUsers.size || confirmedStreamAssistants.size || stillPending.length) {
-    const merged = messages.value.filter(m =>
+  const shouldDropStreams = addedServerAssistant || confirmedStreamGroups.size > 0
+  if (confirmedTempUsers.size || shouldDropStreams) {
+    const next = messages.value.filter(m =>
       !confirmedTempUsers.has(m._tempId)
-      && !(m._streamGroupId && confirmedStreamAssistants.has(m._streamGroupId))
-      && !m._tempId?.startsWith('u')
+      && !(shouldDropStreams && m._streamGroupId)
+      && !(m._streamGroupId && confirmedStreamGroups.has(m._streamGroupId))
     )
-    const insertAfter = merged.findLastIndex(m => m.role === 'user')
-    const pos = insertAfter >= 0 ? insertAfter + 1 : merged.length
-    merged.splice(pos, 0, ...stillPending)
-    if (merged.length !== messages.value.length || confirmedTempUsers.size || confirmedStreamAssistants.size) {
-      messages.value = merged
+    if (next.length !== messages.value.length) {
+      messages.value = next
       changed = true
     }
+  }
+
+  if (changed) {
+    sortMessagesInTimelineOrder()
   }
 
   return changed
@@ -862,11 +893,12 @@ async function handleSend() {
 
   waitingReply.value = true
   const streamGroupId = 'stream-' + Date.now()
-  const streamCreatedAt = new Date().toISOString()
+  const userCreatedMs = parseMessageTime(userMsg)
+  const streamCreatedAt = new Date(userCreatedMs + 1).toISOString()
   const sendStartedAt = Date.now()
+  const sendConvId = currentConvId.value
 
   try {
-    const sendConvId = currentConvId.value
     const response = await sendMessageStream(sendConvId, {
       provider: currentProvider.value,
       model: currentProvider.value === PLATFORM_PROVIDER ? undefined : (currentModel.value || undefined),
@@ -891,10 +923,10 @@ async function handleSend() {
 
     if (currentConvId.value === sendConvId && fullContent?.trim()) {
       syncStreamingAssistantBubbles(fullContent, streamGroupId, streamCreatedAt)
+      sortMessagesInTimelineOrder()
       await nextTick()
       scrollToBottom()
       skipBounceOnce = true
-      await pollCurrentConversationMessages(true)
     }
   } catch (err) {
     ElMessage.error(humanizeError(err, '消息发送失败，请稍后再试'))
@@ -902,9 +934,11 @@ async function handleSend() {
       m => m._tempId !== userMsg._tempId && m._streamGroupId !== streamGroupId
     )
     skipBounceOnce = true
-    await pollCurrentConversationMessages(true)
   } finally {
     waitingReply.value = false
+    if (currentConvId.value === sendConvId) {
+      await pollCurrentConversationMessages(true)
+    }
     await nextTick()
     focusChatInput()
     scrollToBottom()
@@ -1008,6 +1042,7 @@ function syncStreamingAssistantBubbles(fullContent, streamGroupId, createdAt) {
     }))
     .filter(m => m.content)
   messages.value = [...rest, ...streamMsgs]
+  sortMessagesInTimelineOrder()
 }
 
 function normalizeMessageRole(msg) {
