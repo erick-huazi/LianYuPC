@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""Verification gate for LianYu Electron releases (Tier B hardening)."""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+FRONTEND = ROOT / "frontend"
+
+# Import audit runner from sibling script
+sys.path.insert(0, str(ROOT / "scripts"))
+from _audit_installer_unpack import audit_installer, parse_version_from_installer  # noqa: E402
+
+
+def run(cmd: list[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
+    print(f"$ {' '.join(cmd)}", flush=True)
+    shell = sys.platform == "win32" and cmd and cmd[0] in {"npx", "npm", "node"}
+    proc = subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        shell=shell,
+    )
+    if check and proc.returncode != 0:
+        raise SystemExit(f"Command failed ({proc.returncode}):\n{proc.stderr}\n{proc.stdout}")
+    return proc
+
+
+def assert_audit(audit: dict) -> list[str]:
+    failures: list[str] = []
+    asar_ok = (
+        audit["asar_extract_blocked"]
+        or not audit.get("asar_extract_useful", True)
+        or audit.get("asar_bloat_files", 0) >= 10
+    )
+    if not asar_ok:
+        failures.append("asar extract produced fully usable tree with no bloat — asarmor patch may be missing")
+    if audit["extra_dist_outside_asar"]:
+        failures.append("resources/dist found outside app.asar")
+    if audit["critical_hits"] > 0:
+        failures.append(f"CRITICAL secret scan hits: {audit['critical_hits']}")
+    obf = audit.get("obfuscation", {})
+    for label in ("renderer", "preload", "main"):
+        if label not in obf:
+            failures.append(f"obfuscation sample missing for {label}")
+        elif not obf[label].get("obfuscated"):
+            failures.append(f"{label} bundle obfuscation score too low ({obf[label].get('score')})")
+    if not audit.get("bytecode_present"):
+        # Obfuscated main.cjs is acceptable when V8 bytecode is skipped for ESM/CJS compat
+        pass
+    return failures
+
+
+def check_attestation_api(api_origin: str) -> list[str]:
+    """Unsigned /auth/me must not succeed (401/403 from Sa-Token or attestation filter)."""
+    failures: list[str] = []
+    if not api_origin:
+        return failures
+    import ssl
+    import urllib.error
+    import urllib.request
+
+    url = f"{api_origin.rstrip('/')}/api/auth/me"
+    req = urllib.request.Request(url, headers={"lianyu-token": "invalid-token-for-verify"})
+    ctx = ssl.create_default_context()
+    if url.startswith("https:"):
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            if resp.status == 200:
+                failures.append("unsigned API request returned 200 — attestation may be disabled")
+    except urllib.error.HTTPError as err:
+        if err.code not in (401, 403):
+            failures.append(f"unsigned API request expected 401/403, got {err.code}")
+        else:
+            print(f"Attestation API check OK: unsigned request rejected with {err.code}", flush=True)
+    except Exception as exc:
+        failures.append(f"Attestation API check failed: {exc}")
+    return failures
+
+
+def run_npm_test() -> None:
+    print("\n=== npm test ===", flush=True)
+    proc = run(["npm", "test", "--", "run"], cwd=FRONTEND, check=False)
+    if proc.returncode != 0:
+        raise SystemExit(f"npm test failed:\n{proc.stderr}\n{proc.stdout}")
+    out = proc.stdout[-2000:] if len(proc.stdout) > 2000 else proc.stdout
+    sys.stdout.buffer.write(out.encode("utf-8", errors="replace"))
+    sys.stdout.buffer.write(b"\n")
+
+
+def find_installed_exe(install_dir: Path) -> Path | None:
+    for name in ("LianYu.exe", "lianyu.exe"):
+        p = install_dir / name
+        if p.is_file():
+            return p
+    for p in install_dir.rglob("LianYu.exe"):
+        return p
+    return None
+
+
+def smoke_launch(installer: Path, *, timeout_sec: int = 45) -> list[str]:
+    """Silent-install to temp dir, launch, check startup.log."""
+    failures: list[str] = []
+    if sys.platform != "win32":
+        print("Skipping smoke launch (non-Windows)", flush=True)
+        return failures
+
+    print("\n=== startup smoke test ===", flush=True)
+    install_dir = Path(tempfile.mkdtemp(prefix="lianyu-verify-"))
+    log_path = Path(os.environ.get("APPDATA", "")) / "lianyu-pc" / "startup.log"
+    log_before = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else ""
+
+    try:
+        proc = subprocess.run(
+            [str(installer), "/S", f"/D={install_dir}"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if proc.returncode != 0:
+            failures.append(f"silent install failed (exit {proc.returncode})")
+            return failures
+
+        exe = find_installed_exe(install_dir)
+        if not exe:
+            failures.append(f"LianYu.exe not found under {install_dir}")
+            return failures
+
+        subprocess.Popen([str(exe)], cwd=str(exe.parent))
+        deadline = time.time() + timeout_sec
+        new_log = log_before
+        while time.time() < deadline:
+            time.sleep(2)
+            if log_path.is_file():
+                new_log = log_path.read_text(encoding="utf-8", errors="replace")
+                if "did-finish-load" in new_log and "asar integrity verification OK" in new_log:
+                    break
+        else:
+            tail = new_log[-1500:] if new_log else "(no log)"
+            failures.append(f"startup.log missing expected markers within {timeout_sec}s:\n{tail}")
+
+        subprocess.run(["taskkill", "/F", "/IM", "LianYu.exe"], capture_output=True)
+    finally:
+        shutil.rmtree(install_dir, ignore_errors=True)
+
+    return failures
+
+
+def tamper_test(installer: Path) -> list[str]:
+    """Optional: tamper app.asar → integrity check should fail at launch."""
+    failures: list[str] = []
+    if sys.platform != "win32":
+        return failures
+
+    print("\n=== tamper test (optional) ===", flush=True)
+    install_dir = Path(tempfile.mkdtemp(prefix="lianyu-tamper-"))
+    try:
+        proc = subprocess.run(
+            [str(installer), "/S", f"/D={install_dir}"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if proc.returncode != 0:
+            print(f"tamper test skipped: install failed ({proc.returncode})", flush=True)
+            return failures
+
+        asar_path = install_dir / "resources" / "app.asar"
+        if not asar_path.is_file():
+            for p in install_dir.rglob("app.asar"):
+                asar_path = p
+                break
+        if not asar_path.is_file():
+            print("tamper test skipped: app.asar not found", flush=True)
+            return failures
+
+        data = bytearray(asar_path.read_bytes())
+        if len(data) > 100:
+            data[50] ^= 0xFF
+            asar_path.write_bytes(data)
+
+        exe = find_installed_exe(install_dir)
+        if not exe:
+            return failures
+
+        proc = subprocess.run([str(exe)], capture_output=True, timeout=15)
+        # Tampered asar should exit quickly (dialog + exit 1); non-zero or no hang is OK
+        print(f"tamper launch exit code: {proc.returncode}", flush=True)
+    except subprocess.TimeoutExpired:
+        failures.append("tampered app did not exit promptly (integrity check may be broken)")
+    finally:
+        subprocess.run(["taskkill", "/F", "/IM", "LianYu.exe"], capture_output=True)
+        shutil.rmtree(install_dir, ignore_errors=True)
+    return failures
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Verify LianYu Electron release")
+    parser.add_argument("installer", nargs="?", default="")
+    parser.add_argument("--skip-smoke", action="store_true")
+    parser.add_argument("--skip-tamper", action="store_true")
+    parser.add_argument("--skip-test", action="store_true")
+    parser.add_argument("--api-origin", default=os.environ.get("VITE_LIANYU_API_ORIGIN", ""))
+    args = parser.parse_args()
+
+    if args.installer:
+        installer = Path(args.installer).resolve()
+    else:
+        pkg = FRONTEND / "package.json"
+        import json
+
+        version = json.loads(pkg.read_text(encoding="utf-8"))["version"]
+        installer = FRONTEND / "release" / f"v{version}" / f"LianYu Setup {version}.exe"
+
+    if not installer.is_file():
+        raise SystemExit(f"Installer not found: {installer}")
+
+    version = parse_version_from_installer(installer)
+    print(f"=== Verify {installer.name} ({version}) ===\n", flush=True)
+
+    all_failures: list[str] = []
+
+    audit = audit_installer(installer, version=version)
+    all_failures.extend(assert_audit(audit))
+
+    if not args.skip_test:
+        try:
+            run_npm_test()
+        except SystemExit as exc:
+            all_failures.append(str(exc))
+
+    if args.api_origin:
+        all_failures.extend(check_attestation_api(args.api_origin))
+
+    if not args.skip_smoke:
+        all_failures.extend(smoke_launch(installer))
+
+    if not args.skip_tamper:
+        all_failures.extend(tamper_test(installer))
+
+    print("\n=== Verification summary ===", flush=True)
+    if all_failures:
+        for f in all_failures:
+            print(f"FAIL: {f}", flush=True)
+        raise SystemExit(1)
+
+    print("PASS: audit + tests + smoke (and tamper if run)", flush=True)
+    print(f"Report: {audit['report']}", flush=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -90,7 +90,7 @@ public class CharacterSquareService {
     }
 
     public CharacterSquareTemplateResponse getTemplateDetail(
-            Long userId, Long templateId, String uiLanguageCode) {
+            Long userId, Long templateId, String uiLanguageCode, boolean clientAttested) {
         CharacterSquareTemplate template = templateMapper.selectById(templateId);
         if (template == null || template.getIsEnabled() == null || template.getIsEnabled() != 1) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
@@ -103,12 +103,21 @@ public class CharacterSquareService {
         Map<Long, Long> likeCounts = squareLikeService.getLikeCounts();
         Set<Long> userLikes = squareLikeService.getUserLikes(userId);
         Map<Long, Character> addedByTemplateId = loadAddedCharacters(userId);
-        return toTemplateResponse(
+        return stripPromptIfNeeded(toTemplateResponse(
                 template,
                 addedByTemplateId.get(template.getId()),
                 uiLang,
                 likeCounts.getOrDefault(template.getId(), 0L),
-                userLikes.contains(template.getId()));
+                userLikes.contains(template.getId())), clientAttested);
+    }
+
+    private CharacterSquareTemplateResponse stripPromptIfNeeded(
+            CharacterSquareTemplateResponse response, boolean clientAttested) {
+        if (clientAttested || response == null) {
+            return response;
+        }
+        response.setPromptTemplate(null);
+        return response;
     }
 
     private List<CharacterSquareTemplateCardResponse> buildCardList(Long userId, String uiLang) {

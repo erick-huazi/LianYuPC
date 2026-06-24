@@ -16,6 +16,7 @@ import {
 import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
+import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import {
   readDesktopSettings,
@@ -31,6 +32,12 @@ import {
   clearAuthSession,
 } from './authSessionStore.js'
 import {
+  getClientHeaderValue,
+  loginClientBodyExtras,
+  signAuthenticatedRequest,
+  getClientAttestMeta as readClientAttestMeta,
+} from './clientAttestation.js'
+import {
   readAppearance,
   writeAppearance,
   resolveWindowBackgroundColor,
@@ -43,6 +50,13 @@ import {
 import { prepareGreetingPayload } from './greetingAudio.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const nodeRequire = createRequire(import.meta.url)
+/** 主进程在 app.asar 内时，默认 fs 无法读取 asar 本体，需用 original-fs */
+const rawFs = nodeRequire('original-fs')
+
+function readRawFile(filePath) {
+  return rawFs.readFileSync(filePath)
+}
 const isDev = !!process.env.VITE_DEV_SERVER_URL
 const isDebug = process.env.LIANYU_DEBUG === '1' || process.argv.includes('--lianyu-debug')
 
@@ -66,7 +80,7 @@ let launcherSuppressMoveSave = false
 let launcherLoggedIn = false
 
 const SHARED_WEB_PREFS = {
-  preload: path.join(__dirname, 'preload.cjs'),
+  preload: path.join(__dirname, app.isPackaged ? 'preload.cjs' : 'preload.cjs'),
   contextIsolation: true,
   nodeIntegration: false,
   sandbox: true,
@@ -210,37 +224,33 @@ function getSPKIHash(certificate) {
     throw new Error('SPKI not available')
 }
 
-/** 构建时 after-pack.mjs 注入；占位符须保留在产物中供 sed 替换 */
-globalThis.__LIANYU_ASAR_HASH = '__ASAR_HASH__'
-
-/** @type {Set<number>} */
-const trustedWebContentsIds = new Set()
 function verifyAsarIntegrity() {
   if (!app.isPackaged) return
-  const asarPath = path.join(process.resourcesPath, 'app.asar')
-  const hexPath = path.join(process.resourcesPath, 'asar-integrity.hex')
-  const hash = crypto.createHash('sha256').update(fs.readFileSync(asarPath)).digest('hex')
+  try {
+    const asarPath = path.join(process.resourcesPath, 'app.asar')
+    const hexPath = path.join(process.resourcesPath, 'asar-integrity.hex')
+    const hash = crypto.createHash('sha256').update(readRawFile(asarPath)).digest('hex')
 
-  let expected = ''
-  if (fs.existsSync(hexPath)) {
-    expected = fs.readFileSync(hexPath, 'utf8').trim()
-  }
-  const embedded = String(globalThis.__LIANYU_ASAR_HASH || '').trim()
-  if ((!expected || expected.length !== 64) && embedded !== '__ASAR_HASH__' && embedded.length === 64) {
-    expected = embedded
-  }
-  if (!expected || expected.length !== 64) {
-    log('asar integrity hash not found, skipping verification')
-    return
-  }
+    let expected = ''
+    if (fs.existsSync(hexPath)) {
+      expected = fs.readFileSync(hexPath, 'utf8').trim()
+    }
+    if (!expected || expected.length !== 64) {
+      log('asar integrity hash not found, skipping verification')
+      return
+    }
 
-  if (hash !== expected) {
-    dialog.showErrorBox('LianYu', '客户端文件被篡改，请重新安装。')
+    if (hash !== expected) {
+      dialog.showErrorBox('LianYu', '客户端文件被篡改，请重新安装。')
+      app.exit(1)
+    }
+
+    log('asar integrity verification OK')
+  } catch (err) {
+    log(`asar integrity verification failed: ${err.message}`)
+    dialog.showErrorBox('LianYu', '客户端完整性校验失败，请重新安装。')
     app.exit(1)
   }
-
-  ;(app.setAsarIntegrity ?? app.setAppAsarIntegrity)?.(expected)
-  log('asar integrity verification enabled')
 }
 
 function configureContentSecurityPolicy() {
@@ -278,10 +288,14 @@ function isAllowedExternalUrl(rawUrl) {
   }
 }
 
+/** @type {Set<number>} */
+const trustedWebContentsIds = new Set()
+
 function registerTrustedWebContents(win) {
-  trustedWebContentsIds.add(win.webContents.id)
+  const webContentsId = win.webContents.id
+  trustedWebContentsIds.add(webContentsId)
   win.on('closed', () => {
-    trustedWebContentsIds.delete(win.webContents.id)
+    trustedWebContentsIds.delete(webContentsId)
   })
 }
 
@@ -1230,6 +1244,29 @@ function registerIpcHandlers() {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     clearAuthSession()
     return { ok: true }
+  })
+
+  ipcMain.handle('client:get-attest-meta', (event) => {
+    if (!guardTrusted(event)) return null
+    const meta = readClientAttestMeta()
+    return {
+      version: meta.version,
+      buildId: meta.buildId,
+      clientHeader: getClientHeaderValue(),
+    }
+  })
+
+  ipcMain.handle('auth:sign-request', (event, payload) => {
+    if (!guardTrusted(event)) return null
+    const session = readAuthSession()
+    if (!session?.deviceId || !session?.deviceSecret) return null
+    return signAuthenticatedRequest({
+      deviceId: session.deviceId,
+      deviceSecret: session.deviceSecret,
+      method: payload?.method || 'GET',
+      apiPath: payload?.apiPath || '/api',
+      bodyText: payload?.bodyText || '',
+    })
   })
 
   ipcMain.handle('desktop:get-settings', () => readDesktopSettings())

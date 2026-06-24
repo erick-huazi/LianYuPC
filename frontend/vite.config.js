@@ -56,9 +56,13 @@ export default defineConfig({
     : undefined,
   define: enableElectron
     ? {
-        'process.env.LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
-        'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
-        'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
+        ...(process.env.ELECTRON_BUILD === '1'
+          ? {}
+          : {
+              'process.env.LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
+              'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
+              'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
+            }),
       }
     : undefined,
   envDir: '.',
@@ -81,6 +85,17 @@ export default defineConfig({
                   'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
                   'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
                 },
+                build: process.env.ELECTRON_BUILD === '1'
+                  ? {
+                      rollupOptions: {
+                        output: {
+                          // package.json type=module → main 必须是 ESM；.cjs + import 会在启动时崩溃
+                          entryFileNames: 'main.js',
+                          inlineDynamicImports: true,
+                        },
+                      },
+                    }
+                  : undefined,
               },
             },
             preload: {

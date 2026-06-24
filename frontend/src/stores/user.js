@@ -79,7 +79,7 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  async function persistSession() {
+  async function persistSession(credentials = {}) {
     const electronAPI = getElectronAPI()
     const payload = {
       token: token.value || '',
@@ -89,6 +89,16 @@ export const useUserStore = defineStore('user', () => {
       nickname: nickname.value || '',
       avatarUrl: avatarUrl.value || '',
       savedAt: Date.now(),
+    }
+    if (credentials.deviceId) {
+      payload.deviceId = credentials.deviceId
+    }
+    if (credentials.deviceSecret) {
+      payload.deviceSecret = credentials.deviceSecret
+    } else if (electronAPI?.getAuthSession) {
+      const existing = await electronAPI.getAuthSession()
+      if (existing?.deviceId && !payload.deviceId) payload.deviceId = existing.deviceId
+      if (existing?.deviceSecret && !payload.deviceSecret) payload.deviceSecret = existing.deviceSecret
     }
 
     if (payload.token) {
@@ -100,6 +110,7 @@ export const useUserStore = defineStore('user', () => {
     if (electronAPI?.setAuthSession) {
       await electronAPI.setAuthSession(payload.token ? payload : {
         username: payload.username,
+        deviceId: payload.deviceId,
         savedAt: payload.savedAt,
       })
     }
@@ -149,7 +160,10 @@ export const useUserStore = defineStore('user', () => {
     if (user) {
       applyProfile(user)
     }
-    void persistSession()
+    void persistSession({
+      deviceId: user?.deviceId,
+      deviceSecret: user?.deviceSecret,
+    })
     getElectronAPI()?.setLoginState?.(true)
   }
 

@@ -8,6 +8,7 @@ import com.lianyu.service.character.CharacterService;
 import com.lianyu.service.square.CharacterSquareService;
 import com.lianyu.service.square.SquareCommentService;
 import com.lianyu.service.square.SquareLikeService;
+import com.lianyu.service.security.ClientAttestationService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.dto.CharacterResponse;
 import com.lianyu.service.dto.AddCharacterFromSquareRequest;
@@ -81,7 +82,9 @@ public class CharacterController {
             HttpServletRequest request) {
         long userId = StpUtil.getLoginIdAsLong();
         String uiLang = request.getHeader(CharacterSquareService.HEADER_UI_LANGUAGE);
-        return Result.ok(characterSquareService.getTemplateDetail(userId, templateId, uiLang));
+        boolean attested = Boolean.TRUE.equals(
+                request.getAttribute(ClientAttestationService.REQUEST_ATTR_ATTESTED));
+        return Result.ok(characterSquareService.getTemplateDetail(userId, templateId, uiLang, attested));
     }
 
     @Operation(summary = "从角色广场加入我的角色")
