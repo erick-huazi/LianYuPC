@@ -1,30 +1,16 @@
 import http from './index'
 import { storeToken, clearTokenStorage } from '@/utils/secureToken'
-import { getElectronAPI } from '@/utils/electron'
-import { getElectronLoginExtras } from '@/utils/clientAttestation'
 
 export function getCaptcha() {
   return http.get('/auth/captcha', { skipGlobalError: true })
 }
 
-export async function register(data) {
-  const electronAPI = getElectronAPI()
-  let session = null
-  if (electronAPI?.getAuthSession) {
-    session = await electronAPI.getAuthSession()
-  }
-  const extras = await getElectronLoginExtras(session?.deviceId)
-  return http.post('/auth/register', { ...data, ...extras.body }, { headers: extras.headers })
+export function register(data) {
+  return http.post('/auth/register', data, { timeout: 30000 })
 }
 
 export async function login(data) {
-  const electronAPI = getElectronAPI()
-  let session = null
-  if (electronAPI?.getAuthSession) {
-    session = await electronAPI.getAuthSession()
-  }
-  const extras = await getElectronLoginExtras(session?.deviceId)
-  const result = await http.post('/auth/login', { ...data, ...extras.body }, { headers: extras.headers })
+  const result = await http.post('/auth/login', data, { timeout: 30000 })
   if (result?.token) {
     await storeToken(result.token)
   }

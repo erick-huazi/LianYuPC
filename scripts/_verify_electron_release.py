@@ -17,7 +17,7 @@ FRONTEND = ROOT / "frontend"
 
 # Import audit runner from sibling script
 sys.path.insert(0, str(ROOT / "scripts"))
-from _audit_installer_unpack import audit_installer, parse_version_from_installer  # noqa: E402
+from _audit_installer_unpack import audit_installer, parse_version_from_installer, STUB_MAX_BYTES  # noqa: E402
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -51,43 +51,33 @@ def assert_audit(audit: dict) -> list[str]:
     if audit["critical_hits"] > 0:
         failures.append(f"CRITICAL secret scan hits: {audit['critical_hits']}")
     obf = audit.get("obfuscation", {})
-    for label in ("renderer", "preload", "main"):
+    for label in ("renderer",):
         if label not in obf:
             failures.append(f"obfuscation sample missing for {label}")
         elif not obf[label].get("obfuscated"):
             failures.append(f"{label} bundle obfuscation score too low ({obf[label].get('score')})")
+    if audit.get("bytecode_present"):
+        for label in ("main", "preload"):
+            if label in obf and obf[label].get("score", 0) > 5:
+                failures.append(f"{label} should be bytecode stub, but obfuscation score={obf[label].get('score')}")
+    if audit.get("stale_main_cjs"):
+        failures.append("stale dist-electron/main.cjs found in app.asar — remove before pack")
     if not audit.get("bytecode_present"):
-        # Obfuscated main.cjs is acceptable when V8 bytecode is skipped for ESM/CJS compat
-        pass
-    return failures
-
-
-def check_attestation_api(api_origin: str) -> list[str]:
-    """Unsigned /auth/me must not succeed (401/403 from Sa-Token or attestation filter)."""
-    failures: list[str] = []
-    if not api_origin:
-        return failures
-    import ssl
-    import urllib.error
-    import urllib.request
-
-    url = f"{api_origin.rstrip('/')}/api/auth/me"
-    req = urllib.request.Request(url, headers={"lianyu-token": "invalid-token-for-verify"})
-    ctx = ssl.create_default_context()
-    if url.startswith("https:"):
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-    try:
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
-            if resp.status == 200:
-                failures.append("unsigned API request returned 200 — attestation may be disabled")
-    except urllib.error.HTTPError as err:
-        if err.code not in (401, 403):
-            failures.append(f"unsigned API request expected 401/403, got {err.code}")
-        else:
-            print(f"Attestation API check OK: unsigned request rejected with {err.code}", flush=True)
-    except Exception as exc:
-        failures.append(f"Attestation API check failed: {exc}")
+        failures.append("dist-electron/main.jsc or preload.jsc missing — bytecode pack step may be skipped")
+    if audit.get("stub_too_large"):
+        failures.append(f"electron entry stub too large (max {STUB_MAX_BYTES}B): {audit.get('stub_too_large')}")
+    if audit.get("plaintext_host_hits"):
+        failures.append(
+            "plaintext cloud host/fingerprint in asar: "
+            + "; ".join(audit["plaintext_host_hits"][:3])
+        )
+    if audit.get("renderer_api_env_leak"):
+        failures.append(
+            "VITE_LIANYU_API_ORIGIN literal leaked in renderer bundle: "
+            + ", ".join(audit["renderer_api_env_leak"])
+        )
+    if audit.get("vue_path_hits", 0) > 2:
+        failures.append(f"renderer bundle exposes too many vue source paths ({audit['vue_path_hits']})")
     return failures
 
 
@@ -213,7 +203,6 @@ def main() -> None:
     parser.add_argument("--skip-smoke", action="store_true")
     parser.add_argument("--skip-tamper", action="store_true")
     parser.add_argument("--skip-test", action="store_true")
-    parser.add_argument("--api-origin", default=os.environ.get("VITE_LIANYU_API_ORIGIN", ""))
     args = parser.parse_args()
 
     if args.installer:
@@ -241,9 +230,6 @@ def main() -> None:
             run_npm_test()
         except SystemExit as exc:
             all_failures.append(str(exc))
-
-    if args.api_origin:
-        all_failures.extend(check_attestation_api(args.api_origin))
 
     if not args.skip_smoke:
         all_failures.extend(smoke_launch(installer))

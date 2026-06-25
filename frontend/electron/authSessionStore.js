@@ -4,6 +4,9 @@ import path from 'path'
 
 const SESSION_FILE = 'auth-session.bin'
 
+/** safeStorage 不可用时降级到内存，避免登录后无法保存凭证 */
+let memorySession = null
+
 function sessionPath() {
   return path.join(app.getPath('userData'), SESSION_FILE)
 }
@@ -32,16 +35,12 @@ function sanitizeSession(raw) {
   if (raw.savedAt != null && Number.isFinite(Number(raw.savedAt))) {
     next.savedAt = Number(raw.savedAt)
   }
-  if (typeof raw.deviceId === 'string' && raw.deviceId.trim()) {
-    next.deviceId = raw.deviceId.trim()
-  }
-  if (typeof raw.deviceSecret === 'string' && raw.deviceSecret.trim()) {
-    next.deviceSecret = raw.deviceSecret.trim()
-  }
   return Object.keys(next).length ? next : null
 }
 
 export function readAuthSession() {
+  if (memorySession) return { ...memorySession }
+
   const file = sessionPath()
   if (!fs.existsSync(file)) return null
   try {
@@ -66,16 +65,26 @@ export function writeAuthSession(session) {
     clearAuthSession()
     return null
   }
+
   if (!safeStorage.isEncryptionAvailable()) {
-    return null
+    memorySession = next
+    return { ...next }
   }
-  const encrypted = safeStorage.encryptString(JSON.stringify(next))
-  fs.mkdirSync(path.dirname(sessionPath()), { recursive: true })
-  fs.writeFileSync(sessionPath(), encrypted)
-  return next
+
+  try {
+    const encrypted = safeStorage.encryptString(JSON.stringify(next))
+    fs.mkdirSync(path.dirname(sessionPath()), { recursive: true })
+    fs.writeFileSync(sessionPath(), encrypted)
+    memorySession = next
+    return { ...next }
+  } catch {
+    memorySession = next
+    return { ...next }
+  }
 }
 
 export function clearAuthSession() {
+  memorySession = null
   try {
     if (fs.existsSync(sessionPath())) {
       fs.unlinkSync(sessionPath())

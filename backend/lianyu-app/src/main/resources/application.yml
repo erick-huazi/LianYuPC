@@ -150,14 +150,6 @@ lianyu:
     rate-limit:
       per-ip-per-minute: 30
       per-username-per-minute: 10
-  client-attestation:
-    enforce: ${LIANYU_CLIENT_ATTEST_ENFORCE:false}
-    min-client-version: "0.2.123"
-    allowed-build-ids: []
-    timestamp-skew-seconds: 300
-    device-secret-ttl-days: 90
-    nonce-ttl-seconds: 600
-    max-failures-per-minute: 20
   character:
     max-per-user: 80
   memory:

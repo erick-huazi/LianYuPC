@@ -9,8 +9,8 @@ import com.lianyu.service.dto.UserProfile;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface AuthService {
-    LoginResponse register(RegisterRequest request, String clientHeader);
-    LoginResponse login(LoginRequest request, String clientHeader);
+    LoginResponse register(RegisterRequest request);
+    LoginResponse login(LoginRequest request);
     void logout();
     UserProfile me(Long userId);
     UserProfile updateProfile(Long userId, UpdateProfileRequest request);

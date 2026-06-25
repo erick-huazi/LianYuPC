@@ -32,7 +32,12 @@ public class CorsConfig {
         }
         config.setAllowedOriginPatterns(List.of(origins));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Content-Type", "lianyu-token", "X-Trace-Id", "X-LianYu-Output-Language"));
+        config.setAllowedHeaders(List.of(
+                "Content-Type",
+                "lianyu-token",
+                "X-Trace-Id",
+                "X-LianYu-Output-Language",
+                "X-LianYu-Ui-Language"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

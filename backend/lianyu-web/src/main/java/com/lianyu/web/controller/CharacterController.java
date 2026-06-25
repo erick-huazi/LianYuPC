@@ -8,7 +8,6 @@ import com.lianyu.service.character.CharacterService;
 import com.lianyu.service.square.CharacterSquareService;
 import com.lianyu.service.square.SquareCommentService;
 import com.lianyu.service.square.SquareLikeService;
-import com.lianyu.service.security.ClientAttestationService;
 import com.lianyu.service.storage.FileStorageService;
 import com.lianyu.service.dto.CharacterResponse;
 import com.lianyu.service.dto.AddCharacterFromSquareRequest;
@@ -75,16 +74,14 @@ public class CharacterController {
         return Result.ok(characterSquareService.listTemplatesPage(userId, uiLang, tag, keyword, page, pageSize));
     }
 
-    @Operation(summary = "角色广场模板详情（含 promptTemplate）")
+    @Operation(summary = "角色广场模板详情")
     @GetMapping("/square/{templateId}")
     public Result<CharacterSquareTemplateResponse> getSquareTemplate(
             @PathVariable("templateId") Long templateId,
             HttpServletRequest request) {
         long userId = StpUtil.getLoginIdAsLong();
         String uiLang = request.getHeader(CharacterSquareService.HEADER_UI_LANGUAGE);
-        boolean attested = Boolean.TRUE.equals(
-                request.getAttribute(ClientAttestationService.REQUEST_ATTR_ATTESTED));
-        return Result.ok(characterSquareService.getTemplateDetail(userId, templateId, uiLang, attested));
+        return Result.ok(characterSquareService.getTemplateDetail(userId, templateId, uiLang));
     }
 
     @Operation(summary = "从角色广场加入我的角色")

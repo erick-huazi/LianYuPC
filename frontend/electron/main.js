@@ -32,12 +32,6 @@ import {
   clearAuthSession,
 } from './authSessionStore.js'
 import {
-  getClientHeaderValue,
-  loginClientBodyExtras,
-  signAuthenticatedRequest,
-  getClientAttestMeta as readClientAttestMeta,
-} from './clientAttestation.js'
-import {
   readAppearance,
   writeAppearance,
   resolveWindowBackgroundColor,
@@ -48,6 +42,8 @@ import {
   onWindowChanged,
 } from './desktopObserver.js'
 import { prepareGreetingPayload } from './greetingAudio.js'
+import { performApiRequest } from './apiProxy.js'
+import { loadRuntimeSecrets, getRuntimeSecrets } from './runtimeSecrets.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const nodeRequire = createRequire(import.meta.url)
@@ -98,17 +94,26 @@ const LAUNCHER_WEB_PREFS = {
 
 const DEFAULT_API_ORIGIN = 'http://localhost:8080'
 
+loadRuntimeSecrets({
+  secretsDir: __dirname,
+  metaPath: path.join(__dirname, 'client-build.json'),
+  isPackaged: app.isPackaged,
+  isDev,
+})
+
 function resolveApiOrigin() {
-  const configured = process.env.LIANYU_API_ORIGIN || process.env.VITE_LIANYU_API_ORIGIN
-  const trimmed = configured && String(configured).trim()
-  return (trimmed || DEFAULT_API_ORIGIN).replace(/\/$/, '')
+  const secrets = getRuntimeSecrets()
+  if (secrets?.apiOrigin) return secrets.apiOrigin
+  return DEFAULT_API_ORIGIN
 }
 
-/** 服务器证书 SPKI SHA-256（Base64）。当证书续期但私钥不变时无需更新此值 */
-const PINNED_SPKI = 'EdDpp/Z9REuRjqZLzXXrOW8opTtR8Yph2YM0s+xuLss='
+function pinnedSpkiValue() {
+  return getRuntimeSecrets()?.pinnedSpki || ''
+}
 
-/** 服务器证书 SHA-256 指纹（构建时注入），用于自签名证书固定二层兜底 */
-const EXPECTED_CERT_FINGERPRINT = (process.env.LIANYU_CERT_FINGERPRINT || '').trim()
+function expectedCertFingerprint() {
+  return getRuntimeSecrets()?.certFingerprint || ''
+}
 
 /** 企业环境若需兼容安全软件 HTTPS 扫描，构建时设 LIANYU_ALLOW_SYSTEM_CA=1（默认拒绝不匹配证书） */
 const ALLOW_SYSTEM_CA = process.env.LIANYU_ALLOW_SYSTEM_CA === '1'
@@ -140,19 +145,28 @@ function certificateMatchesPin(cert) {
   if (!cert) return false
   try {
     const spki = getSPKIHash(cert)
-    if (spki === PINNED_SPKI) return true
+    if (spki === pinnedSpkiValue()) return true
   } catch {
     // fall through to fingerprint check
   }
-  if (!EXPECTED_CERT_FINGERPRINT) return false
-  const expectedFp = EXPECTED_CERT_FINGERPRINT.replace(/:/g, '').toLowerCase()
+  const certFp = expectedCertFingerprint()
+  if (!certFp) return false
+  const expectedFp = certFp.replace(/:/g, '').toLowerCase()
   const actualFp = normalizeCertFingerprint(cert.fingerprint)
   return actualFp.length > 0 && actualFp === expectedFp
 }
 
-function configureCertificatePinning() {
-  const ses = session.defaultSession
+function getRendererSession() {
+  return session.fromPartition(SHARED_WEB_PREFS.partition)
+}
 
+/** defaultSession（net.request）与 persist:lianyu（渲染进程 axios）均需证书 pin */
+function forEachAppSession(fn) {
+  fn(session.defaultSession)
+  fn(getRendererSession())
+}
+
+function installCertificateVerifyProc(ses) {
   // 方式一（主力）：API 域名仅接受 SPKI 指纹匹配，不匹配则拒绝（-2）
   ses.setCertificateVerifyProc((request, callback) => {
     const { hostname, certificate } = request
@@ -169,7 +183,7 @@ function configureCertificatePinning() {
 
     try {
       const spki = getSPKIHash(certificate)
-      log(`cert SPKI mismatch for ${hostname}: got ${spki}, expected ${PINNED_SPKI}`)
+      log(`cert SPKI mismatch for ${hostname}: got ${spki}, expected ${pinnedSpkiValue()}`)
     } catch (e) {
       log(`cert SPKI compute failed for ${hostname}: ${e.message}`)
     }
@@ -179,10 +193,14 @@ function configureCertificatePinning() {
       callback(-3)
       return
     }
-    // 自签名证书：交给 certificate-error 二次校验（避免指纹格式差异误杀）
-    log(`cert pin mismatch for ${hostname}, defer to certificate-error handler`)
-    callback(-3)
+    log(`cert pin mismatch for ${hostname}, rejecting connection`)
+    callback(-2)
   })
+}
+
+function configureCertificatePinning() {
+  // 仅 defaultSession：net.request / api:request 代理；渲染分区仍走 certificate-error 兜底
+  installCertificateVerifyProc(session.defaultSession)
 
   // 方式二（兜底）：certificate-error 仅 pin 匹配时放行
   app.on('certificate-error', (event, _webContents, url, _error, cert, cb) => {
@@ -236,7 +254,9 @@ function verifyAsarIntegrity() {
       expected = fs.readFileSync(hexPath, 'utf8').trim()
     }
     if (!expected || expected.length !== 64) {
-      log('asar integrity hash not found, skipping verification')
+      log('asar integrity hash not found')
+      dialog.showErrorBox('LianYu', '客户端完整性校验文件缺失，请重新安装。')
+      app.exit(1)
       return
     }
 
@@ -268,12 +288,14 @@ function configureContentSecurityPolicy() {
     "base-uri 'self'",
     "frame-ancestors 'none'",
   ].join('; ')
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [csp],
-      },
+  forEachAppSession((ses) => {
+    ses.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [csp],
+        },
+      })
     })
   })
 }
@@ -304,7 +326,9 @@ function assertTrustedSender(event) {
     throw new Error('Untrusted IPC sender')
   }
   const url = event.senderFrame?.url || event.sender.getURL?.() || ''
-  if (!url.startsWith('file://') && !url.startsWith('app://')) {
+  const isPackagedUrl = url.startsWith('file://') || url.startsWith('app://')
+  const isDevServerUrl = isDev && (url.startsWith('http://') || url.startsWith('https://'))
+  if (!isPackagedUrl && !isDevServerUrl) {
     throw new Error('Untrusted IPC sender URL')
   }
 }
@@ -415,7 +439,7 @@ function patchDesktopRequestOrigin() {
   if (isDev) return
   const apiOrigin = resolveApiOrigin()
   const wsPrefix = resolveWsUrlPrefix(apiOrigin)
-  const ses = session.fromPartition(SHARED_WEB_PREFS.partition)
+  const ses = getRendererSession()
 
   ses.webRequest.onBeforeSendHeaders(
     { urls: [`${apiOrigin}/*`] },
@@ -432,6 +456,10 @@ function patchDesktopRequestOrigin() {
       callback({ requestHeaders: details.requestHeaders })
     },
   )
+
+  ses.webRequest.onErrorOccurred({ urls: [`${apiOrigin}/*`] }, (details) => {
+    log(`renderer API request failed: error=${details.error} url=${details.url}`)
+  })
 }
 
 function logPath() {
@@ -622,7 +650,12 @@ function setLauncherMousePassthrough(ignore) {
 function resetLauncherInteraction() {
   launcherIsDragging = false
   const pickerActive = pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()
-  setLauncherMousePassthrough(pickerActive)
+  const launcherVisible = launcherWindow && !launcherWindow.isDestroyed() && launcherWindow.isVisible()
+  if (!launcherVisible) {
+    setLauncherMousePassthrough(true)
+  } else {
+    setLauncherMousePassthrough(pickerActive)
+  }
   if (launcherWindow && !launcherWindow.isDestroyed() && !launcherWindow.webContents.isDestroyed()) {
     launcherWindow.webContents.send('desktop:launcher-interaction-reset')
   }
@@ -680,6 +713,9 @@ function handleProactiveMessageNotification(payload = {}) {
 
 function hideLauncherWindow() {
   if (launcherWindow && !launcherWindow.isDestroyed()) {
+    stopDesktopObserver()
+    launcherWindow.webContents.send('desktop:launcher-hidden')
+    launcherWindow.setIgnoreMouseEvents(true, { forward: true })
     launcherWindow.hide()
   }
 }
@@ -702,9 +738,11 @@ function showLauncherWindow(options = {}) {
     if (!force && isMainWindowOccupyingDesktop()) return
     if (!win || win.isDestroyed()) return
     resetLauncherInteraction()
+    win.setIgnoreMouseEvents(false)
     win.webContents.setAudioMuted(false)
     win.show()
     win.moveTop()
+    win.webContents.send('desktop:launcher-shown')
   }
   if (win.webContents.isLoading()) {
     win.webContents.once('ready-to-show', reveal)
@@ -914,6 +952,7 @@ function createLauncherWindow() {
   })
   win.lianyuKind = 'launcher'
   attachWindowLogging(win, 'launcher')
+  win.setIgnoreMouseEvents(true, { forward: true })
 
   win.once('ready-to-show', () => {
     win.setBackgroundColor('#00000000')
@@ -1143,6 +1182,7 @@ function quitApplication() {
 
 function registerIpcHandlers() {
   ipcMain.handle('desktop:get-window-kind', (event) => {
+    if (!guardTrusted(event)) return 'unknown'
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.lianyuKind || 'unknown'
   })
@@ -1159,15 +1199,18 @@ function registerIpcHandlers() {
     return { ok: true }
   })
 
-  ipcMain.handle('desktop:toggle-picker', () => {
+  ipcMain.handle('desktop:toggle-picker', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     toggleCharacterPicker({ inactive: true })
   })
 
-  ipcMain.handle('desktop:close-picker', () => {
+  ipcMain.handle('desktop:close-picker', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     closeCharacterPicker()
   })
 
-  ipcMain.handle('desktop:close-quick-chat', () => {
+  ipcMain.handle('desktop:close-quick-chat', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     closeFocusedQuickChat()
   })
 
@@ -1177,9 +1220,13 @@ function registerIpcHandlers() {
     return { ok: true }
   })
 
-  ipcMain.handle('desktop:get-caption-height', () => CAPTION_BAR_HEIGHT)
+  ipcMain.handle('desktop:get-caption-height', (event) => {
+    if (!guardTrusted(event)) return 0
+    return CAPTION_BAR_HEIGHT
+  })
 
   ipcMain.handle('desktop:get-caption-metrics', (event) => {
+    if (!guardTrusted(event)) return null
     const win = BrowserWindow.fromWebContents(event.sender)
     return resolveCaptionMetrics(win)
   })
@@ -1227,8 +1274,47 @@ function registerIpcHandlers() {
     return { ok: true }
   })
 
-  ipcMain.handle('desktop:set-launcher-mouse-passthrough', (_event, ignore) => {
+  ipcMain.handle('desktop:set-launcher-mouse-passthrough', (event, ignore) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     setLauncherMousePassthrough(!!ignore)
+    return { ok: true }
+  })
+
+  ipcMain.handle('runtime:get-config', (event) => {
+    if (!guardTrusted(event)) return null
+    const origin = resolveApiOrigin()
+    try {
+      const url = new URL(origin)
+      const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+      return { apiOrigin: origin, wsUrl: `${wsProtocol}//${url.host}/ws` }
+    } catch {
+      return { apiOrigin: origin, wsUrl: 'ws://localhost:8080/ws' }
+    }
+  })
+
+  ipcMain.handle('api:request', async (event, payload) => {
+    if (!guardTrusted(event)) {
+      return { ok: false, status: 0, statusText: '', headers: {}, data: '' }
+    }
+    try {
+      const res = await performApiRequest({
+        method: payload?.method || 'GET',
+        url: payload?.url || '',
+        headers: payload?.headers || {},
+        body: payload?.body,
+        timeoutMs: payload?.timeout || 60000,
+      })
+      return {
+        ok: true,
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
+        data: res.data,
+      }
+    } catch (err) {
+      log(`api:request failed url=${payload?.url || ''} err=${err?.message || err}`)
+      return { ok: false, status: 0, statusText: '', headers: {}, data: '' }
+    }
   })
 
   ipcMain.handle('auth:get-session', (event) => {
@@ -1237,7 +1323,10 @@ function registerIpcHandlers() {
   })
   ipcMain.handle('auth:set-session', (event, session) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
-    writeAuthSession(session)
+    const saved = writeAuthSession(session)
+    if (session?.token && !saved) {
+      return { ok: false, reason: 'session_write_failed' }
+    }
     return { ok: true }
   })
   ipcMain.handle('auth:clear-session', (event) => {
@@ -1246,30 +1335,10 @@ function registerIpcHandlers() {
     return { ok: true }
   })
 
-  ipcMain.handle('client:get-attest-meta', (event) => {
+  ipcMain.handle('desktop:get-settings', (event) => {
     if (!guardTrusted(event)) return null
-    const meta = readClientAttestMeta()
-    return {
-      version: meta.version,
-      buildId: meta.buildId,
-      clientHeader: getClientHeaderValue(),
-    }
+    return readDesktopSettings()
   })
-
-  ipcMain.handle('auth:sign-request', (event, payload) => {
-    if (!guardTrusted(event)) return null
-    const session = readAuthSession()
-    if (!session?.deviceId || !session?.deviceSecret) return null
-    return signAuthenticatedRequest({
-      deviceId: session.deviceId,
-      deviceSecret: session.deviceSecret,
-      method: payload?.method || 'GET',
-      apiPath: payload?.apiPath || '/api',
-      bodyText: payload?.bodyText || '',
-    })
-  })
-
-  ipcMain.handle('desktop:get-settings', () => readDesktopSettings())
 
   ipcMain.handle('desktop:set-settings', (event, partial) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
@@ -1284,7 +1353,12 @@ function registerIpcHandlers() {
       clampLauncherToWorkArea()
       launcherWindow.webContents.send('desktop:launcher-pet-changed', partial.launcherPetId)
     }
-    if (partial?.allowScreenObserve === true && launcherWindow && !launcherWindow.isDestroyed()) {
+    if (
+      partial?.allowScreenObserve === true
+      && launcherWindow
+      && !launcherWindow.isDestroyed()
+      && isDesktopPetActivelyVisible()
+    ) {
       launcherWindow.webContents.send('desktop:restart-observer')
     }
     if (tray) {
@@ -1293,13 +1367,23 @@ function registerIpcHandlers() {
     return next
   })
 
-  ipcMain.handle('desktop:ack-close-hint', () => {
+  ipcMain.handle('desktop:ack-close-hint', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     writeDesktopSettings({ closeHintShown: true })
     pendingHideAfterHint = false
+    return { ok: true }
+  })
+
+  ipcMain.handle('desktop:is-launcher-visible', (event) => {
+    if (!guardTrusted(event)) return false
+    return isDesktopPetActivelyVisible()
   })
 
   ipcMain.handle('desktop:start-observer', (event, { persona, petId }) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
+    if (!isDesktopPetActivelyVisible()) {
+      return { ok: false, reason: 'launcher_not_visible' }
+    }
     const settings = readDesktopSettings()
     if (!settings.allowScreenObserve) {
       return { ok: false, reason: 'screen_observe_disabled' }
@@ -1315,6 +1399,7 @@ function registerIpcHandlers() {
       persona,
       petId: resolvedPetId,
       onGreeting: (payload) => {
+        if (!isDesktopPetActivelyVisible()) return
         const forward = prepareGreetingPayload(payload)
         if (payload?.audioBase64 && !forward.audioUrl) {
           console.warn('[desktopObserver] failed to materialize greeting audio file')
@@ -1330,13 +1415,16 @@ function registerIpcHandlers() {
     return started ? { ok: true } : { ok: false, reason: 'start_failed' }
   })
 
-  ipcMain.handle('desktop:stop-observer', () => {
+  ipcMain.handle('desktop:stop-observer', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     stopDesktopObserver()
     return { ok: true }
   })
 
-  ipcMain.handle('desktop:notify-window-changed', () => {
+  ipcMain.handle('desktop:notify-window-changed', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     onWindowChanged()
+    return { ok: true }
   })
 
   ipcMain.handle('desktop:save-launcher-position', (event, { x, y }) => {

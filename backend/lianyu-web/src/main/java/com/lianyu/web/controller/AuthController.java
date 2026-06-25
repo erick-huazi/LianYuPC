@@ -7,7 +7,6 @@ import com.lianyu.common.exception.BusinessException;
 import com.lianyu.service.auth.AuthRateLimiter;
 import com.lianyu.service.auth.AuthService;
 import com.lianyu.service.auth.CaptchaService;
-import com.lianyu.service.security.ClientAttestationService;
 import com.lianyu.service.dto.CaptchaVerifyRequest;
 import com.lianyu.service.dto.ChangePasswordRequest;
 import com.lianyu.service.dto.LoginRequest;
@@ -59,15 +58,14 @@ public class AuthController {
     @Operation(summary = "注册")
     @PostMapping("/register")
     public Result<LoginResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        authRateLimiter.checkLoginOrRegister(clientIpResolver.resolve(httpRequest), request.getUsername());
         String clientIp = clientIpResolver.resolve(httpRequest);
+        authRateLimiter.checkLoginOrRegister(clientIp, request.getUsername());
         if (clientIp != null && !clientIp.isBlank()) {
             authRateLimiter.checkRateLimit("rate:register:ip:", clientIp.trim(),
                     3, Duration.ofDays(1), "该 IP 今日注册次数已达上限");
         }
         verifyCaptcha(request.getCaptcha());
-        String clientHeader = httpRequest.getHeader(ClientAttestationService.HEADER_CLIENT);
-        return Result.ok(authService.register(request, clientHeader));
+        return Result.ok(authService.register(request));
     }
 
     @Operation(summary = "登录")
@@ -75,8 +73,7 @@ public class AuthController {
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         authRateLimiter.checkLoginOrRegister(clientIpResolver.resolve(httpRequest), request.getUsername());
         verifyCaptcha(request.getCaptcha());
-        String clientHeader = httpRequest.getHeader(ClientAttestationService.HEADER_CLIENT);
-        return Result.ok(authService.login(request, clientHeader));
+        return Result.ok(authService.login(request));
     }
 
     @Operation(summary = "登出")

@@ -90,31 +90,24 @@ public class CharacterSquareService {
     }
 
     public CharacterSquareTemplateResponse getTemplateDetail(
-            Long userId, Long templateId, String uiLanguageCode, boolean clientAttested) {
+            Long userId, Long templateId, String uiLanguageCode) {
         CharacterSquareTemplate template = templateMapper.selectById(templateId);
-        if (template == null || template.getIsEnabled() == null || template.getIsEnabled() != 1) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
-        }
-        String slug = normalizeSlug(template);
-        if (slug == null || !CharacterSquareCatalog.isKnownSlug(slug)) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
-        }
+        requireEnabledKnownTemplate(template);
         String uiLang = OutputLanguage.fromCode(uiLanguageCode).getCode();
         Map<Long, Long> likeCounts = squareLikeService.getLikeCounts();
         Set<Long> userLikes = squareLikeService.getUserLikes(userId);
         Map<Long, Character> addedByTemplateId = loadAddedCharacters(userId);
-        return stripPromptIfNeeded(toTemplateResponse(
+        return stripPromptFromApi(toTemplateResponse(
                 template,
                 addedByTemplateId.get(template.getId()),
                 uiLang,
                 likeCounts.getOrDefault(template.getId(), 0L),
-                userLikes.contains(template.getId())), clientAttested);
+                userLikes.contains(template.getId())));
     }
 
-    private CharacterSquareTemplateResponse stripPromptIfNeeded(
-            CharacterSquareTemplateResponse response, boolean clientAttested) {
-        if (clientAttested || response == null) {
-            return response;
+    private CharacterSquareTemplateResponse stripPromptFromApi(CharacterSquareTemplateResponse response) {
+        if (response == null) {
+            return null;
         }
         response.setPromptTemplate(null);
         return response;
@@ -190,14 +183,7 @@ public class CharacterSquareService {
                                                        String cityMode,
                                                        String userCity) {
         CharacterSquareTemplate template = templateMapper.selectById(templateId);
-        if (template == null || template.getIsEnabled() == null || template.getIsEnabled() != 1) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
-        }
-
-        String slug = normalizeSlug(template);
-        if (slug == null || !CharacterSquareCatalog.isKnownSlug(slug)) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
-        }
+        String slug = requireEnabledKnownTemplate(template);
 
         Character existing = characterMapper.selectOne(new LambdaQueryWrapper<Character>()
                 .eq(Character::getOwnerUserId, userId)
@@ -269,7 +255,7 @@ public class CharacterSquareService {
                     .summary(template.getSummary())
                     .avatarThumbUrl(thumbUrl)
                     .avatarUrl(avatarUrl)
-                    .tags(parseTagLabels(template.getTagsJson()))
+                    .tags(parseTagKeys(template.getTagsJson()))
                     .added(added != null)
                     .addedCharacterId(added != null ? added.getId() : null)
                     .likeCount(likeCount)
@@ -310,7 +296,7 @@ public class CharacterSquareService {
                     .summary(template.getSummary())
                     .avatarUrl(fileStorageService.resolvePublicUrl(template.getAvatarUrl()))
                     .promptTemplate(template.getPromptTemplate())
-                    .tags(parseTagLabels(template.getTagsJson()))
+                    .tags(parseTagKeys(template.getTagsJson()))
                     .tagKeys(parseTagKeys(template.getTagsJson()))
                     .added(added != null)
                     .addedCharacterId(added != null ? added.getId() : null)
@@ -361,8 +347,19 @@ public class CharacterSquareService {
         return keys;
     }
 
-    private List<String> parseTagLabels(Object raw) {
-        return parseTagKeys(raw);
+    private static boolean isTemplateEnabled(CharacterSquareTemplate template) {
+        return template != null && template.getIsEnabled() != null && template.getIsEnabled() == 1;
+    }
+
+    private String requireEnabledKnownTemplate(CharacterSquareTemplate template) {
+        if (!isTemplateEnabled(template)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
+        }
+        String slug = normalizeSlug(template);
+        if (slug == null || !CharacterSquareCatalog.isKnownSlug(slug)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "角色模板不存在或已下架");
+        }
+        return slug;
     }
 
     private Map<String, Object> copySettings(Map<String, Object> source) {

@@ -15,8 +15,6 @@ import com.lianyu.service.dto.LoginResponse;
 import com.lianyu.service.dto.RegisterRequest;
 import com.lianyu.service.dto.UpdateProfileRequest;
 import com.lianyu.service.dto.UserProfile;
-import com.lianyu.service.security.ClientAttestationService;
-import com.lianyu.service.security.ClientAttestationService.DeviceCredentials;
 import com.lianyu.service.storage.FileStorageService;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
@@ -33,11 +31,10 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final FileStorageService fileStorageService;
-    private final ClientAttestationService clientAttestationService;
 
     @Override
     @Transactional
-    public LoginResponse register(RegisterRequest request, String clientHeader) {
+    public LoginResponse register(RegisterRequest request) {
         User existing = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername()));
         if (existing != null) {
@@ -47,8 +44,7 @@ public class AuthServiceImpl implements AuthService {
             // 上次注册可能已在服务端成功，但客户端未收到响应；密码一致则直接登录
             log.info("Register idempotent login: username={}", existing.getUsername());
             StpUtil.login(existing.getId());
-            return attachDeviceCredentials(toLoginResponse(existing), existing.getId(), request.getDeviceId(),
-                    clientHeader, request.getClientBuildId());
+            return toLoginResponse(existing);
         }
 
         User user = new User();
@@ -59,12 +55,11 @@ public class AuthServiceImpl implements AuthService {
         log.info("User registered: {}", user.getUsername());
 
         StpUtil.login(user.getId());
-        return attachDeviceCredentials(toLoginResponse(user), user.getId(), request.getDeviceId(),
-                clientHeader, request.getClientBuildId());
+        return toLoginResponse(user);
     }
 
     @Override
-    public LoginResponse login(LoginRequest request, String clientHeader) {
+    public LoginResponse login(LoginRequest request) {
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername()));
         if (user == null) {
@@ -76,8 +71,7 @@ public class AuthServiceImpl implements AuthService {
 
         StpUtil.login(user.getId());
         log.info("User logged in: {}", user.getUsername());
-        return attachDeviceCredentials(toLoginResponse(user), user.getId(), request.getDeviceId(),
-                clientHeader, request.getClientBuildId());
+        return toLoginResponse(user);
     }
 
     @Override
@@ -152,18 +146,6 @@ public class AuthServiceImpl implements AuthService {
                 .nickname(user.getNickname())
                 .avatarUrl(fileStorageService.resolvePublicUrl(user.getAvatarUrl()))
                 .build();
-    }
-
-    private LoginResponse attachDeviceCredentials(
-            LoginResponse response, Long userId, String deviceId, String clientHeader, String clientBuildId) {
-        DeviceCredentials credentials = clientAttestationService.issueCredentials(
-                userId, deviceId, clientHeader, clientBuildId);
-        if (credentials == null) {
-            return response;
-        }
-        response.setDeviceId(credentials.deviceId());
-        response.setDeviceSecret(credentials.deviceSecret());
-        return response;
     }
 
     private LoginResponse toLoginResponse(User user) {

@@ -12,8 +12,4 @@ public class LoginRequest {
     private String password;
     @Valid
     private CaptchaVerifyRequest captcha;
-    /** Reuse existing device credentials on re-login (Electron). */
-    private String deviceId;
-    /** Must match X-LianYu-Client build segment when issuing credentials. */
-    private String clientBuildId;
 }

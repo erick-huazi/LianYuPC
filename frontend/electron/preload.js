@@ -57,8 +57,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAuthSession: () => ipcRenderer.invoke('auth:get-session'),
   setAuthSession: (session) => ipcRenderer.invoke('auth:set-session', session),
   clearAuthSession: () => ipcRenderer.invoke('auth:clear-session'),
-  getClientAttestMeta: () => ipcRenderer.invoke('client:get-attest-meta'),
-  signRequest: (payload) => ipcRenderer.invoke('auth:sign-request', payload),
+  getRuntimeConfig: () => ipcRenderer.invoke('runtime:get-config'),
+  apiRequest: (payload) => ipcRenderer.invoke('api:request', payload),
+  isLauncherVisible: () => ipcRenderer.invoke('desktop:is-launcher-visible'),
   startDesktopObserver: (config) => ipcRenderer.invoke('desktop:start-observer', config),
   stopDesktopObserver: () => ipcRenderer.invoke('desktop:stop-observer'),
   onLauncherGreeting: (callback) => {
@@ -70,5 +71,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => callback()
     ipcRenderer.on('desktop:restart-observer', handler)
     return () => ipcRenderer.removeListener('desktop:restart-observer', handler)
+  },
+  onLauncherShown: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on('desktop:launcher-shown', handler)
+    return () => ipcRenderer.removeListener('desktop:launcher-shown', handler)
+  },
+  onLauncherHidden: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on('desktop:launcher-hidden', handler)
+    return () => ipcRenderer.removeListener('desktop:launcher-hidden', handler)
   },
 })

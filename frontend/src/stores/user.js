@@ -10,7 +10,7 @@ import {
   uploadProfileAvatar as uploadProfileAvatarApi
 } from '@/api/auth'
 import { storeToken, readToken, clearTokenStorage, syncToken, syncSetTokenCache } from '@/utils/secureToken'
-import { getElectronAPI } from '@/utils/electron'
+import { getElectronAPI, normalizeAuthSession } from '@/utils/electron'
 import { LAST_USERNAME_KEY, PROFILE_CACHE_KEY } from '@/constants/authSession'
 
 function readProfileCache() {
@@ -64,8 +64,8 @@ export const useUserStore = defineStore('user', () => {
   async function loadPersistedSession() {
     const electronAPI = getElectronAPI()
     if (electronAPI?.getAuthSession) {
-      const session = await electronAPI.getAuthSession()
-      if (session) return session
+      const session = normalizeAuthSession(await electronAPI.getAuthSession())
+      if (session?.token) return session
     }
 
     const cachedToken = await readToken()
@@ -79,7 +79,7 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  async function persistSession(credentials = {}) {
+  async function persistSession() {
     const electronAPI = getElectronAPI()
     const payload = {
       token: token.value || '',
@@ -90,16 +90,6 @@ export const useUserStore = defineStore('user', () => {
       avatarUrl: avatarUrl.value || '',
       savedAt: Date.now(),
     }
-    if (credentials.deviceId) {
-      payload.deviceId = credentials.deviceId
-    }
-    if (credentials.deviceSecret) {
-      payload.deviceSecret = credentials.deviceSecret
-    } else if (electronAPI?.getAuthSession) {
-      const existing = await electronAPI.getAuthSession()
-      if (existing?.deviceId && !payload.deviceId) payload.deviceId = existing.deviceId
-      if (existing?.deviceSecret && !payload.deviceSecret) payload.deviceSecret = existing.deviceSecret
-    }
 
     if (payload.token) {
       await storeToken(payload.token)
@@ -108,11 +98,21 @@ export const useUserStore = defineStore('user', () => {
     }
 
     if (electronAPI?.setAuthSession) {
-      await electronAPI.setAuthSession(payload.token ? payload : {
+      const sessionPayload = payload.token ? payload : {
         username: payload.username,
-        deviceId: payload.deviceId,
         savedAt: payload.savedAt,
-      })
+      }
+      const result = await electronAPI.setAuthSession(sessionPayload)
+      if (result?.ok === false) {
+        const reason = result.reason || 'unknown'
+        if (reason === 'session_write_failed') {
+          throw new Error('无法保存登录状态，请重启应用后重试')
+        }
+        if (reason === 'untrusted_sender') {
+          throw new Error('客户端内部通信异常，请重启应用后重试')
+        }
+        throw new Error('无法保存登录状态，请重启应用后重试')
+      }
     }
   }
 
@@ -153,17 +153,14 @@ export const useUserStore = defineStore('user', () => {
     return true
   }
 
-  function setAuth(t, tn, user) {
+  async function setAuth(t, tn, user) {
     syncSetTokenCache(t)
     token.value = t
     tokenName.value = tn
     if (user) {
       applyProfile(user)
     }
-    void persistSession({
-      deviceId: user?.deviceId,
-      deviceSecret: user?.deviceSecret,
-    })
+    await persistSession()
     getElectronAPI()?.setLoginState?.(true)
   }
 
@@ -208,13 +205,13 @@ export const useUserStore = defineStore('user', () => {
 
   async function login(data) {
     const res = await loginApi(data)
-    setAuth(res.token, res.tokenName, res)
+    await setAuth(res.token, res.tokenName, res)
     return res
   }
 
   async function register(data) {
     const res = await registerApi(data)
-    setAuth(res.token, res.tokenName, res)
+    await setAuth(res.token, res.tokenName, res)
     return res
   }
 

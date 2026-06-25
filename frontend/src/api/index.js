@@ -1,19 +1,38 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { apiBasePath } from '@/utils/runtime'
+import { apiBasePath, ensureApiOriginReady, isElectronRuntime } from '@/utils/runtime'
 import { extractApiError, humanizeError } from '@/utils/errorMessage'
 import { readToken, clearTokenStorage } from '@/utils/secureToken'
 import { applyOutputLanguageHeaders } from '@/utils/outputLanguageHeader'
-import { applyAttestationHeaders } from '@/utils/clientAttestation'
+import { electronMainProcessAdapter, shouldUseMainProcessAdapter } from '@/api/electronAdapter'
+
+/** Placeholder until initElectronRuntimeConfig resolves real apiOrigin */
+const ELECTRON_BASE_PLACEHOLDER = 'http://127.0.0.1:0'
+
+function rejectSessionExpired() {
+  clearTokenStorage()
+  void import('@/stores/user').then(({ useUserStore }) => {
+    void useUserStore().clearAuth({ keepUsername: true })
+  })
+  const hash = window.location.hash || ''
+  if (!hash.includes('#/login') && !hash.includes('#/register')) {
+    window.location.hash = '#/'
+  }
+  return Promise.reject(new Error('登录已过期，请重新登录'))
+}
 
 const http = axios.create({
-  baseURL: apiBasePath(),
+  baseURL: isElectronRuntime() ? `${ELECTRON_BASE_PLACEHOLDER}/api` : apiBasePath(),
   timeout: 60000,
   headers: { 'Content-Type': 'application/json' }
 })
 
 // Request interceptor — async inject encrypted Sa-Token
 http.interceptors.request.use(async config => {
+  if (isElectronRuntime()) {
+    await ensureApiOriginReady()
+    config.baseURL = apiBasePath()
+  }
   const token = await readToken()
   if (token) {
     config.headers['lianyu-token'] = token
@@ -21,11 +40,9 @@ http.interceptors.request.use(async config => {
   const traceId = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36)
   config.headers['X-Trace-Id'] = traceId
   config.headers = applyOutputLanguageHeaders(config.headers)
-  config.headers = await applyAttestationHeaders(config.headers, {
-    method: config.method,
-    url: config.url,
-    data: config.data,
-  })
+  if (shouldUseMainProcessAdapter(config)) {
+    config.adapter = electronMainProcessAdapter
+  }
   return config
 })
 
@@ -38,15 +55,7 @@ http.interceptors.response.use(
         return body.data
       }
       if (body.code === 401) {
-        clearTokenStorage()
-        void import('@/stores/user').then(({ useUserStore }) => {
-          void useUserStore().clearAuth({ keepUsername: true })
-        })
-        const hash = window.location.hash || ''
-        if (!hash.includes('#/login') && !hash.includes('#/register')) {
-          window.location.hash = '#/'
-        }
-        return Promise.reject(new Error('登录已过期，请重新登录'))
+        return rejectSessionExpired()
       }
       const msg = humanizeError(body.message, '请求失败，请稍后再试')
       if (response.config?.skipGlobalError !== true) {
@@ -58,15 +67,7 @@ http.interceptors.response.use(
   },
   error => {
     if (error.response?.status === 401) {
-      clearTokenStorage()
-      void import('@/stores/user').then(({ useUserStore }) => {
-        void useUserStore().clearAuth({ keepUsername: true })
-      })
-      const hash = window.location.hash || ''
-      if (!hash.includes('#/login') && !hash.includes('#/register')) {
-        window.location.hash = '#/'
-      }
-      return Promise.reject(new Error('登录已过期，请重新登录'))
+      return rejectSessionExpired()
     }
     const apiErr = extractApiError(error)
     let fallback = '请求失败，请稍后再试'
