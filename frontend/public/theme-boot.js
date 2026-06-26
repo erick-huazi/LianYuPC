@@ -3,7 +3,7 @@
     var mode = localStorage.getItem('lianyu-theme')
     var root = document.documentElement
     var isLight = mode === 'light'
-    var bg = isLight ? '#ffffff' : '#0a0a10'
+    var bg = isLight ? '#f7f7f9' : '#0a0a10'
     var text = isLight ? '#1a1a1e' : '#e8edf2'
     root.classList.toggle('dark', !isLight)
     root.classList.toggle('light', isLight)

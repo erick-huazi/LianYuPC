@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { readToken, syncToken } from '@/utils/secureToken'
+import { readToken, syncToken, syncSetTokenCache } from '@/utils/secureToken'
 import { useUserStore } from '@/stores/user'
 
 const routes = [
@@ -49,8 +49,8 @@ const routes = [
       {
         path: 'chat/:id',
         name: 'QuickChat',
-        component: () => import('@/pages/ChatPage.vue'),
-        meta: { compact: true, immersive: true, hideDock: true }
+        component: () => import('@/pages/QuickChatPage.vue'),
+        meta: { quickChat: true }
       }
     ]
   },
@@ -143,6 +143,10 @@ router.beforeEach(async (to, from, next) => {
   await readToken()
   const token = syncToken()
   const userStore = useUserStore()
+  if (token && !userStore.token) {
+    userStore.token = token
+    syncSetTokenCache(token)
+  }
   const hasValidSession = !!(token && userStore.isLoggedIn)
 
   if (to.meta.guest) {

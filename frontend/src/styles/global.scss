@@ -94,7 +94,7 @@ body.electron-app {
     left: 0;
     right: var(--electron-caption-controls-width);
     height: var(--electron-caption-height);
-    background: #0a0a10;
+    background: var(--ly-bg-primary, #0a0a10);
     z-index: 9998;
     pointer-events: none;
   }
@@ -110,13 +110,31 @@ body.electron-app {
     top: 0;
     min-height: var(--electron-caption-height);
     box-sizing: border-box;
-    -webkit-app-region: drag;
+    position: relative;
+    -webkit-app-region: no-drag;
     background: rgba(6, 8, 15, 0.72);
     backdrop-filter: blur(16px) saturate(1.15);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: var(--electron-caption-controls-width);
+      bottom: 0;
+      -webkit-app-region: drag;
+      z-index: 0;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
   }
 
-  .landing-nav__inner,
+  .landing-nav__brand,
+  .landing-nav__links,
   .landing-nav__actions,
   .landing-nav a,
   .landing-nav button {
@@ -141,17 +159,33 @@ body.electron-app {
     padding-top: $space-2;
     padding-bottom: $space-2;
     padding-right: calc(#{$space-2} + var(--electron-caption-controls-width));
-    background: #0a0a10;
+    background: var(--ly-bg-primary, #0a0a10);
     backdrop-filter: none;
     box-shadow: none;
     border-bottom: 1px solid rgba($color-pink-rgb, 0.08);
     z-index: 10001;
-    -webkit-app-region: drag;
+    -webkit-app-region: no-drag;
   }
 
   .gal-header {
     padding-right: calc(#{$space-2} + var(--electron-caption-controls-width));
-    -webkit-app-region: drag;
+    -webkit-app-region: no-drag;
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      right: var(--electron-caption-controls-width);
+      -webkit-app-region: drag;
+      z-index: 0;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+      -webkit-app-region: no-drag;
+    }
   }
 
   .gal-header__back,

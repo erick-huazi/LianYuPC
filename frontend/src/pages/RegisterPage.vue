@@ -141,6 +141,7 @@ import { User, Lock, Sunny, Loading, Refresh } from '@element-plus/icons-vue'
 import { APP_LOGO } from '@/constants/brand.js'
 import { ElMessage } from 'element-plus'
 import { getCaptcha } from '@/api/auth'
+import { humanizeError } from '@/utils/errorMessage'
 import AuthParticles from '@/components/auth/AuthParticles.vue'
 import { useAuthPageGsap } from '@/composables/useAuthPageGsap'
 
@@ -244,8 +245,9 @@ async function handleRegister() {
       },
     })
     ElMessage.success('注册成功')
-    router.push('/app')
-  } catch {
+    await router.push('/app')
+  } catch (err) {
+    ElMessage.error(humanizeError(err, '注册失败，请检查填写内容和验证码'))
     refreshCaptcha()
     form.captchaAnswer = ''
   } finally {

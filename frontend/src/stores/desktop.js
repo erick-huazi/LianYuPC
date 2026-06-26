@@ -84,8 +84,12 @@ export const useDesktopStore = defineStore('desktop', () => {
     }
     const api = getElectronAPI()
     if (api?.setDesktopSettings) {
-      await api.setDesktopSettings(partial)
+      const result = await api.setDesktopSettings(partial)
+      if (result?.ok === false) {
+        throw new Error('桌面设置未能同步到客户端，请重启应用后重试')
+      }
     }
+    api?.requestChromeSync?.()
   }
 
   async function detectWindowKind() {

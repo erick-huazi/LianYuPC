@@ -201,24 +201,22 @@ public class CharacterStateService {
      */
     @Transactional
     public int decayAllEmotions() {
-        List<CharacterState> all = stateMapper.selectList(null);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(decayIntervalMinutes);
+        List<CharacterState> candidates = stateMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CharacterState>()
+                        .isNotNull(CharacterState::getCurrentEmotion)
+                        .ne(CharacterState::getCurrentEmotion, "平静")
+                        .and(w -> w.isNull(CharacterState::getEmotionUpdatedAt)
+                                .or()
+                                .le(CharacterState::getEmotionUpdatedAt, threshold)));
 
         int updated = 0;
-        for (CharacterState state : all) {
-            if (state.getCurrentEmotion() == null || "平静".equals(state.getCurrentEmotion())) {
-                continue;
-            }
-            LocalDateTime lastUpdated = state.getEmotionUpdatedAt();
-            if (lastUpdated == null) {
+        for (CharacterState state : candidates) {
+            if (state.getEmotionUpdatedAt() == null) {
                 state.setEmotionUpdatedAt(LocalDateTime.now());
                 stateMapper.updateById(state);
                 continue;
             }
-            long minutesSinceUpdate = ChronoUnit.MINUTES.between(lastUpdated, LocalDateTime.now());
-            if (minutesSinceUpdate < decayIntervalMinutes) {
-                continue;
-            }
-
             int currentIntensity = state.getEmotionIntensity() != null ? state.getEmotionIntensity() : 50;
             int newIntensity = Math.max(0, currentIntensity - ThreadLocalRandom.current().nextInt(5, 16));
             if (newIntensity <= 15) {

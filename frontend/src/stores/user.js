@@ -98,11 +98,10 @@ export const useUserStore = defineStore('user', () => {
     }
 
     if (electronAPI?.setAuthSession) {
-      const sessionPayload = payload.token ? payload : {
-        username: payload.username,
-        savedAt: payload.savedAt,
+      if (!payload.token) {
+        return
       }
-      const result = await electronAPI.setAuthSession(sessionPayload)
+      const result = await electronAPI.setAuthSession(payload)
       if (result?.ok === false) {
         const reason = result.reason || 'unknown'
         if (reason === 'session_write_failed') {
@@ -150,6 +149,7 @@ export const useUserStore = defineStore('user', () => {
     }
 
     getElectronAPI()?.setLoginState?.(true)
+    getElectronAPI()?.requestChromeSync?.()
     return true
   }
 
@@ -162,6 +162,7 @@ export const useUserStore = defineStore('user', () => {
     }
     await persistSession()
     getElectronAPI()?.setLoginState?.(true)
+    getElectronAPI()?.requestChromeSync?.()
   }
 
   function applyProfile(user) {

@@ -16,6 +16,5 @@ export function applyOutputLanguageHeaders(headers = {}) {
   return {
     ...headers,
     [HEADER_OUTPUT_LANGUAGE]: getOutputLanguageHeaderValue(),
-    'output-language': getOutputLanguageHeaderValue()
   }
 }

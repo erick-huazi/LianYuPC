@@ -7,23 +7,52 @@ import rcedit from 'rcedit'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+function sleepSync(ms) {
+  const end = Date.now() + ms
+  while (Date.now() < end) { /* spin */ }
+}
+
+function removeIfExists(filePath) {
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+}
+
+function replaceFileWithRetry(src, dest, { retries = 12, delayMs = 250 } = {}) {
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      removeIfExists(dest)
+      fs.renameSync(src, dest)
+      return
+    } catch (err) {
+      if (attempt === retries) throw err
+      console.warn(`replace ${path.basename(dest)} attempt ${attempt}/${retries}: ${err.message}`)
+      sleepSync(delayMs * attempt)
+    }
+  }
+}
+
 function sha256File(filePath) {
   const hash = crypto.createHash('sha256')
   hash.update(fs.readFileSync(filePath))
   return hash.digest('hex')
 }
 
-/** asarmor header patch — hinders naive `asar extract` while keeping Electron runtime intact */
+/** asarmor header patch — write to side file first to avoid app.asar rename lock on Windows */
 async function patchAsarArchive(asarPath) {
   if (!fs.existsSync(asarPath)) {
     console.log('app.asar not found, skipping asarmor patch')
     return false
   }
 
+  const patchedPath = `${asarPath}.patched`
+  for (const stale of [`${asarPath}.tmp`, patchedPath, `${patchedPath}.tmp`]) {
+    removeIfExists(stale)
+  }
+
   console.log(`asarmor patching ${asarPath}`)
   const archive = await asarmor.open(asarPath)
   archive.patch()
-  await archive.write(asarPath)
+  await archive.write(patchedPath)
+  replaceFileWithRetry(patchedPath, asarPath)
   console.log('asarmor patch applied')
   return true
 }

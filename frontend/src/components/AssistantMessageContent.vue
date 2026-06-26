@@ -62,6 +62,8 @@ const rootClass = computed(() => [
 
   &__inner {
     font-style: italic;
+    opacity: 0.72;
+    letter-spacing: 0.01em;
   }
 
   &--chat &__speech {

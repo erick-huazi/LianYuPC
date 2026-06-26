@@ -70,6 +70,10 @@ let isQuitting = false
 let pendingHideAfterHint = false
 let pickerBlurTimer = null
 let pickerOpeningUntil = 0
+let launcherHiddenForPicker = false
+let launcherPickerOpen = false
+/** @type {{ x: number, y: number, width: number, height: number } | null} */
+let launcherBoundsBeforePicker = null
 let launcherIsDragging = false
 let launcherSuppressMoveSave = false
 /** 桌宠是否允许显示（用户已登录后才允许） */
@@ -326,6 +330,10 @@ function assertTrustedSender(event) {
     throw new Error('Untrusted IPC sender')
   }
   const url = event.senderFrame?.url || event.sender.getURL?.() || ''
+  if (!url) {
+    // 打包后 hash 路由下 frame URL 可能为空；已注册窗口仍视为可信
+    return
+  }
   const isPackagedUrl = url.startsWith('file://') || url.startsWith('app://')
   const isDevServerUrl = isDev && (url.startsWith('http://') || url.startsWith('https://'))
   if (!isPackagedUrl && !isDevServerUrl) {
@@ -517,6 +525,9 @@ function attachWindowLogging(win, label) {
   })
   win.webContents.on('did-finish-load', () => {
     log(`${label} did-finish-load url=${win.webContents.getURL()}`)
+    if (label === 'main') {
+      void syncChromeFromRenderer(win)
+    }
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url)) {
@@ -636,6 +647,10 @@ function buildTrayMenu() {
 }
 
 const LAUNCHER_WINDOW = { width: 200, height: 268 }
+/** 角色列表固定高度：不随角色数量变化 */
+const PICKER_PANEL_HEIGHT = 320
+const PICKER_PANEL_WIDTH = 320
+const PICKER_PET_GAP = 8
 
 function setLauncherMousePassthrough(ignore) {
   if (!launcherWindow || launcherWindow.isDestroyed()) return
@@ -646,18 +661,23 @@ function setLauncherMousePassthrough(ignore) {
   }
 }
 
-/** 显示/拖拽结束后重置穿透与拖拽状态。仅角色选择器打开时穿透，其余时候拦截鼠标保证桌宠可交互。 */
+/** 显示/拖拽结束后重置穿透：角色列表打开时整窗接收点击，否则仅桌宠 hitbox 可点 */
 function resetLauncherInteraction() {
   launcherIsDragging = false
-  const pickerActive = pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()
-  const launcherVisible = launcherWindow && !launcherWindow.isDestroyed() && launcherWindow.isVisible()
-  if (!launcherVisible) {
-    setLauncherMousePassthrough(true)
-  } else {
-    setLauncherMousePassthrough(pickerActive)
-  }
+  setLauncherMousePassthrough(!launcherPickerOpen)
   if (launcherWindow && !launcherWindow.isDestroyed() && !launcherWindow.webContents.isDestroyed()) {
     launcherWindow.webContents.send('desktop:launcher-interaction-reset')
+  }
+}
+
+function restoreLauncherAfterPicker() {
+  if (!launcherHiddenForPicker) return
+  launcherHiddenForPicker = false
+  if (launcherWindow && !launcherWindow.isDestroyed()) {
+    if (!launcherWindow.isVisible()) {
+      launcherWindow.show()
+    }
+    resetLauncherInteraction()
   }
 }
 
@@ -702,9 +722,6 @@ function handleProactiveMessageNotification(payload = {}) {
 
   if (isDesktopPetActivelyVisible()) {
     launcherWindow.webContents.send('desktop:launcher-new-message', payload)
-    if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()) {
-      pickerWindow.webContents.send('desktop:launcher-new-message', payload)
-    }
     return
   }
 
@@ -720,14 +737,132 @@ function hideLauncherWindow() {
   }
 }
 
+/** 主进程 auth session 为准，避免 renderer setLoginState IPC 丢失时桌宠永不显示 */
+function refreshLauncherLoginState() {
+  if (readAuthSession()?.token) {
+    launcherLoggedIn = true
+  }
+}
+
+const RENDERER_DESKTOP_STATE_SCRIPT = `
+(function () {
+  try {
+    const theme = localStorage.getItem('lianyu-theme') === 'light' ? 'light' : 'dark'
+    const loggedIn = Boolean(
+      localStorage.getItem('_ltt')
+      || localStorage.getItem('lianyu-user-profile')
+    )
+    const petRaw = localStorage.getItem('lianyu-show-desktop-pet')
+    const launcherRaw = localStorage.getItem('lianyu-show-launcher')
+    let showDesktopPet = true
+    if (petRaw === 'false' || launcherRaw === 'false') showDesktopPet = false
+    if (petRaw === 'true' || launcherRaw === 'true') showDesktopPet = true
+    const launcherPetId = localStorage.getItem('lianyu-launcher-pet') || 'raiden'
+    const allowScreenObserve = localStorage.getItem('lianyu-allow-screen-observe') === 'true'
+    return { theme, loggedIn, showDesktopPet, launcherPetId, allowScreenObserve }
+  } catch {
+    return { theme: 'dark', loggedIn: false, showDesktopPet: true, launcherPetId: 'raiden', allowScreenObserve: false }
+  }
+})()
+`
+
+async function pullRendererDesktopState(win = mainWindow) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return null
+  try {
+    return await win.webContents.executeJavaScript(RENDERER_DESKTOP_STATE_SCRIPT, true)
+  } catch (e) {
+    log(`pullRendererDesktopState failed: ${e.message}`)
+    return null
+  }
+}
+
+async function syncLauncherPetId(petId, { notifyLauncher = true } = {}) {
+  if (!petId) return
+  const next = writeDesktopSettings({ launcherPetId: petId })
+  if (notifyLauncher && launcherWindow && !launcherWindow.isDestroyed()) {
+    resetLauncherCompactSize()
+    clampLauncherToWorkArea()
+    launcherWindow.webContents.send('desktop:launcher-pet-changed', next.launcherPetId || petId)
+  }
+}
+
+async function syncChromeFromRenderer(win = mainWindow) {
+  const state = await pullRendererDesktopState(win)
+  if (!state) return
+  if (state.loggedIn) {
+    launcherLoggedIn = true
+  }
+  if (state.theme === 'light' || state.theme === 'dark') {
+    writeAppearance(state.theme)
+    applyTitleBarOverlayToAllWindows(state.theme)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        mainWindow.setBackgroundColor(resolveWindowBackgroundColor(state.theme))
+      } catch (e) {
+        log(`syncChrome setBackgroundColor failed: ${e.message}`)
+      }
+    }
+  }
+  if (state.showDesktopPet === false) {
+    writeDesktopSettings({ showDesktopPet: false, showLauncherLogo: false })
+  } else if (state.showDesktopPet === true) {
+    writeDesktopSettings({ showDesktopPet: true, showLauncherLogo: true })
+  }
+  if (state.launcherPetId) {
+    await syncLauncherPetId(state.launcherPetId)
+  }
+  if (state.allowScreenObserve === true) {
+    writeDesktopSettings({ allowScreenObserve: true })
+  }
+}
+
+async function resolveDesktopAuthToken() {
+  refreshLauncherLoginState()
+  let session = readAuthSession()
+  if (session?.token) return session.token
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await syncChromeFromRenderer(mainWindow)
+    session = readAuthSession()
+    if (session?.token) return session.token
+  }
+  return null
+}
+
 function showLauncherWindow(options = {}) {
+  void showLauncherWindowAsync(options)
+}
+
+async function showLauncherWindowAsync(options = {}) {
   const { center = false, force = false } = options
-  if (!launcherLoggedIn) return
+  refreshLauncherLoginState()
+  if (!launcherLoggedIn && mainWindow && !mainWindow.isDestroyed()) {
+    const state = await pullRendererDesktopState(mainWindow)
+    if (state?.loggedIn) {
+      launcherLoggedIn = true
+      log('showLauncherWindow: recovered login state from renderer storage')
+    }
+    if (state?.showDesktopPet === true) {
+      writeDesktopSettings({ showDesktopPet: true, showLauncherLogo: true })
+    }
+    if (state?.launcherPetId) {
+      await syncLauncherPetId(state.launcherPetId)
+    }
+  }
+  if (!launcherLoggedIn) {
+    log('showLauncherWindow: aborted — not logged in')
+    return
+  }
   const settings = readDesktopSettings()
-  if (!isDesktopPetEnabled(settings)) return
+  if (!isDesktopPetEnabled(settings)) {
+    log('showLauncherWindow: aborted — desktop pet disabled in settings')
+    return
+  }
   if (!force && isMainWindowOccupyingDesktop()) return
   const win = ensureLauncherWindow()
-  if (!win) return
+  if (!win) {
+    log('showLauncherWindow: aborted — launcher window unavailable')
+    return
+  }
   resetLauncherCompactSize()
   if (center) {
     centerLauncherOnScreen()
@@ -743,6 +878,7 @@ function showLauncherWindow(options = {}) {
     win.show()
     win.moveTop()
     win.webContents.send('desktop:launcher-shown')
+    log('showLauncherWindow: launcher shown')
   }
   if (win.webContents.isLoading()) {
     win.webContents.once('ready-to-show', reveal)
@@ -768,11 +904,11 @@ function showMainWindow(hash = '') {
 
 const CAPTION_BAR_HEIGHT = 52
 
-/** Windows 标题栏右侧系统按钮区背景 — 须与 AppHeader / 落地页顶栏一致 */
+/** Windows 标题栏：透明 overlay 背景 + 主题色图标，保留系统原生 min/max/close */
 const TITLE_BAR_PRESETS = {
-  dark: { color: '#0a0a10', symbolColor: '#d4d4d8' },
-  light: { color: '#ffffff', symbolColor: '#1a1a1e' },
-  landing: { color: '#06080f', symbolColor: '#e8eaef' },
+  dark: { color: '#00000000', symbolColor: '#d4d4d8' },
+  light: { color: '#00000000', symbolColor: '#1a1a1e' },
+  landing: { color: '#00000000', symbolColor: '#e8eaef' },
 }
 
 let currentTitleBarPreset = 'dark'
@@ -788,12 +924,20 @@ function resolveTitleBarOverlay(presetKey = currentTitleBarPreset) {
 
 function applyTitleBarOverlayToWindow(win, presetKey = currentTitleBarPreset) {
   if (process.platform !== 'win32' || !win || win.isDestroyed()) return
-  try {
-    win.setTitleBarOverlay(resolveTitleBarOverlay(presetKey))
-    pushCaptionMetrics(win)
-  } catch (e) {
-    log(`setTitleBarOverlay failed: ${e.message}`)
+  const overlay = resolveTitleBarOverlay(presetKey)
+  const mode = presetKey === 'light' ? 'light' : presetKey === 'landing' ? 'dark' : presetKey
+  const apply = () => {
+    try {
+      win.setTitleBarOverlay(overlay)
+      win.setBackgroundColor(resolveWindowBackgroundColor(mode === 'light' ? 'light' : 'dark'))
+      pushCaptionMetrics(win)
+    } catch (e) {
+      log(`setTitleBarOverlay failed preset=${presetKey}: ${e.message}`)
+    }
   }
+  apply()
+  setTimeout(apply, 0)
+  setTimeout(apply, 150)
 }
 
 function applyTitleBarOverlayToAllWindows(presetKey) {
@@ -801,6 +945,14 @@ function applyTitleBarOverlayToAllWindows(presetKey) {
   applyTitleBarOverlayToWindow(mainWindow, currentTitleBarPreset)
   for (const win of quickChatWindows.values()) {
     applyTitleBarOverlayToWindow(win, currentTitleBarPreset)
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const mode = currentTitleBarPreset === 'light' ? 'light' : 'dark'
+    try {
+      mainWindow.setBackgroundColor(resolveWindowBackgroundColor(mode))
+    } catch (e) {
+      log(`setBackgroundColor failed: ${e.message}`)
+    }
   }
 }
 
@@ -842,7 +994,18 @@ function attachCaptionMetricsChannel(win) {
   win.on('leave-full-screen', push)
 }
 
-/** Windows 须在 BrowserWindow 构造时传入 titleBarOverlay，否则 setTitleBarOverlay 会抛错 */
+/** 快捷聊天：无边框，仅页面内自定义 × 关闭 */
+function buildQuickChatWindowOptions() {
+  return {
+    frame: false,
+    thickFrame: false,
+    hasShadow: true,
+    skipTaskbar: false,
+    resizable: true,
+  }
+}
+
+/** Windows 须 hidden + titleBarOverlay，保留系统原生窗口按钮 */
 function buildCaptionWindowOptions() {
   if (process.platform === 'win32') {
     return {
@@ -892,7 +1055,9 @@ function createMainWindow() {
 
   win.once('ready-to-show', () => {
     applyMainWindowCaption(win)
+    applyTitleBarOverlayToWindow(win, currentTitleBarPreset)
     pushCaptionMetrics(win)
+    void syncChromeFromRenderer(win)
     win.show()
   })
 
@@ -967,17 +1132,19 @@ function createLauncherWindow() {
 
   let moveTimer = null
   win.on('moved', () => {
-    if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible() && !launcherIsDragging) {
-      repositionPickerNearLauncher()
-    }
     if (moveTimer) clearTimeout(moveTimer)
     if (launcherIsDragging) return
     if (launcherSuppressMoveSave) return
     moveTimer = setTimeout(() => {
       const bounds = win.getBounds()
-      writeLauncherPosition(bounds.x, bounds.y)
+      if (launcherPickerOpen) {
+        const petX = bounds.x + Math.round((bounds.width - LAUNCHER_WINDOW.width) / 2)
+        const petY = bounds.y + bounds.height - LAUNCHER_WINDOW.height
+        writeLauncherPosition(petX, petY)
+      } else {
+        writeLauncherPosition(bounds.x, bounds.y)
+      }
       clampLauncherToWorkArea()
-      repositionPickerNearLauncher()
     }, 200)
   })
 
@@ -1007,150 +1174,212 @@ function prewarmLauncherWindow() {
   createLauncherWindow()
 }
 
-function repositionPickerNearLauncher() {
-  if (!pickerWindow || pickerWindow.isDestroyed() || !launcherWindow || launcherWindow.isDestroyed()) {
-    return
+function expandLauncherForPicker() {
+  if (!launcherWindow || launcherWindow.isDestroyed()) return
+  const bounds = launcherWindow.getBounds()
+
+  if (!launcherBoundsBeforePicker) {
+    if (bounds.width <= LAUNCHER_WINDOW.width + 8 && bounds.height <= LAUNCHER_WINDOW.height + 8) {
+      launcherBoundsBeforePicker = { ...bounds }
+    } else {
+      launcherBoundsBeforePicker = {
+        x: bounds.x + Math.round((bounds.width - LAUNCHER_WINDOW.width) / 2),
+        y: bounds.y + bounds.height - LAUNCHER_WINDOW.height,
+        width: LAUNCHER_WINDOW.width,
+        height: LAUNCHER_WINDOW.height,
+      }
+    }
   }
-  const launcherBounds = launcherWindow.getBounds()
-  const pickerBounds = pickerWindow.getBounds()
+
+  const pet = launcherBoundsBeforePicker
   const display = screen.getDisplayNearestPoint({
-    x: launcherBounds.x + launcherBounds.width / 2,
-    y: launcherBounds.y + launcherBounds.height / 2,
+    x: pet.x + pet.width / 2,
+    y: pet.y + pet.height / 2,
   })
   const area = display.workArea
-  const gap = 2
+  const width = PICKER_PANEL_WIDTH
+  const height = PICKER_PANEL_HEIGHT + LAUNCHER_WINDOW.height + PICKER_PET_GAP
 
-  let x = launcherBounds.x + Math.round((launcherBounds.width - pickerBounds.width) / 2)
-  let y = launcherBounds.y - pickerBounds.height - gap
+  let x = pet.x + Math.round((pet.width - width) / 2)
+  let y = pet.y - PICKER_PANEL_HEIGHT - PICKER_PET_GAP
   if (y < area.y) {
-    y = launcherBounds.y + launcherBounds.height + gap
+    y = pet.y + pet.height + PICKER_PET_GAP
   }
-  if (y + pickerBounds.height > area.y + area.height) {
-    y = area.y + area.height - pickerBounds.height
-  }
-  if (x + pickerBounds.width > area.x + area.width) {
-    x = area.x + area.width - pickerBounds.width
+  if (x + width > area.x + area.width) {
+    x = area.x + area.width - width
   }
   if (x < area.x) x = area.x
-  pickerWindow.setPosition(Math.round(x), Math.round(y))
+  if (y + height > area.y + area.height) {
+    y = area.y + area.height - height
+  }
+  if (y < area.y) y = area.y
+
+  launcherWindow.setBounds({
+    x: Math.round(x),
+    y: Math.round(y),
+    width,
+    height,
+  }, false)
 }
 
-function createPickerWindow() {
-  if (pickerWindow && !pickerWindow.isDestroyed()) {
-    return pickerWindow
-  }
-
-  const win = new BrowserWindow({
-    width: 320,
-    height: 420,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    resizable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    show: false,
-    webPreferences: { ...SHARED_WEB_PREFS },
-  })
-  win.lianyuKind = 'picker'
-  attachWindowLogging(win, 'picker')
-
-  win.on('blur', () => {
-    if (pickerBlurTimer) clearTimeout(pickerBlurTimer)
-    pickerBlurTimer = setTimeout(() => {
-      if (win.isDestroyed() || win.isFocused()) return
-      if (Date.now() < pickerOpeningUntil) return
-      win.hide()
-    }, 600)
-  })
-
-  win.on('hide', () => {
-    setLauncherMousePassthrough(false)
-  })
-
-  win.on('closed', () => {
-    pickerWindow = null
-    setLauncherMousePassthrough(false)
-  })
-
-  loadRoute(win, '#/launcher/pick')
-  pickerWindow = win
-  return win
-}
-
-function openCharacterPicker(options = {}) {
-  const { inactive = false } = options
-  ensureLauncherWindow()
-  const win = createPickerWindow()
-  repositionPickerNearLauncher()
-  pickerOpeningUntil = Date.now() + 1200
-  // 确保 picker 在桌宠窗口之上，且桌宠窗口穿透不拦截 picker 区域的点击
-  win.setAlwaysOnTop(true, 'floating')
-  if (launcherWindow && !launcherWindow.isDestroyed()) {
-    launcherWindow.setAlwaysOnTop(true, 'normal')
-  }
-  setLauncherMousePassthrough(true)
-  if (inactive) {
-    win.showInactive()
+function shrinkLauncherAfterPicker() {
+  if (!launcherWindow || launcherWindow.isDestroyed()) return
+  const saved = launcherBoundsBeforePicker
+  if (saved) {
+    launcherWindow.setBounds({
+      x: saved.x,
+      y: saved.y,
+      width: LAUNCHER_WINDOW.width,
+      height: LAUNCHER_WINDOW.height,
+    }, false)
   } else {
-    win.show()
-    win.focus()
-    win.moveTop()
+    clampLauncherToWorkArea()
   }
-  repositionPickerNearLauncher()
+  launcherBoundsBeforePicker = null
 }
 
-function toggleCharacterPicker(options = {}) {
-  if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()) {
-    pickerWindow.hide()
-    setLauncherMousePassthrough(false)
+function openCharacterPicker() {
+  if (!launcherLoggedIn) {
+    refreshLauncherLoginState()
+    void pullRendererDesktopState(mainWindow).then((state) => {
+      if (state?.loggedIn) launcherLoggedIn = true
+    })
+  }
+  ensureLauncherWindow()
+  if (!launcherWindow || launcherWindow.isDestroyed()) return
+
+  if (launcherPickerOpen) {
+    closeCharacterPicker()
     return
   }
-  openCharacterPicker(options)
+
+  launcherPickerOpen = true
+  setLauncherMousePassthrough(false)
+  expandLauncherForPicker()
+
+  if (!launcherWindow.isVisible()) {
+    launcherWindow.show()
+  }
+  launcherWindow.focus()
+  launcherWindow.moveTop()
+  launcherWindow.webContents.send('desktop:picker-toggle', { open: true })
+}
+
+function toggleCharacterPicker() {
+  if (launcherPickerOpen) {
+    closeCharacterPicker()
+    return
+  }
+  openCharacterPicker()
 }
 
 function closeCharacterPicker() {
+  if (!launcherPickerOpen && !(pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible())) {
+    return
+  }
+
+  launcherPickerOpen = false
+  if (launcherWindow && !launcherWindow.isDestroyed()) {
+    launcherWindow.webContents.send('desktop:picker-toggle', { open: false })
+    shrinkLauncherAfterPicker()
+    setLauncherMousePassthrough(true)
+  }
+
   if (pickerWindow && !pickerWindow.isDestroyed()) {
     pickerWindow.hide()
-    setLauncherMousePassthrough(false)
   }
+  restoreLauncherAfterPicker()
+}
+
+function positionQuickChatNearLauncher(win) {
+  if (!win || win.isDestroyed()) return
+  if (!launcherWindow || launcherWindow.isDestroyed()) return
+  const anchor = launcherWindow
+  const anchorBounds = anchor.getBounds()
+  const winBounds = win.getBounds()
+  const display = screen.getDisplayNearestPoint({
+    x: anchorBounds.x + anchorBounds.width / 2,
+    y: anchorBounds.y + anchorBounds.height / 2,
+  })
+  const area = display.workArea
+  const gap = 12
+  let x = anchorBounds.x + anchorBounds.width + gap
+  let y = anchorBounds.y + Math.round((anchorBounds.height - winBounds.height) / 2)
+  if (x + winBounds.width > area.x + area.width) {
+    x = anchorBounds.x - winBounds.width - gap
+  }
+  if (x < area.x) x = area.x
+  if (y < area.y) y = area.y
+  if (y + winBounds.height > area.y + area.height) {
+    y = area.y + area.height - winBounds.height
+  }
+  win.setPosition(Math.round(x), Math.round(y))
+}
+
+function showQuickChatWindow(win, conversationId) {
+  if (!win || win.isDestroyed()) return false
+  const appearance = readAppearance()
+  win.setBackgroundColor(resolveWindowBackgroundColor(appearance))
+  positionQuickChatNearLauncher(win)
+  if (!win.isVisible()) win.show()
+  win.focus()
+  win.moveTop()
+  log(`openQuickChatWindow: shown conversation=${conversationId}`)
+  return true
 }
 
 function openQuickChatWindow(conversationId) {
   const id = String(conversationId)
+  if (!id || id === 'undefined' || id === 'null') {
+    log('openQuickChatWindow: invalid conversation id')
+    return null
+  }
   closeCharacterPicker()
 
   const existing = quickChatWindows.get(id)
   if (existing && !existing.isDestroyed()) {
-    existing.show()
-    existing.focus()
+    showQuickChatWindow(existing, id)
     return existing
   }
 
+  const appearance = readAppearance()
   const win = new BrowserWindow({
-    width: 420,
-    height: 680,
-    minWidth: 360,
-    minHeight: 520,
+    width: 380,
+    height: 560,
+    minWidth: 320,
+    minHeight: 420,
     title: 'LianYu 聊天',
     icon: resolveDistPath('logo.png'),
-    backgroundColor: '#0a0a10',
-    ...buildCaptionWindowOptions(),
+    backgroundColor: resolveWindowBackgroundColor(appearance),
+    ...buildQuickChatWindowOptions(),
     show: false,
     webPreferences: { ...SHARED_WEB_PREFS },
   })
   win.lianyuKind = 'quickChat'
   win.setMenuBarVisibility(false)
   attachWindowLogging(win, `quickChat:${id}`)
-  attachCaptionMetricsChannel(win)
 
-  win.once('ready-to-show', () => {
-    applyMainWindowCaption(win)
-    pushCaptionMetrics(win)
-    win.show()
+  const reveal = () => showQuickChatWindow(win, id)
+
+  win.once('ready-to-show', reveal)
+  win.webContents.once('did-finish-load', () => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      setTimeout(reveal, 100)
+    }
+  })
+  win.webContents.once('did-fail-load', () => {
+    log(`openQuickChatWindow: load failed conversation=${id}, fallback main window`)
+    if (!win.isDestroyed()) win.destroy()
+    quickChatWindows.delete(id)
+    showMainWindow(`#/app/chat/${id}`)
   })
 
+  const forceTimer = setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) reveal()
+  }, 800)
+
   win.on('closed', () => {
+    clearTimeout(forceTimer)
     quickChatWindows.delete(id)
   })
 
@@ -1159,11 +1388,41 @@ function openQuickChatWindow(conversationId) {
   return win
 }
 
+function destroyQuickChatWindow(win, reason = 'unknown') {
+  if (!win || win.isDestroyed()) return false
+  log(`destroyQuickChatWindow: reason=${reason} kind=${win.lianyuKind || 'unknown'}`)
+  win.destroy()
+  return true
+}
+
+function closeQuickChatFromEvent(event) {
+  if (!guardTrusted(event)) {
+    log('closeQuickChatFromEvent: untrusted sender')
+    return false
+  }
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win && win.lianyuKind === 'quickChat') {
+    return destroyQuickChatWindow(win, 'sender-window')
+  }
+  for (const chatWin of quickChatWindows.values()) {
+    if (!chatWin.isDestroyed() && chatWin.webContents.id === event.sender.id) {
+      return destroyQuickChatWindow(chatWin, 'map-by-sender')
+    }
+  }
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused && focused.lianyuKind === 'quickChat') {
+    return destroyQuickChatWindow(focused, 'focused-window')
+  }
+  log(`closeQuickChatFromEvent: no quick chat window for sender=${event.sender.id}`)
+  return false
+}
+
 function closeFocusedQuickChat() {
   const focused = BrowserWindow.getFocusedWindow()
-  if (focused && focused.lianyuKind === 'quickChat' && !focused.isDestroyed()) {
-    focused.close()
+  if (focused && focused.lianyuKind === 'quickChat') {
+    return destroyQuickChatWindow(focused, 'focused-close')
   }
+  return false
 }
 
 function quitApplication() {
@@ -1181,6 +1440,12 @@ function quitApplication() {
 }
 
 function registerIpcHandlers() {
+  ipcMain.on('desktop:sync-chrome', (event) => {
+    if (!trustedWebContentsIds.has(event.sender.id)) return
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) void syncChromeFromRenderer(win)
+  })
+
   ipcMain.handle('desktop:get-window-kind', (event) => {
     if (!guardTrusted(event)) return 'unknown'
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -1194,24 +1459,47 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('desktop:open-quick-chat', (event, conversationId) => {
-    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
+    if (!guardTrusted(event)) {
+      log('open-quick-chat: untrusted sender')
+      return { ok: false, reason: 'untrusted_sender' }
+    }
+    const win = openQuickChatWindow(conversationId)
+    return win ? { ok: true } : { ok: false, reason: 'invalid_conversation' }
+  })
+
+  ipcMain.on('desktop:open-quick-chat', (event, conversationId) => {
+    if (!trustedWebContentsIds.has(event.sender.id)) {
+      log('open-quick-chat(send): untrusted sender')
+      return
+    }
     openQuickChatWindow(conversationId)
-    return { ok: true }
   })
 
   ipcMain.handle('desktop:toggle-picker', (event) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
-    toggleCharacterPicker({ inactive: true })
+    toggleCharacterPicker()
+    return { ok: true }
+  })
+
+  ipcMain.handle('desktop:picker-interaction', (event) => {
+    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
+    return { ok: true }
   })
 
   ipcMain.handle('desktop:close-picker', (event) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     closeCharacterPicker()
+    return { ok: true }
   })
 
   ipcMain.handle('desktop:close-quick-chat', (event) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
-    closeFocusedQuickChat()
+    return { ok: closeQuickChatFromEvent(event) }
+  })
+
+  ipcMain.on('desktop:close-quick-chat', (event) => {
+    if (!trustedWebContentsIds.has(event.sender.id)) return
+    closeQuickChatFromEvent(event)
   })
 
   ipcMain.handle('desktop:notify-proactive-message', (event, payload) => {
@@ -1232,15 +1520,23 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('desktop:set-title-bar-appearance', (event, payload = {}) => {
-    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
+    if (!guardTrusted(event)) {
+      void syncChromeFromRenderer(mainWindow)
+      return { ok: false, reason: 'untrusted_sender' }
+    }
     const presetKey = resolveTitleBarPresetKey(payload)
     applyTitleBarOverlayToAllWindows(presetKey)
     return { ok: true, preset: presetKey }
   })
 
   ipcMain.handle('desktop:save-appearance', (event, mode) => {
-    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
+    if (!guardTrusted(event)) {
+      void syncChromeFromRenderer(mainWindow)
+      return { ok: false, reason: 'untrusted_sender' }
+    }
     const normalized = writeAppearance(mode)
+    const presetKey = normalized === 'light' ? 'light' : 'dark'
+    applyTitleBarOverlayToAllWindows(presetKey)
     return { ok: true, mode: normalized }
   })
 
@@ -1327,6 +1623,10 @@ function registerIpcHandlers() {
     if (session?.token && !saved) {
       return { ok: false, reason: 'session_write_failed' }
     }
+    if (session?.token) {
+      launcherLoggedIn = true
+      prewarmLauncherWindow()
+    }
     return { ok: true }
   })
   ipcMain.handle('auth:clear-session', (event) => {
@@ -1341,7 +1641,10 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('desktop:set-settings', (event, partial) => {
-    if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
+    if (!guardTrusted(event)) {
+      void syncChromeFromRenderer(mainWindow)
+      return { ok: false, reason: 'untrusted_sender' }
+    }
     const next = writeDesktopSettings(partial || {})
     if (!isDesktopPetEnabled(next) && launcherWindow && !launcherWindow.isDestroyed()) {
       launcherWindow.close()
@@ -1351,7 +1654,7 @@ function registerIpcHandlers() {
     if (partial?.launcherPetId != null && launcherWindow && !launcherWindow.isDestroyed()) {
       resetLauncherCompactSize()
       clampLauncherToWorkArea()
-      launcherWindow.webContents.send('desktop:launcher-pet-changed', partial.launcherPetId)
+      launcherWindow.webContents.send('desktop:launcher-pet-changed', next.launcherPetId)
     }
     if (
       partial?.allowScreenObserve === true
@@ -1364,7 +1667,7 @@ function registerIpcHandlers() {
     if (tray) {
       tray.setContextMenu(buildTrayMenu())
     }
-    return next
+    return { ok: true, settings: next }
   })
 
   ipcMain.handle('desktop:ack-close-hint', (event) => {
@@ -1379,7 +1682,7 @@ function registerIpcHandlers() {
     return isDesktopPetActivelyVisible()
   })
 
-  ipcMain.handle('desktop:start-observer', (event, { persona, petId }) => {
+  ipcMain.handle('desktop:start-observer', async (event, { persona, petId }) => {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     if (!isDesktopPetActivelyVisible()) {
       return { ok: false, reason: 'launcher_not_visible' }
@@ -1388,14 +1691,15 @@ function registerIpcHandlers() {
     if (!settings.allowScreenObserve) {
       return { ok: false, reason: 'screen_observe_disabled' }
     }
-    const session = readAuthSession()
-    if (!session?.token) {
+    const authToken = await resolveDesktopAuthToken()
+    if (!authToken) {
+      log('start-observer: no auth token in main process')
       return { ok: false, reason: 'not_logged_in' }
     }
     const resolvedPetId = petId || settings.launcherPetId || 'raiden'
     const started = startDesktopObserver({
       apiOrigin: resolveApiOrigin(),
-      authToken: session.token,
+      authToken,
       persona,
       petId: resolvedPetId,
       onGreeting: (payload) => {
@@ -1443,7 +1747,6 @@ function registerIpcHandlers() {
     launcherWindow.setPosition(Math.round(bounds.x + dx), Math.round(bounds.y + dy))
     const next = launcherWindow.getBounds()
     writeLauncherPosition(next.x, next.y)
-    repositionPickerNearLauncher()
     return { ok: true }
   })
 
@@ -1465,7 +1768,6 @@ function registerIpcHandlers() {
     launcherIsDragging = true
     const bounds = launcherWindow.getBounds()
     launcherWindow.setPosition(Math.round(bounds.x + dx), Math.round(bounds.y + dy))
-    repositionPickerNearLauncher()
   })
 
   ipcMain.on('desktop:launcher-drag-end', (event) => {
@@ -1477,7 +1779,6 @@ function registerIpcHandlers() {
     launcherIsDragging = false
     launcherSuppressMoveSave = true
     clampLauncherToWorkArea()
-    repositionPickerNearLauncher()
     resetLauncherInteraction()
     setTimeout(() => {
       launcherSuppressMoveSave = false
@@ -1499,7 +1800,6 @@ function registerIpcHandlers() {
     launcherIsDragging = !!dragging
     if (!launcherIsDragging) {
       clampLauncherToWorkArea()
-      repositionPickerNearLauncher()
       resetLauncherInteraction()
     }
     return { ok: true }
@@ -1509,7 +1809,6 @@ function registerIpcHandlers() {
     if (!guardTrusted(event)) return { ok: false, reason: 'untrusted_sender' }
     launcherIsDragging = false
     clampLauncherToWorkArea()
-    repositionPickerNearLauncher()
     resetLauncherInteraction()
     return { ok: true }
   })

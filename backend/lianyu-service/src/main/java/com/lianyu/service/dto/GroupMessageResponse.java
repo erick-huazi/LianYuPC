@@ -11,5 +11,4 @@ public class GroupMessageResponse {
     private Long characterId;
     private String characterName;
     private String content;
-    private String stickerUrl;
 }

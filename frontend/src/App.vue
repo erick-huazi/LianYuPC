@@ -35,7 +35,8 @@ const elementLocale = computed(() => elementLocaleMap[settingsStore.uiLanguage] 
 /** Electron file:// 下禁用路由过渡，避免 out-in 中间态黑屏 */
 const isElectron = isElectronRuntime()
 const isLauncherSurface = computed(() => route.name === 'Launcher' || route.name === 'LauncherPick')
-const usesAppHeader = computed(() => route.path.startsWith('/app') || route.path.startsWith('/quick'))
+const isQuickChatSurface = computed(() => route.path.startsWith('/quick'))
+const usesAppHeader = computed(() => route.path.startsWith('/app'))
 const pageTransitionName = computed(() => (isElectron ? '' : 'page'))
 const pageTransitionMode = computed(() => (isElectron ? undefined : 'out-in'))
 const usesIntegratedCaption = computed(() => {
@@ -45,7 +46,7 @@ const usesIntegratedCaption = computed(() => {
 })
 /** 主界面 / 落地页 / 登录注册由页面顶栏充当标题栏，不再单独顶出拖拽条 */
 const showElectronCaptionDrag = computed(() => (
-  isElectron && !isLauncherSurface.value && !usesIntegratedCaption.value
+  isElectron && !isLauncherSurface.value && !isQuickChatSurface.value && !usesIntegratedCaption.value
 ))
 
 function syncElectronChrome() {
@@ -81,7 +82,7 @@ function applyCaptionMetrics(metrics) {
 
 onMounted(async () => {
   if (isElectron) {
-    syncElectronCaptionClass(!isLauncherSurface.value)
+    syncElectronCaptionClass(!isLauncherSurface.value && !isQuickChatSurface.value)
     const api = getElectronAPI()
     const metrics = (await api?.getCaptionMetrics?.()) || {}
     if (!metrics.height) {
@@ -93,7 +94,7 @@ onMounted(async () => {
     syncElectronChrome()
   }
 
-  if (userStore.isLoggedIn && !userStore.userId) {
+  if (userStore.isLoggedIn && !userStore.userId && !isLauncherSurface.value) {
     try {
       await userStore.fetchProfile({ skipGlobalError: true })
     } catch (err) {
@@ -107,7 +108,12 @@ onMounted(async () => {
 
 watch(isLauncherSurface, (launcher) => {
   if (!isElectron) return
-  syncElectronCaptionClass(!launcher)
+  syncElectronCaptionClass(!launcher && !isQuickChatSurface.value)
+})
+
+watch(isQuickChatSurface, (quick) => {
+  if (!isElectron) return
+  syncElectronCaptionClass(!quick && !isLauncherSurface.value)
 })
 
 watch(

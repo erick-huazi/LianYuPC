@@ -336,14 +336,19 @@ async function onDesktopChange() {
     desktopForm.allowScreenObserve = false
     getElectronAPI()?.stopDesktopObserver?.()
   }
-  await desktopStore.persist({
-    closeToTray: desktopForm.closeToTray,
-    showDesktopPet: desktopForm.showDesktopPet,
-    showLauncherLogo: desktopForm.showDesktopPet,
-    allowScreenObserve: desktopForm.allowScreenObserve,
-    launchAtLogin: desktopForm.launchAtLogin,
-    launcherPetId: desktopForm.launcherPetId,
-  })
+  try {
+    await desktopStore.persist({
+      closeToTray: desktopForm.closeToTray,
+      showDesktopPet: desktopForm.showDesktopPet,
+      showLauncherLogo: desktopForm.showDesktopPet,
+      allowScreenObserve: desktopForm.allowScreenObserve,
+      launchAtLogin: desktopForm.launchAtLogin,
+      launcherPetId: desktopForm.launcherPetId,
+    })
+    getElectronAPI()?.requestChromeSync?.()
+  } catch (err) {
+    ElMessage.error(err?.message || '桌面设置保存失败')
+  }
 }
 
 async function onScreenObserveChange(enabled) {

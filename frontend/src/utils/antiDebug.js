@@ -13,6 +13,8 @@ let hiddenAt = 0
 export function initAntiDebug() {
   if (import.meta.env.DEV) return
   if (!window.electronAPI?.isElectron) return
+  const hash = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
+  if (hash === '/launcher' || hash.startsWith('/launcher/')) return
 
   initDebuggerLoop()
   initConsoleHardening()

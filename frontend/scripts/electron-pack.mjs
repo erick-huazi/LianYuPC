@@ -31,8 +31,8 @@ const RENDERER_OBFUSCATOR = {
   selfDefending: true,
   numbersToExpressions: true,
   transformObjectKeys: false,
-  reservedNames: ['electronAPI'],
-  reservedStrings: ['electronAPI', 'isElectron'],
+  reservedNames: ['electronAPI', 'toJSON'],
+  reservedStrings: ['electronAPI', 'isElectron', 'toJSON', 'AxiosHeaders'],
   unicodeEscapeSequence: false,
   disableConsoleOutput: false,
   simplify: false,
@@ -169,8 +169,48 @@ const viteEnv = {
 }
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
-const outDir = path.join('release', `v${pkg.version}`)
-fs.mkdirSync(path.join(root, outDir), { recursive: true })
+
+function resolveReleaseOutDir(version) {
+  const primary = path.join('release', `v${version}`)
+  const primaryFull = path.join(root, primary)
+  const installer = path.join(primaryFull, `LianYu Setup ${version}.exe`)
+  if (fs.existsSync(installer)) return primary
+
+  const winUnpacked = path.join(primaryFull, 'win-unpacked')
+  if (fs.existsSync(winUnpacked)) {
+    const fallback = `${primary}-rebuild`
+    console.warn(`Partial release folder exists without installer (${primary}), using ${fallback}`)
+    return fallback
+  }
+  return primary
+}
+
+const outDir = resolveReleaseOutDir(pkg.version)
+const outDirFull = path.join(root, outDir)
+fs.mkdirSync(outDirFull, { recursive: true })
+
+function killLianYuProcesses() {
+  if (process.platform !== 'win32') return
+  try {
+    execSync('taskkill /F /IM LianYu.exe /T', { stdio: 'ignore' })
+    console.log('Stopped running LianYu.exe before packaging')
+  } catch {
+    /* not running */
+  }
+}
+
+function removePartialReleaseArtifacts() {
+  const installer = path.join(outDirFull, `LianYu Setup ${pkg.version}.exe`)
+  const winUnpacked = path.join(outDirFull, 'win-unpacked')
+  if (fs.existsSync(installer)) return
+  if (!fs.existsSync(winUnpacked)) return
+  try {
+    fs.rmSync(winUnpacked, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    console.log(`Removed partial release folder: ${path.relative(root, winUnpacked)}`)
+  } catch (err) {
+    console.warn(`Could not remove partial release folder (continuing): ${err.message}`)
+  }
+}
 
 execSync('python scripts/regenerate-icon.py', { stdio: 'inherit' })
 removePreViteStaleEntries()
@@ -189,6 +229,9 @@ packRuntimeSecrets({
 
 obfuscateRendererBundles()
 applyBytecodePackaging()
+
+killLianYuProcesses()
+removePartialReleaseArtifacts()
 
 const outputArg = `--config.directories.output=${outDir.replace(/\\/g, '/')}`
 execSync(`npx electron-builder --win ${outputArg}`, {

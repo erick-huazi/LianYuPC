@@ -4,7 +4,7 @@ import { getElectronAPI } from '@/utils/electron'
  * Sync Windows titleBarOverlay (min/max/close strip) with app chrome.
  * @param {{ routeName?: string, routePath?: string, theme?: string }} options
  */
-export function syncElectronTitleBar({ routeName = '', routePath = '', theme = 'dark' } = {}) {
+export async function syncElectronTitleBar({ routeName = '', routePath = '', theme = 'dark' } = {}) {
   const api = getElectronAPI()
   if (!api?.setTitleBarAppearance) return
 
@@ -15,12 +15,21 @@ export function syncElectronTitleBar({ routeName = '', routePath = '', theme = '
     surface = 'auth'
   }
 
-  void api.setTitleBarAppearance({
+  const mode = theme === 'light' ? 'light' : 'dark'
+  const appearance = await api.setTitleBarAppearance({
     surface,
-    theme: theme === 'light' ? 'light' : 'dark',
+    theme: mode,
   })
+  if (appearance?.ok === false) {
+    console.warn('[electronCaption] setTitleBarAppearance failed:', appearance.reason)
+  }
 
   if (api.saveAppearance) {
-    void api.saveAppearance(theme === 'light' ? 'light' : 'dark')
+    const saved = await api.saveAppearance(mode)
+    if (saved?.ok === false) {
+      console.warn('[electronCaption] saveAppearance failed:', saved.reason)
+    }
   }
+
+  api.requestChromeSync?.()
 }

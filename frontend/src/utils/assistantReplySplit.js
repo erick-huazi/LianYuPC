@@ -1,6 +1,8 @@
 /**
  * 与后端 {@code AssistantReplySplitter} 一致：按换行拆成多条气泡。
  */
+import { isInsideParentheses } from '@/utils/innerThoughtFilter'
+
 const SENTENCE_SPLIT_MIN_CHARS = 40
 const CJK_SENTENCE_BOUNDARY = /(?<=[。！？!?])(?=[^。！？!?\s])/u
 const EN_SENTENCE_BOUNDARY = /(?<=[.!?])\s+/
@@ -18,15 +20,33 @@ function splitBySentenceBoundary(text) {
   return [text.trim()]
 }
 
+function splitLinesOutsideParentheses(text) {
+  const normalized = String(text).replace(/\r\n/g, '\n')
+  const lines = []
+  let current = ''
+  for (let i = 0; i < normalized.length; i += 1) {
+    const ch = normalized[i]
+    if (ch === '\n') {
+      if (!isInsideParentheses(normalized, i)) {
+        const trimmed = current.trim()
+        if (trimmed) lines.push(trimmed)
+        current = ''
+        continue
+      }
+    }
+    current += ch
+  }
+  const trimmed = current.trim()
+  if (trimmed) lines.push(trimmed)
+  return lines.length ? lines : [normalized.trim()]
+}
+
 function collectReplyPieces(fullContent) {
   if (!fullContent || !String(fullContent).trim()) {
     return []
   }
   const normalized = String(fullContent).replace(/\r\n/g, '\n').trim()
-  let pieces = normalized
-    .split('\n')
-    .map(s => s.trim())
-    .filter(Boolean)
+  let pieces = splitLinesOutsideParentheses(normalized)
   if (pieces.length === 0) {
     pieces = [normalized]
   }

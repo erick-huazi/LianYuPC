@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { setUiLocale } from '@/i18n'
+import { isElectronApp, getElectronAPI } from '@/utils/electron'
+import { syncElectronTitleBar } from '@/utils/electronCaption'
 import {
   DEFAULT_MODEL_LANGUAGE,
   DEFAULT_UI_LANGUAGE,
@@ -70,11 +72,15 @@ export const useSettingsStore = defineStore('settings', () => {
     }
     localStorage.setItem(STORAGE_ACCENT, accent)
     applyAppearance(theme.value, accent)
+    if (isElectronApp()) {
+      void syncElectronTitleBar({ theme: theme.value })
+    }
   }
 
   watch(theme, val => {
     localStorage.setItem(STORAGE_THEME, val)
     persistAndApply()
+    getElectronAPI()?.requestChromeSync?.()
   })
 
   watch(accentColor, persistAndApply)
@@ -106,6 +112,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function initAppearance() {
     applyAppearance(theme.value, accentColor.value)
+    if (isElectronApp()) {
+      void syncElectronTitleBar({ theme: theme.value })
+    }
   }
 
   function initLanguage() {

@@ -1,5 +1,11 @@
 <template>
-  <div ref="containerRef" class="pet-root" @contextmenu.prevent="onContextMenu">
+  <div
+    ref="containerRef"
+    class="pet-root"
+    :class="{ 'pet-root--picker-open': pickerOpen }"
+    @contextmenu.prevent="onContextMenu"
+  >
+    <LauncherPickPanel v-if="pickerOpen" class="pet-picker" />
     <transition name="pet-toast-fade">
       <div v-if="toastText" class="pet-toast" role="status">
         {{ toastText }}
@@ -33,6 +39,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { gsap } from 'gsap'
 import { getElectronAPI } from '@/utils/electron'
+import LauncherPickPanel from '@/components/LauncherPickPanel.vue'
 import { DEFAULT_PET_ID, getPetById, getPetIdleUrl, getPetSpriteUrl, getPetPersona } from '@/constants/petCatalog'
 import { usePetSpriteAnimator } from '@/composables/usePetSpriteAnimator'
 
@@ -44,6 +51,7 @@ const hitboxRef = ref(null)
 const pointerState = ref(null)
 const toastText = ref('')
 const greetingText = ref('')
+const pickerOpen = ref(false)
 const dragging = ref(false)
 const currentPetId = ref(DEFAULT_PET_ID)
 let clickTimer = null
@@ -54,6 +62,10 @@ let unsubscribePetChanged = null
 let unsubscribeInteractionReset = null
 let unsubscribeGreeting = null
 let unsubscribeRestartObserver = null
+let unsubscribeLauncherShown = null
+let unsubscribeLauncherHidden = null
+let unsubscribePickerToggle = null
+let launcherActive = false
 let gsapCtx = null
 let idleFloatTween = null
 let dragRafId = null
@@ -102,7 +114,11 @@ function applyPetId(petId) {
     playAnim('idle')
   }
   img.src = url
-  startObserver()
+  if (launcherActive) startObserver()
+}
+
+function stopObserver() {
+  getElectronAPI()?.stopDesktopObserver?.()
 }
 
 function startObserver() {
@@ -323,7 +339,12 @@ onMounted(async () => {
   document.body.style.background = 'transparent'
   const appEl = document.getElementById('app')
   if (appEl) appEl.style.background = 'transparent'
-  getElectronAPI()?.setLauncherMousePassthrough?.(false)
+  getElectronAPI()?.isLauncherVisible?.().then((visible) => {
+    if (visible) {
+      launcherActive = true
+      startObserver()
+    }
+  })
   const settings = await getElectronAPI()?.getDesktopSettings?.()
   applyPetId(settings?.launcherPetId || DEFAULT_PET_ID)
   if (wrapRef.value) {
@@ -338,6 +359,23 @@ onMounted(async () => {
   unsubscribeInteractionReset = getElectronAPI()?.onLauncherInteractionReset?.(resetInteractionState)
   unsubscribeGreeting = getElectronAPI()?.onLauncherGreeting?.(showGreeting)
   unsubscribeRestartObserver = getElectronAPI()?.onRestartObserver?.(startObserver)
+  unsubscribeLauncherShown = getElectronAPI()?.onLauncherShown?.(async () => {
+    launcherActive = true
+    const settings = await getElectronAPI()?.getDesktopSettings?.()
+    if (settings?.launcherPetId) {
+      applyPetId(settings.launcherPetId)
+    }
+    getElectronAPI()?.requestChromeSync?.()
+    startObserver()
+  })
+  unsubscribeLauncherHidden = getElectronAPI()?.onLauncherHidden?.(() => {
+    launcherActive = false
+    stopObserver()
+    pickerOpen.value = false
+  })
+  unsubscribePickerToggle = getElectronAPI()?.onPickerToggle?.((payload) => {
+    pickerOpen.value = payload?.open === true
+  })
 })
 
 onUnmounted(() => {
@@ -352,6 +390,9 @@ onUnmounted(() => {
   unsubscribeInteractionReset?.()
   unsubscribeGreeting?.()
   unsubscribeRestartObserver?.()
+  unsubscribeLauncherShown?.()
+  unsubscribeLauncherHidden?.()
+  unsubscribePickerToggle?.()
   gsapCtx?.revert()
 })
 </script>
@@ -376,6 +417,18 @@ body:has(.pet-root),
   align-items: center; justify-content: flex-end;
   box-sizing: border-box;
   user-select: none; pointer-events: none;
+}
+
+.pet-root--picker-open {
+  justify-content: flex-start;
+  pointer-events: auto;
+}
+
+.pet-picker {
+  flex: 0 0 320px;
+  width: 100%;
+  height: 320px;
+  pointer-events: auto;
 }
 
 .pet-toast {

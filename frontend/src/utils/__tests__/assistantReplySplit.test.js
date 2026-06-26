@@ -48,4 +48,15 @@ describe('splitAssistantReplyForDisplay', () => {
     ].join('\n')
     expect(splitAssistantReplyForDisplay(text)).toHaveLength(3)
   })
+
+  it('does not split on newlines inside parentheses', () => {
+    const text = [
+      '（她靠近你，轻轻握住你的手',
+      '',
+      '）好的，我等一下倒没关系。'
+    ].join('\n')
+    expect(splitAssistantReplyForDisplay(text)).toEqual([
+      '（她靠近你，轻轻握住你的手\n\n）好的，我等一下倒没关系。'
+    ])
+  })
 })

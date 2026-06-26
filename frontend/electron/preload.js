@@ -4,10 +4,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   getWindowKind: () => ipcRenderer.invoke('desktop:get-window-kind'),
   openMainWindow: (hash) => ipcRenderer.invoke('desktop:open-main', hash || ''),
-  openQuickChat: (conversationId) => ipcRenderer.invoke('desktop:open-quick-chat', conversationId),
+  openQuickChat: (conversationId) => {
+    ipcRenderer.send('desktop:open-quick-chat', conversationId)
+  },
   toggleCharacterPicker: () => ipcRenderer.invoke('desktop:toggle-picker'),
+  touchPickerInteraction: () => ipcRenderer.invoke('desktop:picker-interaction'),
   closePicker: () => ipcRenderer.invoke('desktop:close-picker'),
-  closeQuickChat: () => ipcRenderer.invoke('desktop:close-quick-chat'),
+  closeQuickChat: () => {
+    ipcRenderer.send('desktop:close-quick-chat')
+    return ipcRenderer.invoke('desktop:close-quick-chat')
+  },
   hideLauncher: () => ipcRenderer.invoke('desktop:hide-launcher'),
   showLauncher: () => ipcRenderer.invoke('desktop:show-launcher'),
   quitApp: () => ipcRenderer.invoke('desktop:quit'),
@@ -33,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCaptionMetrics: () => ipcRenderer.invoke('desktop:get-caption-metrics'),
   setTitleBarAppearance: (payload) => ipcRenderer.invoke('desktop:set-title-bar-appearance', payload),
   saveAppearance: (mode) => ipcRenderer.invoke('desktop:save-appearance', mode),
+  requestChromeSync: () => ipcRenderer.send('desktop:sync-chrome'),
   onCaptionMetrics: (callback) => {
     const handler = (_event, metrics) => callback(metrics)
     ipcRenderer.on('desktop:caption-metrics', handler)
@@ -76,6 +83,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => callback()
     ipcRenderer.on('desktop:launcher-shown', handler)
     return () => ipcRenderer.removeListener('desktop:launcher-shown', handler)
+  },
+  onPickerToggle: (callback) => {
+    const handler = (_event, payload) => callback(payload)
+    ipcRenderer.on('desktop:picker-toggle', handler)
+    return () => ipcRenderer.removeListener('desktop:picker-toggle', handler)
+  },
+  onPickerShown: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on('desktop:picker-shown', handler)
+    return () => ipcRenderer.removeListener('desktop:picker-shown', handler)
   },
   onLauncherHidden: (callback) => {
     const handler = () => callback()

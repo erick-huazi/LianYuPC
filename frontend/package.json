@@ -1,6 +1,6 @@
 {
   "name": "lianyu-pc",
-  "version": "0.2.126",
+  "version": "0.2.160",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -19,8 +19,9 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "@stomp/stompjs": "^7.0.0",
-    "axios": "^1.7.9",
     "active-win": "^8.2.1",
+    "axios": "^1.7.9",
+    "bytenode": "^1.6.0",
     "dompurify": "^3.4.8",
     "element-plus": "^2.8.8",
     "gsap": "^3.15.0",
@@ -30,22 +31,17 @@
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
-    "@electron/asar": "^4.2.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.6",
     "asarmor": "^3.0.2",
-    "bytenode": "^1.6.0",
     "electron": "^42.3.2",
     "electron-builder": "^26.8.1",
     "javascript-obfuscator": "^5.4.3",
-    "png-to-ico": "^3.0.1",
     "rcedit": "^4.0.1",
     "sass": "^1.80.7",
-    "sharp": "^0.34.5",
     "vite": "^5.4.11",
     "vite-plugin-electron": "^1.0.1",
     "vite-plugin-electron-renderer": "^1.0.0",
-    "vite-plugin-javascript-obfuscator": "^3.1.0",
     "vitest": "^2.1.8"
   },
   "build": {
@@ -93,7 +89,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "LianYu",
       "uninstallDisplayName": "LianYu",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false
     }
   }
 }

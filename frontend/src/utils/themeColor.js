@@ -278,6 +278,10 @@ export function applyAppearance(modeOrBg, accentHex) {
     if (appRoot) {
       appRoot.style.backgroundColor = palette.backgrounds.primary
     }
+    root.style.backgroundColor = palette.backgrounds.primary
+    if (document.body) {
+      document.body.style.backgroundColor = palette.backgrounds.primary
+    }
   }
   return {
     mode: normalizedMode,

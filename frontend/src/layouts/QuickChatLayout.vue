@@ -1,72 +1,67 @@
 <template>
-  <div class="quick-chat-layout">
-    <header v-if="showBar" class="quick-chat-bar glass-strong">
-      <div class="quick-chat-bar__meta">
-        <span class="quick-chat-bar__title">{{ barTitle }}</span>
-      </div>
-      <div class="quick-chat-bar__actions">
-        <el-button text size="small" @click="expandToMain">展开</el-button>
-        <el-button text size="small" @click="closeWindow">关闭</el-button>
-      </div>
-    </header>
-    <main class="quick-chat-layout__body">
-      <router-view />
-    </main>
+  <div class="quick-shell">
+    <router-view />
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { watch, onMounted, onUnmounted } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
+import { syncElectronTitleBar } from '@/utils/electronCaption'
+import { isElectronRuntime } from '@/utils/runtime'
 import { getElectronAPI } from '@/utils/electron'
 
-const route = useRoute()
+const settingsStore = useSettingsStore()
 
-const showBar = computed(() => route.name === 'QuickChat')
-const barTitle = computed(() => route.meta?.quickTitle || '快速聊天')
-
-function expandToMain() {
-  const id = route.params.id
-  getElectronAPI()?.openMainWindow?.(id ? `#/app/chat/${id}` : '#/app')
-  getElectronAPI()?.closeQuickChat?.()
+function syncTheme() {
+  settingsStore.initAppearance()
+  if (isElectronRuntime()) {
+    syncElectronTitleBar({ routeName: 'QuickChat', routePath: '/quick', theme: settingsStore.theme })
+    getElectronAPI()?.requestChromeSync?.()
+  }
 }
 
-function closeWindow() {
-  getElectronAPI()?.closeQuickChat?.()
+function onStorageTheme(e) {
+  if (e.key === 'lianyu-theme' || e.key === 'lianyu-accent-color') {
+    syncTheme()
+  }
 }
+
+onMounted(() => {
+  syncTheme()
+  window.addEventListener('storage', onStorageTheme)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', onStorageTheme)
+})
+
+watch(
+  () => [settingsStore.theme, settingsStore.accentColor],
+  syncTheme,
+)
 </script>
 
+<style lang="scss">
+html:has(.quick-shell),
+body:has(.quick-shell),
+#app:has(.quick-shell) {
+  background: var(--ly-bg-primary, #121820) !important;
+  min-height: 100% !important;
+  height: 100%;
+}
+
+#app:has(.quick-shell)::before {
+  display: none !important;
+}
+</style>
+
 <style lang="scss" scoped>
-.quick-chat-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - var(--electron-caption-height, 0px));
-  background: #0a0a10;
-}
-
-.quick-chat-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
-}
-
-.quick-chat-bar__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #f5f5f7;
-}
-
-.quick-chat-bar__actions {
-  display: flex;
-  gap: 4px;
-}
-
-.quick-chat-layout__body {
-  flex: 1;
+.quick-shell {
+  width: 100%;
+  height: 100vh;
   min-height: 0;
   overflow: hidden;
+  background: var(--ly-bg-primary, #121820);
 }
 </style>

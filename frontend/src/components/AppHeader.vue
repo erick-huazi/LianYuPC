@@ -193,6 +193,13 @@ async function handleUserMenu(command) {
   overflow: visible;
 }
 
+:global(html.is-electron) .app-header {
+  background: var(--ly-bg-primary);
+  backdrop-filter: none;
+  box-shadow: none;
+  border-bottom: 1px solid rgba(var(--ly-accent-rgb), 0.08);
+}
+
 .header-brand {
   display: flex;
   align-items: center;

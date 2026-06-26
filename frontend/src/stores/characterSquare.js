@@ -9,12 +9,9 @@ function cacheKey(page, tag, keyword) {
   return `${page}|${tag || ''}|${keyword || ''}`
 }
 
-function sortByLikes(records) {
-  return [...records].sort((a, b) => {
-    const likeDiff = (b.likeCount ?? 0) - (a.likeCount ?? 0)
-    if (likeDiff !== 0) return likeDiff
-    return (a.id ?? 0) - (b.id ?? 0)
-  })
+/** Backend already sorts by likeCount → sortOrder → id; preserve order. */
+function patchRecords(records, patchRecord) {
+  return records.map(patchRecord)
 }
 
 export const useCharacterSquareStore = defineStore('characterSquare', () => {
@@ -53,7 +50,7 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
         tag: tag || undefined,
         keyword: keyword || undefined,
       })
-      const records = sortByLikes(data?.records || [])
+      const records = data?.records || []
       if (Array.isArray(data?.userLikes)) {
         userLikes.value = new Set(data.userLikes)
       } else {
@@ -80,7 +77,7 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
   }
 
   const top3TemplateIds = computed(() => {
-    return sortByLikes(catalogRecords.value)
+    return catalogRecords.value
       .slice(0, 3)
       .map(item => item.id)
   })
@@ -113,7 +110,7 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
         ? { ...item, liked, likeCount }
         : item
 
-    catalogRecords.value = sortByLikes(catalogRecords.value.map(patchRecord))
+    catalogRecords.value = patchRecords(catalogRecords.value, patchRecord)
 
     const next = { ...pages.value }
     for (const key of Object.keys(next)) {
@@ -122,7 +119,7 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
       next[key] = {
         ...entry,
         userLikes: [...userLikes.value],
-        records: sortByLikes(entry.records.map(patchRecord))
+        records: patchRecords(entry.records, patchRecord)
       }
     }
     pages.value = next
@@ -153,10 +150,8 @@ export const useCharacterSquareStore = defineStore('characterSquare', () => {
   }
 
   function isMostLiked(templateId, scopedRecords = catalogRecords.value) {
-    const top3 = sortByLikes(scopedRecords)
-      .slice(0, 3)
-      .map(item => item.id)
-    return top3.includes(templateId)
+    return top3TemplateIds.value.includes(templateId)
+      && scopedRecords.some(item => item.id === templateId)
   }
 
   return {

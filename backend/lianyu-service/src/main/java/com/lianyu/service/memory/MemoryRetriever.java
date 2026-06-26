@@ -236,7 +236,8 @@ public class MemoryRetriever {
                         .eq(MemoryMeta::getCharacterId, characterId)
                         .eq(MemoryMeta::getUserId, userId)
                         .likeRight(MemoryMeta::getSummary, "【长期记忆/")
-                        .orderByDesc(MemoryMeta::getCreatedAt));
+                        .orderByDesc(MemoryMeta::getCreatedAt)
+                        .last("LIMIT 80"));
 
         Map<String, MemoryMeta> latestBySlot = new LinkedHashMap<>();
         for (MemoryMeta meta : metas) {

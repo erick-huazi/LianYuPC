@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 
 const SESSION_FILE = 'auth-session.bin'
+const PLAIN_SESSION_FILE = 'auth-session.plain.json'
 
 /** safeStorage 不可用时降级到内存，避免登录后无法保存凭证 */
 let memorySession = null
@@ -38,25 +39,60 @@ function sanitizeSession(raw) {
   return Object.keys(next).length ? next : null
 }
 
+function plainSessionPath() {
+  return path.join(app.getPath('userData'), PLAIN_SESSION_FILE)
+}
+
+function readPlainSessionFile() {
+  try {
+    const raw = fs.readFileSync(plainSessionPath(), 'utf8')
+    return sanitizeSession(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+function writePlainSessionFile(session) {
+  try {
+    fs.mkdirSync(path.dirname(plainSessionPath()), { recursive: true })
+    fs.writeFileSync(plainSessionPath(), JSON.stringify(session))
+  } catch {
+    // ignore
+  }
+}
+
+function removePlainSessionFile() {
+  try {
+    if (fs.existsSync(plainSessionPath())) {
+      fs.unlinkSync(plainSessionPath())
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function readAuthSession() {
   if (memorySession) return { ...memorySession }
 
   const file = sessionPath()
-  if (!fs.existsSync(file)) return null
-  try {
-    const encrypted = fs.readFileSync(file)
-    if (!encrypted?.length) return null
-    if (!safeStorage.isEncryptionAvailable()) return null
-    const json = safeStorage.decryptString(encrypted)
-    return sanitizeSession(JSON.parse(json))
-  } catch {
+  if (fs.existsSync(file)) {
     try {
-      fs.unlinkSync(file)
+      const encrypted = fs.readFileSync(file)
+      if (!encrypted?.length) return readPlainSessionFile()
+      if (!safeStorage.isEncryptionAvailable()) return readPlainSessionFile()
+      const json = safeStorage.decryptString(encrypted)
+      return sanitizeSession(JSON.parse(json))
     } catch {
-      // ignore corrupt session file
+      try {
+        fs.unlinkSync(file)
+      } catch {
+        // ignore corrupt session file
+      }
+      return readPlainSessionFile()
     }
-    return null
   }
+
+  return readPlainSessionFile()
 }
 
 export function writeAuthSession(session) {
@@ -68,6 +104,7 @@ export function writeAuthSession(session) {
 
   if (!safeStorage.isEncryptionAvailable()) {
     memorySession = next
+    writePlainSessionFile(next)
     return { ...next }
   }
 
@@ -76,15 +113,18 @@ export function writeAuthSession(session) {
     fs.mkdirSync(path.dirname(sessionPath()), { recursive: true })
     fs.writeFileSync(sessionPath(), encrypted)
     memorySession = next
+    removePlainSessionFile()
     return { ...next }
   } catch {
     memorySession = next
+    writePlainSessionFile(next)
     return { ...next }
   }
 }
 
 export function clearAuthSession() {
   memorySession = null
+  removePlainSessionFile()
   try {
     if (fs.existsSync(sessionPath())) {
       fs.unlinkSync(sessionPath())

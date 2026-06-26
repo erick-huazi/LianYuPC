@@ -95,7 +95,6 @@
             type="submit"
             class="submit-btn form-reveal"
             :disabled="loading"
-            @click="handleLogin"
           >
             <span v-if="loading" class="btn-loading">
               <el-icon class="is-loading"><Loading /></el-icon>
@@ -123,6 +122,7 @@ import { APP_LOGO } from '@/constants/brand.js'
 import { ElMessage } from 'element-plus'
 import { getCaptcha } from '@/api/auth'
 import { getLastUsername } from '@/stores/user'
+import { humanizeError } from '@/utils/errorMessage'
 import AuthParticles from '@/components/auth/AuthParticles.vue'
 import { useAuthPageGsap } from '@/composables/useAuthPageGsap'
 
@@ -183,6 +183,7 @@ async function refreshCaptcha() {
 }
 
 async function handleLogin() {
+  if (loading.value) return
   if (!captchaId.value) {
     ElMessage.warning('请等待验证码加载')
     return
@@ -205,8 +206,9 @@ async function handleLogin() {
       },
     })
     ElMessage.success('登录成功')
-    router.push('/app')
-  } catch {
+    await router.push('/app')
+  } catch (err) {
+    ElMessage.error(humanizeError(err, '登录失败，请检查账号、密码和验证码'))
     refreshCaptcha()
     form.captchaAnswer = ''
   } finally {

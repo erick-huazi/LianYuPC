@@ -7,7 +7,9 @@ import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
 import { initAntiDebug } from './utils/antiDebug'
+import { initElectronRuntimeConfig } from '@/utils/runtime'
 import { prepareAuthRoute, bootstrapAuth } from './auth/bootstrap'
+import { bootstrapLauncherSession } from './auth/launcherBootstrap'
 import './styles/theme.scss'
 import './styles/global.scss'
 import './styles/app-shell.scss'
@@ -46,8 +48,32 @@ settingsStore.initAppearance()
 
 initAntiDebug()
 
+function isLauncherOnlySurface() {
+  const hash = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
+  return hash === '/launcher' || hash.startsWith('/launcher/')
+}
+
+function isQuickChatSurface() {
+  const hash = (window.location.hash.replace(/^#/, '') || '/').split('?')[0]
+  return hash.startsWith('/quick/')
+}
+
+function isDesktopAuxSurface() {
+  return isLauncherOnlySurface() || isQuickChatSurface()
+}
+
 ;(async () => {
-  await prepareAuthRoute(pinia)
+  await initElectronRuntimeConfig()
+  if (isDesktopAuxSurface()) {
+    await bootstrapLauncherSession(pinia)
+  } else {
+    await prepareAuthRoute(pinia)
+  }
   app.mount('#app')
-  void bootstrapAuth(pinia)
+  if (!isDesktopAuxSurface()) {
+    await bootstrapAuth(pinia)
+  } else if (isQuickChatSurface()) {
+    const { useUserStore } = await import('@/stores/user')
+    void useUserStore(pinia).fetchProfile({ skipGlobalError: true }).catch(() => {})
+  }
 })()

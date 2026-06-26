@@ -7,25 +7,56 @@ export function isElectronRuntime() {
 }
 
 const DEFAULT_API_ORIGIN = 'http://localhost:8080'
+const PACKED_API_ORIGIN = (
+  typeof import.meta.env.VITE_LIANYU_PACKED_API_ORIGIN === 'string'
+    ? import.meta.env.VITE_LIANYU_PACKED_API_ORIGIN
+    : ''
+).trim().replace(/\/$/, '')
 
-function readConfiguredApiOrigin() {
-  const fromImportMeta = import.meta.env.VITE_LIANYU_API_ORIGIN
-  if (fromImportMeta && String(fromImportMeta).trim()) {
-    return String(fromImportMeta).trim()
-  }
-  // electron-pack / vite define 注入（ELECTRON_BUILD=1）
-  if (typeof process !== 'undefined' && process.env) {
-    const fromProcess = process.env.LIANYU_API_ORIGIN || process.env.VITE_LIANYU_API_ORIGIN
-    if (fromProcess && String(fromProcess).trim()) {
-      return String(fromProcess).trim().replace(/\/$/, '')
+/** @type {string | null} */
+let cachedElectronOrigin = null
+/** @type {Promise<void> | null} */
+let initPromise = null
+
+/** Electron 打包版：从主进程 IPC 拉取 API 根地址（renderer 不嵌入 VITE_LIANYU_API_ORIGIN） */
+export async function initElectronRuntimeConfig() {
+  if (!isElectronRuntime()) return
+  if (cachedElectronOrigin) return
+  if (initPromise) return initPromise
+
+  initPromise = (async () => {
+    const api = window.electronAPI
+    if (api?.getRuntimeConfig) {
+      try {
+        const cfg = await api.getRuntimeConfig()
+        if (cfg?.apiOrigin) {
+          cachedElectronOrigin = String(cfg.apiOrigin).trim().replace(/\/$/, '')
+          return
+        }
+      } catch {
+        /* fall through to packed origin */
+      }
     }
-  }
-  return ''
+    if (PACKED_API_ORIGIN) {
+      cachedElectronOrigin = PACKED_API_ORIGIN
+    }
+  })()
+
+  return initPromise
 }
 
-/** Electron 下 API 根地址（云端构建注入，本地开发默认 localhost） */
+export async function ensureApiOriginReady() {
+  if (isElectronRuntime() && !cachedElectronOrigin) {
+    await initElectronRuntimeConfig()
+  }
+}
+
+/** Electron 下 API 根地址（云端由主进程 secrets 提供；本地开发默认 localhost） */
 export function resolveApiOrigin() {
-  return readConfiguredApiOrigin() || DEFAULT_API_ORIGIN
+  if (isElectronRuntime()) {
+    return cachedElectronOrigin || DEFAULT_API_ORIGIN
+  }
+  return ''
 }
 
 /** HTTP API 根（Electron 直连后端；浏览器走同源 nginx） */

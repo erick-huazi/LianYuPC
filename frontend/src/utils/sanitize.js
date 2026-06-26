@@ -10,13 +10,3 @@ export function sanitizeHtml(dirty) {
     ALLOWED_ATTRS,
   })
 }
-
-export function sanitizeTextToHtml(text) {
-  if (!text) return ''
-  const escaped = String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-  return sanitizeHtml(escaped)
-}

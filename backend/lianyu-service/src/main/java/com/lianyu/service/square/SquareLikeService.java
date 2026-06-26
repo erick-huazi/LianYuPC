@@ -37,6 +37,10 @@ public class SquareLikeService {
     private final CharacterSquareTemplateMapper templateMapper;
     private final StringRedisTemplate redisTemplate;
 
+    private volatile Map<Long, Long> likeCountsCache = Map.of();
+    private volatile long likeCountsCachedAtMillis = 0L;
+    private static final long LIKE_COUNTS_CACHE_TTL_MS = 30_000;
+
     @PostConstruct
     public void warmUpLikeCache() {
         Long size = redisTemplate.opsForZSet().size(KEY_LIKES);
@@ -47,6 +51,22 @@ public class SquareLikeService {
     }
 
     public Map<Long, Long> getLikeCounts() {
+        long now = System.currentTimeMillis();
+        if (now - likeCountsCachedAtMillis < LIKE_COUNTS_CACHE_TTL_MS && !likeCountsCache.isEmpty()) {
+            return likeCountsCache;
+        }
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            if (now - likeCountsCachedAtMillis < LIKE_COUNTS_CACHE_TTL_MS && !likeCountsCache.isEmpty()) {
+                return likeCountsCache;
+            }
+            likeCountsCache = loadLikeCountsFromRedis();
+            likeCountsCachedAtMillis = now;
+            return likeCountsCache;
+        }
+    }
+
+    private Map<Long, Long> loadLikeCountsFromRedis() {
         Set<ZSetOperations.TypedTuple<String>> tuples =
                 redisTemplate.opsForZSet().rangeWithScores(KEY_LIKES, 0, -1);
         if (tuples == null || tuples.isEmpty()) {
@@ -68,6 +88,10 @@ public class SquareLikeService {
             }
         }
         return counts;
+    }
+
+    private void invalidateLikeCountsCache() {
+        likeCountsCachedAtMillis = 0L;
     }
 
     public Set<Long> getUserLikes(Long userId) {
@@ -115,6 +139,7 @@ public class SquareLikeService {
             redisTemplate.opsForZSet().incrementScore(KEY_LIKES, templateKey, -1D);
             normalizeScore(templateId);
             markDeletedInDb(userId, templateId);
+            invalidateLikeCountsCache();
             long likeCount = getLikeCount(templateId);
             return SquareLikeToggleResponse.builder().liked(false).likeCount(likeCount).build();
         }
@@ -122,6 +147,7 @@ public class SquareLikeService {
         redisTemplate.opsForSet().add(userKey, templateKey);
         redisTemplate.opsForZSet().incrementScore(KEY_LIKES, templateKey, 1D);
         upsertActiveLikeInDb(userId, templateId);
+        invalidateLikeCountsCache();
         long likeCount = getLikeCount(templateId);
         return SquareLikeToggleResponse.builder().liked(true).likeCount(likeCount).build();
     }
