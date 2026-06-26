@@ -3,7 +3,6 @@
     ref="containerRef"
     class="pet-root"
     :class="{ 'pet-root--picker-open': pickerOpen }"
-    @contextmenu.prevent="onContextMenu"
   >
     <LauncherPickPanel v-if="pickerOpen" class="pet-picker" />
     <transition name="pet-toast-fade">
@@ -28,6 +27,7 @@
         ref="hitboxRef"
         class="pet-hitbox"
         title="单击选角色，按住拖动"
+        @contextmenu.prevent="onContextMenu"
         @pointerdown.prevent="onPointerDown"
       />
     </div>
@@ -178,7 +178,6 @@ function releasePointerCapture(state) {
 function onPointerDown(e) {
   if (e.button !== 0) return
   flushPendingGreetingAudio()
-  getElectronAPI()?.setLauncherMousePassthrough?.(false)
   hitboxRef.value?.setPointerCapture?.(e.pointerId)
   pointerState.value = {
     startX: e.screenX, startY: e.screenY,
@@ -239,6 +238,7 @@ function onPointerUp(e) {
       playAnimOnce('wave')
       getElectronAPI()?.toggleCharacterPicker?.()
     }, 240)
+    try { getElectronAPI()?.clampLauncherPosition?.() } catch { /* ignore */ }
   } else if (wasMoved) {
     playAnimOnce('running', () => returnToIdle())
     try { getElectronAPI()?.endLauncherDrag?.() } catch { /* ignore */ }

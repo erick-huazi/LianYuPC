@@ -654,17 +654,19 @@ const PICKER_PET_GAP = 8
 
 function setLauncherMousePassthrough(ignore) {
   if (!launcherWindow || launcherWindow.isDestroyed()) return
-  if (ignore) {
+  if (!launcherWindow.isVisible()) {
     launcherWindow.setIgnoreMouseEvents(true, { forward: true })
-  } else {
-    launcherWindow.setIgnoreMouseEvents(false)
+    return
   }
+  // 桌宠可见时始终由窗口接收鼠标；交互区域由 CSS pointer-events 限定。
+  // passthrough+forward 在 Windows/Electron 42 上从 false 切回 true 后 hitbox 会失灵。
+  launcherWindow.setIgnoreMouseEvents(false)
 }
 
 /** 显示/拖拽结束后重置穿透：角色列表打开时整窗接收点击，否则仅桌宠 hitbox 可点 */
 function resetLauncherInteraction() {
   launcherIsDragging = false
-  setLauncherMousePassthrough(!launcherPickerOpen)
+  setLauncherMousePassthrough(false)
   if (launcherWindow && !launcherWindow.isDestroyed() && !launcherWindow.webContents.isDestroyed()) {
     launcherWindow.webContents.send('desktop:launcher-interaction-reset')
   }
@@ -873,7 +875,6 @@ async function showLauncherWindowAsync(options = {}) {
     if (!force && isMainWindowOccupyingDesktop()) return
     if (!win || win.isDestroyed()) return
     resetLauncherInteraction()
-    win.setIgnoreMouseEvents(false)
     win.webContents.setAudioMuted(false)
     win.show()
     win.moveTop()
