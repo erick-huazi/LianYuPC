@@ -2,10 +2,23 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-export function electronBinaryPath(root) {
-  return process.platform === 'win32'
-    ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
-    : path.join(root, 'node_modules', 'electron', 'dist', 'electron')
+export function electronBinaryPath(root, platform = process.platform) {
+  if (platform === 'win32') {
+    return path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+  }
+  if (platform === 'darwin') {
+    return path.join(
+      root,
+      'node_modules',
+      'electron',
+      'dist',
+      'Electron.app',
+      'Contents',
+      'MacOS',
+      'Electron',
+    )
+  }
+  return path.join(root, 'node_modules', 'electron', 'dist', 'electron')
 }
 
 export function ensureElectronRuntime(root) {

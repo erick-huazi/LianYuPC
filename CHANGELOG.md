@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file. The format foll
 - Public desktop branding, installer names, icon, and documentation now use Amiweave.
 - Desktop packages connect to `https://amiweave.com` by default.
 - macOS packages now receive the same ASAR integrity marker as Windows packages.
+- Desktop build scripts now resolve Electron's platform-specific executable path, including the macOS app bundle.
 - Windows executables now embed Amiweave product, company, icon, and version metadata.
 - Debugger-pause detection no longer mistakes normal startup stalls for an attached debugger.
 - Launcher packaging checks now wait briefly for the rendered interaction hitbox instead of relying on a fixed delay.

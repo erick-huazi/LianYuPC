@@ -6,12 +6,10 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { electronBinaryPath } from './ensure-electron.mjs'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
-const electronBin =
-  process.platform === 'win32'
-    ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
-    : path.join(root, 'node_modules', 'electron', 'dist', 'electron')
+const electronBin = electronBinaryPath(root)
 
 const mainEntry = path.join(root, 'dist-electron', 'main.js')
 const distIndex = path.join(root, 'dist', 'index.html')
