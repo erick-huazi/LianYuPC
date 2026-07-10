@@ -1,8 +1,8 @@
 # LianYu-PC
 
-[![CI](https://github.com/liuwanwan1/LianYuPC/actions/workflows/ci.yml/badge.svg)](https://github.com/liuwanwan1/LianYuPC/actions/workflows/ci.yml)
+[![CI](https://github.com/erick-huazi/LianYuPC/actions/workflows/ci.yml/badge.svg)](https://github.com/erick-huazi/LianYuPC/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/liuwanwan1/LianYuPC?include_prereleases)](https://github.com/liuwanwan1/LianYuPC/releases)
+[![Release](https://img.shields.io/github/v/release/erick-huazi/LianYuPC?include_prereleases)](https://github.com/erick-huazi/LianYuPC/releases)
 
 恋语是一个 AI 角色陪伴桌面/Web 应用。它把角色聊天、长期记忆、主动陪伴、桌面感知和多角色关系放在同一套可自托管系统中。
 
