@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { buildSync } from 'esbuild'
 import JavaScriptObfuscator from 'javascript-obfuscator'
 import { compileBytecode, writeMainStub, writePreloadStub } from './compile-bytecode.mjs'
+import { ensureElectronRuntime } from './ensure-electron.mjs'
 import { packRuntimeSecrets } from './pack-runtime-secrets.mjs'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -239,6 +240,7 @@ function removePartialReleaseArtifacts() {
   }
 }
 
+ensureElectronRuntime(root)
 execSync('python scripts/regenerate-icon.py', { stdio: 'inherit' })
 removePreViteStaleEntries()
 execSync('npx vite build', { stdio: 'inherit', env: viteEnv })
