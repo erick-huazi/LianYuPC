@@ -306,9 +306,16 @@ const builderPlatformArg = targetPlatform === 'win' ? '--win' : '--mac'
 const nativeRebuildArg = process.env.LIANYU_SKIP_NATIVE_REBUILD === 'true'
   ? '--config.npmRebuild=false'
   : ''
+const builderEnv = { ...process.env }
+if (targetPlatform === 'mac') {
+  builderEnv.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR =
+    process.env.LIANYU_ELECTRON_BUILDER_BINARIES_MIRROR
+    || 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+  console.log('Using the official electron-builder binary releases for macOS packaging')
+}
 execSync(`npx electron-builder ${builderPlatformArg} ${outputArg} ${nativeRebuildArg}`.trim(), {
   stdio: 'inherit',
-  env: process.env,
+  env: builderEnv,
 })
 
 const artifacts = fs.readdirSync(outDirFull)

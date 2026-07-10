@@ -35,6 +35,14 @@ function sha256File(filePath) {
   return hash.digest('hex')
 }
 
+export function resolveAsarResourcesDir(context) {
+  if (context.electronPlatformName === 'darwin') {
+    const appName = `${context.packager.appInfo.productFilename}.app`
+    return path.join(context.appOutDir, appName, 'Contents', 'Resources')
+  }
+  return path.join(context.appOutDir, 'resources')
+}
+
 /** asarmor header patch — write to side file first to avoid app.asar rename lock on Windows */
 async function patchAsarArchive(asarPath) {
   if (!fs.existsSync(asarPath)) {
@@ -63,14 +71,14 @@ async function patchAsarArchive(asarPath) {
 }
 
 /** 写入 resources/asar-integrity.hex（须在 asarmor patch 之后，对最终 asar 算哈希） */
-function writeAsarIntegrityHex(context) {
-  const asarPath = path.join(context.appOutDir, 'resources', 'app.asar')
+function writeAsarIntegrityHex(resourcesDir) {
+  const asarPath = path.join(resourcesDir, 'app.asar')
   if (!fs.existsSync(asarPath)) {
     console.log('app.asar not found, skipping integrity hash')
     return
   }
 
-  const hexPath = path.join(context.appOutDir, 'resources', 'asar-integrity.hex')
+  const hexPath = path.join(resourcesDir, 'asar-integrity.hex')
   const hex = sha256File(asarPath)
   fs.writeFileSync(hexPath, hex, 'utf8')
   console.log(`asar integrity SHA-256: ${hex}`)
@@ -78,7 +86,8 @@ function writeAsarIntegrityHex(context) {
 
 /** 把 logo 写进 exe，桌面快捷方式才会显示正确图标 */
 export default async function afterPack(context) {
-  const asarPath = path.join(context.appOutDir, 'resources', 'app.asar')
+  const resourcesDir = resolveAsarResourcesDir(context)
+  const asarPath = path.join(resourcesDir, 'app.asar')
   await patchAsarArchive(asarPath)
 
   if (context.electronPlatformName === 'win32') {
@@ -101,5 +110,5 @@ export default async function afterPack(context) {
       icon: iconPath,
     })
   }
-  writeAsarIntegrityHex(context)
+  writeAsarIntegrityHex(resourcesDir)
 }
