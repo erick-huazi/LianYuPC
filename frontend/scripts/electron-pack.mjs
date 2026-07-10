@@ -7,6 +7,7 @@ import { buildSync } from 'esbuild'
 import JavaScriptObfuscator from 'javascript-obfuscator'
 import { compileBytecode, writeMainStub, writePreloadStub } from './compile-bytecode.mjs'
 import { ensureElectronRuntime } from './ensure-electron.mjs'
+import { createElectronBuilderEnv } from './electron-builder-env.mjs'
 import { packRuntimeSecrets } from './pack-runtime-secrets.mjs'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -303,17 +304,16 @@ removePartialReleaseArtifacts()
 
 const outputArg = `--config.directories.output=${outDir.replace(/\\/g, '/')}`
 const builderPlatformArg = targetPlatform === 'win' ? '--win' : '--mac'
-const nativeRebuildArg = process.env.LIANYU_SKIP_NATIVE_REBUILD === 'true'
-  ? '--config.npmRebuild=false'
-  : ''
-const builderEnv = { ...process.env }
+const builderArgs = [builderPlatformArg, outputArg, '--publish', 'never']
+if (process.env.LIANYU_SKIP_NATIVE_REBUILD === 'true') {
+  builderArgs.push('--config.npmRebuild=false')
+}
+const builderEnv = createElectronBuilderEnv(process.env, targetPlatform)
 if (targetPlatform === 'mac') {
-  builderEnv.NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR =
-    process.env.LIANYU_ELECTRON_BUILDER_BINARIES_MIRROR
-    || 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
   console.log('Using the official electron-builder binary releases for macOS packaging')
 }
-execSync(`npx electron-builder ${builderPlatformArg} ${outputArg} ${nativeRebuildArg}`.trim(), {
+const builderCli = path.join(root, 'node_modules', 'electron-builder', 'cli.js')
+execFileSync(process.execPath, [builderCli, ...builderArgs], {
   stdio: 'inherit',
   env: builderEnv,
 })
