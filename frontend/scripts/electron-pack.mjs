@@ -70,6 +70,7 @@ function cleanDistElectronShipSet() {
   if (!fs.existsSync(electronDir)) return
   const keep = new Set([
     'main.js',
+    'main-src.cjs',
     'preload.cjs',
     'main.jsc',
     'preload.jsc',
@@ -156,6 +157,28 @@ function applyBytecodePackaging() {
   cleanDistElectronShipSet()
 }
 
+function applySourcePackaging() {
+  const electronDir = path.join(root, 'dist-electron')
+  const preloadSrc = path.join(electronDir, 'preload-src.cjs')
+  const preloadDest = path.join(electronDir, 'preload.cjs')
+
+  if (!fs.existsSync(path.join(electronDir, 'main-src.cjs')) || !fs.existsSync(preloadSrc)) {
+    throw new Error('Source fallback entries are missing')
+  }
+
+  removeIfExists(path.join(electronDir, 'main.jsc'))
+  removeIfExists(path.join(electronDir, 'preload.jsc'))
+  removeIfExists(preloadDest)
+  fs.renameSync(preloadSrc, preloadDest)
+  fs.writeFileSync(
+    path.join(electronDir, 'main.js'),
+    `import { createRequire } from 'module'\nconst require = createRequire(import.meta.url)\nrequire('./main-src.cjs')\n`,
+    'utf8',
+  )
+  cleanDistElectronShipSet()
+  console.warn('Bytecode unavailable; packaging auditable source bundles')
+}
+
 const cloudEnv = loadEnvFile(path.join(root, '.env.production.cloud'))
 const packApiOrigin = cloudEnv.VITE_LIANYU_API_ORIGIN || 'http://localhost:8080'
 const packCertFingerprint = cloudEnv.VITE_LIANYU_CERT_FINGERPRINT || ''
@@ -228,7 +251,13 @@ packRuntimeSecrets({
 })
 
 obfuscateRendererBundles()
-applyBytecodePackaging()
+try {
+  applyBytecodePackaging()
+} catch (err) {
+  if (process.env.LIANYU_ALLOW_SOURCE_FALLBACK !== 'true') throw err
+  console.warn(`Bytecode compilation failed: ${err.message}`)
+  applySourcePackaging()
+}
 
 console.log('\n--- Launcher smoke test (pre-pack) ---')
 execSync('node scripts/smoke-launcher.mjs', { stdio: 'inherit', cwd: root })

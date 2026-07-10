@@ -83,6 +83,8 @@ jobs:
             throw "Backend version $backendVersion does not match frontend version $frontendVersion"
           }
       - run: npm run electron:build
+        env:
+          LIANYU_ALLOW_SOURCE_FALLBACK: "true"
       - name: Create checksums
         shell: pwsh
         run: |
