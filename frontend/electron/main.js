@@ -120,7 +120,11 @@ function expectedCertFingerprint() {
   return getRuntimeSecrets()?.certFingerprint || ''
 }
 
-/** 企业环境若需兼容安全软件 HTTPS 扫描，构建时设 LIANYU_ALLOW_SYSTEM_CA=1（默认拒绝不匹配证书） */
+function hasConfiguredCertificatePin() {
+  return Boolean(pinnedSpkiValue() || expectedCertFingerprint())
+}
+
+/** With an explicit pin, LIANYU_ALLOW_SYSTEM_CA=1 permits enterprise HTTPS inspection. */
 const ALLOW_SYSTEM_CA = process.env.LIANYU_ALLOW_SYSTEM_CA === '1'
 
 function isApiHostname(hostname) {
@@ -172,12 +176,17 @@ function forEachAppSession(fn) {
 }
 
 function installCertificateVerifyProc(ses) {
-  // 方式一（主力）：API 域名仅接受 SPKI 指纹匹配，不匹配则拒绝（-2）
+  // Public CA deployments may omit pins; Chromium then performs normal validation.
   ses.setCertificateVerifyProc((request, callback) => {
     const { hostname, certificate } = request
 
     if (!isApiHostname(hostname)) {
       callback(-3) // 其他域名走 Chromium 默认验证
+      return
+    }
+
+    if (!hasConfiguredCertificatePin()) {
+      callback(-3)
       return
     }
 
@@ -218,6 +227,10 @@ function configureCertificatePinning() {
     }
     if (!isApiHostname(hostname)) {
       return // 非 API 域名由 Chromium 默认处理
+    }
+    if (!hasConfiguredCertificatePin()) {
+      cb(false)
+      return
     }
     if (certificateMatchesPin(cert)) {
       log(`cert-error pin OK for ${url}`)

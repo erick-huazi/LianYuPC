@@ -187,6 +187,7 @@ function applySourcePackaging() {
 const cloudEnv = loadEnvFile(path.join(root, '.env.production.cloud'))
 const packApiOrigin = cloudEnv.VITE_LIANYU_API_ORIGIN || 'http://localhost:8080'
 const packCertFingerprint = cloudEnv.VITE_LIANYU_CERT_FINGERPRINT || ''
+const packPinnedSpki = cloudEnv.VITE_LIANYU_PINNED_SPKI || ''
 
 const viteEnv = {
   ...process.env,
@@ -253,6 +254,7 @@ packRuntimeSecrets({
   buildId,
   apiOrigin: packApiOrigin,
   certFingerprint: packCertFingerprint,
+  pinnedSpki: packPinnedSpki,
   outPath: path.join(root, 'dist-electron', 'runtime-secrets.bin'),
 })
 

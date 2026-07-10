@@ -4,8 +4,6 @@ import path from 'node:path'
 
 /** Must match frontend/electron/runtimeSecrets.js */
 const RUNTIME_SECRETS_PEPPER = 'LianYu-RtSec-v1-8F3C2A1B'
-const PINNED_SPKI = 'EdDpp/Z9REuRjqZLzXXrOW8opTtR8Yph2YM0s+xuLss='
-
 function deriveKey(version, buildId) {
   return crypto
     .createHash('sha256')
@@ -14,11 +12,12 @@ function deriveKey(version, buildId) {
 }
 
 /**
- * @param {{ version: string, buildId: string, apiOrigin: string, certFingerprint: string, outPath: string }} opts
+ * @param {{ version: string, buildId: string, apiOrigin: string, certFingerprint: string, pinnedSpki?: string, outPath: string }} opts
  */
 export function packRuntimeSecrets(opts) {
   const apiOrigin = String(opts.apiOrigin || '').trim().replace(/\/$/, '')
   const certFingerprint = String(opts.certFingerprint || '').trim()
+  const pinnedSpki = String(opts.pinnedSpki || '').trim()
   if (!apiOrigin) {
     throw new Error('packRuntimeSecrets: apiOrigin is required')
   }
@@ -26,7 +25,7 @@ export function packRuntimeSecrets(opts) {
   const payload = JSON.stringify({
     apiOrigin,
     certFingerprint,
-    pinnedSpki: PINNED_SPKI,
+    pinnedSpki,
   })
   const nonce = crypto.randomBytes(16)
   const data = Buffer.from(payload, 'utf8')

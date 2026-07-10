@@ -14,4 +14,4 @@ lianyu:
 
 # WebSocket 仅允许云端域名连接（防 CSWSH）
 ws:
-  allowed-origin-patterns: https://154.219.111.30
+  allowed-origin-patterns: "${WS_ALLOWED_ORIGIN_PATTERNS:https://amiweave.com,https://www.amiweave.com}"

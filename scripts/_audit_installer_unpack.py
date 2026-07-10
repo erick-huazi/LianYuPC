@@ -27,7 +27,7 @@ SECRET_PATTERNS = [
     (r"api[_-]?key", "api_key literal (case-insensitive)", re.I),
     (r"password\s*[:=]", "password assignment", re.I),
     (r"secret\s*[:=]", "secret assignment", re.I),
-    (r"154\.219\.111\.30", "cloud API host"),
+    (r"amiweave\.com", "cloud API host"),
     (r"EdDpp/", "SPKI pin prefix"),
     (r"8B:D6:4E:A0", "cert fingerprint prefix"),
     (r"lianyu-token", "Sa-Token header name"),

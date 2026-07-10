@@ -61,7 +61,11 @@ export function loadRuntimeSecrets(opts) {
         || process.env.VITE_LIANYU_CERT_FINGERPRINT
         || ''
       ).trim(),
-      pinnedSpki: 'EdDpp/Z9REuRjqZLzXXrOW8opTtR8Yph2YM0s+xuLss=',
+      pinnedSpki: (
+        process.env.LIANYU_PINNED_SPKI
+        || process.env.VITE_LIANYU_PINNED_SPKI
+        || ''
+      ).trim(),
     }
     return cachedSecrets
   }

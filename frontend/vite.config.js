@@ -55,6 +55,7 @@ if (enableElectron && !isElectronPack) {
 const electronApiOrigin = process.env.VITE_LIANYU_API_ORIGIN || 'http://localhost:8080'
 
 const certFingerprint = process.env.VITE_LIANYU_CERT_FINGERPRINT || ''
+const pinnedSpki = process.env.VITE_LIANYU_PINNED_SPKI || ''
 
 
 
@@ -111,6 +112,7 @@ export default defineConfig({
         'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
 
         'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
+        'process.env.LIANYU_PINNED_SPKI': JSON.stringify(pinnedSpki),
 
       }
 
@@ -157,6 +159,7 @@ export default defineConfig({
                       'process.env.VITE_LIANYU_API_ORIGIN': JSON.stringify(electronApiOrigin),
 
                       'process.env.LIANYU_CERT_FINGERPRINT': JSON.stringify(certFingerprint),
+                      'process.env.LIANYU_PINNED_SPKI': JSON.stringify(pinnedSpki),
 
                     },
 
