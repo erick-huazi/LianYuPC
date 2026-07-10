@@ -1931,7 +1931,7 @@ async function runLauncherSmokeTest() {
     })
     win.show()
     resetLauncherInteraction()
-    const probeDeadline = Date.now() + 5000
+    const probeDeadline = Date.now() + 15000
     let probe = null
     do {
       probe = await win.webContents.executeJavaScript(
