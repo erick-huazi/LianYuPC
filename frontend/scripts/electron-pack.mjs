@@ -166,9 +166,13 @@ function applySourcePackaging() {
     throw new Error('Source fallback entries are missing')
   }
 
-  removeIfExists(path.join(electronDir, 'main.jsc'))
-  removeIfExists(path.join(electronDir, 'preload.jsc'))
-  removeIfExists(preloadDest)
+  for (const filePath of [
+    path.join(electronDir, 'main.jsc'),
+    path.join(electronDir, 'preload.jsc'),
+    preloadDest,
+  ]) {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  }
   fs.renameSync(preloadSrc, preloadDest)
   fs.writeFileSync(
     path.join(electronDir, 'main.js'),
