@@ -88,7 +88,10 @@ jobs:
       - name: Create checksums
         shell: pwsh
         run: |
-          $files = Get-ChildItem release -Recurse -File
+          $files = Get-ChildItem release -Recurse -File | Where-Object {
+            $_.FullName -notmatch '[\\/]win-unpacked[\\/]' -and
+            ($_.Extension -eq '.exe' -or $_.Extension -eq '.blockmap')
+          }
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
             "$hash  $($file.Name)"
@@ -97,7 +100,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lianyu-windows
-          path: frontend/release/**/*
+          path: |
+            frontend/release/**/*.exe
+            frontend/release/**/*.blockmap
+            frontend/release/SHA256SUMS.txt
           if-no-files-found: error
 
   publish:
@@ -115,8 +121,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mapfile -d '' assets < <(find release-assets -type f -print0)
-          gh release create "${RELEASE_TAG}" "${assets[@]}" \
-            --verify-tag \
-            --title "LianYu ${RELEASE_TAG}" \
-            --generate-notes
+          mapfile -d '' assets < <(find release-assets -type f \
+            \( -name '*.exe' -o -name '*.blockmap' -o -name 'SHA256SUMS.txt' \) -print0)
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
+            gh release edit "${RELEASE_TAG}" --draft=false --prerelease
+          else
+            gh release create "${RELEASE_TAG}" "${assets[@]}" \
+              --verify-tag \
+              --title "LianYu ${RELEASE_TAG}" \
+              --generate-notes \
+              --prerelease
+          fi
