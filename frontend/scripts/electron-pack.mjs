@@ -257,12 +257,10 @@ packRuntimeSecrets({
 })
 
 obfuscateRendererBundles()
-try {
-  applyBytecodePackaging()
-} catch (err) {
-  if (process.env.LIANYU_ALLOW_SOURCE_FALLBACK !== 'true') throw err
-  console.warn(`Bytecode compilation failed: ${err.message}`)
+if (process.env.LIANYU_PACKAGE_AUDITABLE_SOURCE === 'true') {
   applySourcePackaging()
+} else {
+  applyBytecodePackaging()
 }
 
 console.log('\n--- Launcher smoke test (pre-pack) ---')

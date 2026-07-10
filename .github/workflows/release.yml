@@ -84,7 +84,7 @@ jobs:
           }
       - run: npm run electron:build
         env:
-          LIANYU_ALLOW_SOURCE_FALLBACK: "true"
+          LIANYU_PACKAGE_AUDITABLE_SOURCE: "true"
       - name: Create checksums
         shell: pwsh
         run: |
