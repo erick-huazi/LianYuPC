@@ -125,6 +125,11 @@ jobs:
             echo "Backend version ${backend_version} does not match frontend version ${frontend_version}" >&2
             exit 1
           fi
+      - name: Prepare verified DMG builder
+        shell: bash
+        run: |
+          dmgbuild_path=$(node scripts/prepare-dmg-builder.mjs)
+          echo "CUSTOM_DMGBUILD_PATH=${dmgbuild_path}" >> "${GITHUB_ENV}"
       - run: npm run electron:build:mac
         env:
           LIANYU_PACKAGE_AUDITABLE_SOURCE: "true"
