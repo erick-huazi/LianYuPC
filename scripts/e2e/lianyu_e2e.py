@@ -387,8 +387,8 @@ def inject_auth(page: Page, auth: dict) -> None:
         }""",
         auth,
     )
-    page.reload(wait_until="domcontentloaded")
-    goto_hash(page, "/app")
+    page.goto(f"{BASE_URL}/#/app", wait_until="networkidle")
+    dismiss_onboarding_if_present(page)
 
 
 def assert_page_title(page: Page, text: str) -> None:
@@ -723,14 +723,18 @@ def run_tests() -> TestRun:
                           destination: `/topic/group/${conversationId}`,
                           ack: 'auto',
                         }))
-                        setTimeout(() => ws.send(frame('SEND', {
-                          destination: `/app/group/${conversationId}/send`,
-                          'content-type': 'application/json',
-                        }, JSON.stringify({
+                        setTimeout(() => {
+                          const body = JSON.stringify({
                           provider,
                           model: 'e2e-model',
                           content: '大家好，这是群聊端到端测试。',
-                        }))), 150)
+                          })
+                          ws.send(frame('SEND', {
+                            destination: `/app/group/${conversationId}/send`,
+                            'content-type': 'application/json',
+                            'content-length': new TextEncoder().encode(body).byteLength,
+                          }, body))
+                        }, 150)
                       } else if (data.startsWith('ERROR')) {
                         clearTimeout(timer)
                         ws.close()
@@ -796,13 +800,14 @@ def run_tests() -> TestRun:
         def test_add_character_from_square() -> None:
             goto_hash(page, "/app/character-square")
             add_btn = page.get_by_role("button", name="加入我的角色")
-            if add_btn.count() == 0:
+            add_count = add_btn.count()
+            if add_count == 0:
                 print("        [skip] no square templates available (API may be down)")
                 return
-            add_btn.click()
-            dialog = page.locator(".el-message-box")
+            add_btn.first.click()
+            dialog = page.locator(".square-add-dialog")
             expect(dialog).to_be_visible(timeout=10000)
-            dialog.locator("input").fill("郑州")
+            dialog.locator('input[type="text"]').fill("郑州")
             dialog.get_by_role("button", name=re.compile("确认|加入|确定")).click()
             page.wait_for_timeout(2000)
             success = page.locator(".el-message--success")
@@ -840,7 +845,7 @@ def run_tests() -> TestRun:
         def test_group_chat_page() -> None:
             goto_hash(page, "/app/group-chat")
             expect_hash(page, "#/app/group-chat")
-            expect(page.locator(".group-chat-page")).to_be_visible(timeout=15000)
+            expect(page.locator(".groupchat-page")).to_be_visible(timeout=15000)
             snap("12-group-chat")
 
         def test_moments_page() -> None:

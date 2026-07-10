@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.List;
 
-public class JacksonListTypeHandler extends AbstractJsonTypeHandler<List<?>> {
+public class JacksonListTypeHandler extends AbstractJsonTypeHandler<List<Long>> {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -21,19 +21,19 @@ public class JacksonListTypeHandler extends AbstractJsonTypeHandler<List<?>> {
     }
 
     @Override
-    public List<?> parse(String json) {
+    public List<Long> parse(String json) {
         if (json == null || json.isEmpty()) {
             return null;
         }
         try {
-            return MAPPER.readValue(json, new TypeReference<List<?>>() {});
+            return MAPPER.readValue(json, new TypeReference<List<Long>>() {});
         } catch (IOException e) {
             throw new RuntimeException("Failed to parse JSON list", e);
         }
     }
 
     @Override
-    public String toJson(List<?> obj) {
+    public String toJson(List<Long> obj) {
         if (obj == null) {
             return null;
         }
