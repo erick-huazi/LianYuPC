@@ -11,3 +11,17 @@ export function getMemory(id) {
 export function deleteMemory(id) {
   return http.delete(`/memory/${id}`)
 }
+
+export function clearMemories(characterId) {
+  return http.delete('/memory', { params: characterId ? { characterId } : {} })
+}
+
+export function listMemoryRecalls(characterId, { page = 1, size = 30 } = {}) {
+  return http.get('/memory/recalls', {
+    params: { ...(characterId ? { characterId } : {}), page, size }
+  })
+}
+
+export function clearMemoryRecalls(characterId) {
+  return http.delete('/memory/recalls', { params: characterId ? { characterId } : {} })
+}

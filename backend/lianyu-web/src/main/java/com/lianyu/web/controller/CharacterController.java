@@ -5,6 +5,7 @@ import com.lianyu.common.base.Result;
 import com.lianyu.service.ai.AiChatService;
 import com.lianyu.service.auth.AuthRateLimiter;
 import com.lianyu.service.character.CharacterService;
+import com.lianyu.service.character.CharacterCardService;
 import com.lianyu.service.square.CharacterSquareService;
 import com.lianyu.service.square.SquareCommentService;
 import com.lianyu.service.square.SquareLikeService;
@@ -26,6 +27,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -39,6 +45,7 @@ import java.time.Duration;
 public class CharacterController {
 
     private final CharacterService characterService;
+    private final CharacterCardService characterCardService;
     private final CharacterSquareService characterSquareService;
     private final SquareLikeService squareLikeService;
     private final SquareCommentService squareCommentService;
@@ -58,6 +65,31 @@ public class CharacterController {
     public Result<List<CharacterResponse>> list() {
         long userId = StpUtil.getLoginIdAsLong();
         return Result.ok(characterService.list(userId));
+    }
+
+    @Operation(summary = "导入 SillyTavern Character Card V1/V2（PNG 或 JSON）")
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<CharacterResponse> importCard(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(defaultValue = "real") String cityMode,
+            @RequestParam(required = false) String city) {
+        long userId = StpUtil.getLoginIdAsLong();
+        return Result.ok(characterCardService.importCard(userId, file, cityMode, city));
+    }
+
+    @Operation(summary = "导出 SillyTavern Character Card V2")
+    @GetMapping("/{id}/export")
+    public ResponseEntity<byte[]> exportCard(@PathVariable("id") Long id,
+                                             @RequestParam(defaultValue = "png") String format) {
+        long userId = StpUtil.getLoginIdAsLong();
+        CharacterCardService.ExportedCard card = characterCardService.exportCard(userId, id, format);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(card.contentType()));
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename(card.filename(), StandardCharsets.UTF_8)
+                .build());
+        headers.setContentLength(card.bytes().length);
+        return ResponseEntity.ok().headers(headers).body(card.bytes());
     }
 
     @Operation(summary = "角色广场模板列表（分页）")

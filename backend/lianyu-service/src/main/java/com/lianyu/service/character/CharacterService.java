@@ -30,6 +30,7 @@ import com.lianyu.service.dto.UpdateCharacterRequest;
 import com.lianyu.service.conversation.CityChangeFollowUpScheduler;
 import com.lianyu.service.conversation.SessionSummaryService;
 import com.lianyu.service.memory.MemoryCacheService;
+import com.lianyu.service.memory.MemoryRecallAuditService;
 import com.lianyu.service.memory.MemoryWriter;
 import com.lianyu.service.storage.FileStorageService;
 import java.util.LinkedHashMap;
@@ -65,6 +66,7 @@ public class CharacterService {
     private final CharacterDiaryMapper characterDiaryMapper;
     private final MemoryWriter memoryWriter;
     private final MemoryCacheService memoryCacheService;
+    private final MemoryRecallAuditService memoryRecallAuditService;
     private final StringRedisTemplate redisTemplate;
     private final FileStorageService fileStorageService;
     private final CharacterCitySettingsService characterCitySettingsService;
@@ -187,6 +189,7 @@ public class CharacterService {
                 .eq(MemoryMeta::getUserId, userId)
                 .eq(MemoryMeta::getCharacterId, characterId));
         memoryCacheService.invalidate(userId, characterId);
+        memoryRecallAuditService.clear(userId, characterId);
 
         deleteMomentsForCharacter(userId, characterId);
         characterDiaryMapper.delete(new LambdaQueryWrapper<CharacterDiary>()

@@ -7,20 +7,31 @@ pip install playwright
 python -m playwright install chromium   # or use system Edge (script auto-fallback)
 ```
 
-## Run against cloud (default)
+## Run against local Lite stack (default)
 
 ```bash
+docker compose -f docker-compose.yml -f docker-compose.lite.yml up -d --build
 python scripts/e2e/lianyu_e2e.py
 ```
 
-## Run against local dev (needs backend :8080 + `npm run dev`)
+## Run against another target
 
 ```powershell
-$env:LIANYU_E2E_BASE_URL="http://localhost:5173"
-python scripts/with_server.py --server "cd frontend && npm run dev" --port 5173 -- python scripts/e2e/lianyu_e2e.py
+$env:LIANYU_E2E_BASE_URL="https://your-lianyu.example"
+python scripts/e2e/lianyu_e2e.py
 ```
 
-(Docker Compose stack must also be up for API calls.)
+The suite creates an isolated random user and starts a deterministic OpenAI-compatible mock on
+the host. It verifies authentication, local-provider calls, Character Card round-trip, single chat,
+RabbitMQ-backed memory extraction and recall audit, authenticated STOMP group chat, privacy
+controls, primary pages, and screenshots.
+
+For a backend that cannot reach `host.docker.internal`, point the suite at an existing compatible
+mock instead:
+
+```powershell
+$env:LIANYU_E2E_MOCK_AI_BASE_URL="http://mock-openai.internal:18089"
+```
 
 ## Artifacts
 

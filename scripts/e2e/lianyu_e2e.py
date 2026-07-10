@@ -1,31 +1,124 @@
 """
 LianYu-PC end-to-end smoke + flow tests (Playwright).
 
-Default target: deployed cloud stack at https://154.219.111.30
-Override: set LIANYU_E2E_BASE_URL=http://localhost:5173 (needs backend on :8080)
+Default target: local Lite stack at http://localhost:8088
+Override with LIANYU_E2E_BASE_URL for another deployment.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import socket
 import ssl
 import sys
+import threading
 import time
 import uuid
 import urllib.error
 import urllib.request
+from base64 import b64decode
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Callable
 
 from playwright.sync_api import Page, sync_playwright, expect
 
-BASE_URL = os.environ.get("LIANYU_E2E_BASE_URL", "https://154.219.111.30").rstrip("/")
+BASE_URL = os.environ.get("LIANYU_E2E_BASE_URL", "http://localhost:8088").rstrip("/")
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
 PASSWORD = "TestPass1a"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BROWSER_CAPTCHAS: list[tuple[str, str]] = []
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
+
+
+class MockOpenAIHandler(BaseHTTPRequestHandler):
+    server_version = "LianYuE2E/1.0"
+
+    def log_message(self, _format: str, *_args) -> None:
+        return
+
+    def send_json(self, payload: dict, status: int = 200) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path.rstrip("/").endswith("/v1/models"):
+            self.send_json({
+                "object": "list",
+                "data": [{
+                    "id": "e2e-model",
+                    "object": "model",
+                    "created": 1,
+                    "owned_by": "lianyu-e2e",
+                }],
+            })
+            return
+        self.send_json({"error": {"message": "not found"}}, 404)
+
+    def do_POST(self) -> None:  # noqa: N802
+        if not self.path.rstrip("/").endswith("/v1/chat/completions"):
+            self.send_json({"error": {"message": "not found"}}, 404)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        request_body = json.loads(self.rfile.read(length) or b"{}")
+        content = "收到，我会认真记住，也会在之后的对话里继续回应。"
+        if request_body.get("stream"):
+            chunk = {
+                "id": "chatcmpl-e2e",
+                "object": "chat.completion.chunk",
+                "created": 1,
+                "model": "e2e-model",
+                "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
+            }
+            done = {
+                "id": "chatcmpl-e2e",
+                "object": "chat.completion.chunk",
+                "created": 1,
+                "model": "e2e-model",
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+            body = (
+                f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                f"data: {json.dumps(done, ensure_ascii=False)}\n\n"
+                "data: [DONE]\n\n"
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_json({
+            "id": "chatcmpl-e2e",
+            "object": "chat.completion",
+            "created": 1,
+            "model": "e2e-model",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 12, "completion_tokens": 10, "total_tokens": 22},
+        })
+
+
+def start_mock_openai() -> tuple[ThreadingHTTPServer | None, str]:
+    configured = os.environ.get("LIANYU_E2E_MOCK_AI_BASE_URL", "").strip().rstrip("/")
+    if configured:
+        return None, configured
+    server = ThreadingHTTPServer(("0.0.0.0", 0), MockOpenAIHandler)
+    thread = threading.Thread(target=server.serve_forever, name="lianyu-e2e-openai", daemon=True)
+    thread.start()
+    return server, f"http://host.docker.internal:{server.server_port}"
 
 
 @dataclass
@@ -77,26 +170,133 @@ def api_request(method: str, path: str, body: dict | None = None, token: str | N
         raise RuntimeError(f"HTTP {exc.code} {path}: {payload[:300]}") from exc
 
 
-def solve_captcha(expression: str) -> int:
-    text = expression.strip()
-    match = re.match(r"(\d+)\s*([+\-×÷])\s*(\d+)\s*=\s*\?", text)
-    if not match:
-        raise ValueError(f"Unrecognized captcha expression: {expression!r}")
-    a, op, b = int(match.group(1)), match.group(2), int(match.group(3))
-    if op == "+":
-        return a + b
-    if op == "-":
-        return a - b
-    if op == "×":
-        return a * b
-    if op == "÷":
-        return a // b
-    raise ValueError(f"Unknown operator: {op}")
+def api_multipart(
+    path: str,
+    filename: str,
+    content_type: str,
+    content: bytes,
+    fields: dict[str, str],
+    token: str,
+) -> dict:
+    boundary = f"----LianYuE2E{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend([
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+            str(value).encode("utf-8"),
+            b"\r\n",
+        ])
+    chunks.extend([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(),
+        f"Content-Type: {content_type}\r\n\r\n".encode(),
+        content,
+        b"\r\n",
+        f"--{boundary}--\r\n".encode(),
+    ])
+    req = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=b"".join(chunks),
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "lianyu-token": token,
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, context=SSL_CTX, timeout=60) as resp:
+        return json.loads(resp.read())
+
+
+def api_bytes(path: str, token: str) -> tuple[bytes, str]:
+    req = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        headers={"lianyu-token": token},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, context=SSL_CTX, timeout=60) as resp:
+        return resp.read(), resp.headers.get("Content-Type", "")
+
+
+def load_local_env() -> dict[str, str]:
+    values: dict[str, str] = {}
+    env_path = REPO_ROOT / ".env"
+    if not env_path.exists():
+        return values
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def read_resp(stream):
+    prefix = stream.read(1)
+    if not prefix:
+        raise RuntimeError("Redis closed the connection")
+    line = stream.readline().rstrip(b"\r\n")
+    if prefix == b"+":
+        return line.decode("utf-8")
+    if prefix == b"-":
+        raise RuntimeError(f"Redis error: {line.decode('utf-8', errors='replace')}")
+    if prefix == b":":
+        return int(line)
+    if prefix == b"$":
+        length = int(line)
+        if length < 0:
+            return None
+        value = stream.read(length)
+        stream.read(2)
+        return value.decode("utf-8")
+    raise RuntimeError(f"Unsupported Redis response prefix: {prefix!r}")
+
+
+def send_redis_command(sock: socket.socket, stream, *parts: str):
+    encoded = [part.encode("utf-8") for part in parts]
+    payload = [f"*{len(encoded)}\r\n".encode()]
+    for part in encoded:
+        payload.extend([f"${len(part)}\r\n".encode(), part, b"\r\n"])
+    sock.sendall(b"".join(payload))
+    return read_resp(stream)
+
+
+def captcha_answer(captcha_id: str) -> int:
+    local_env = load_local_env()
+    host = os.environ.get("LIANYU_E2E_REDIS_HOST", "127.0.0.1")
+    port = int(os.environ.get("LIANYU_E2E_REDIS_PORT", local_env.get("REDIS_PORT", "6379")))
+    password = os.environ.get("LIANYU_E2E_REDIS_PASSWORD", local_env.get("REDIS_PASSWORD", ""))
+    if not password:
+        raise RuntimeError("Set LIANYU_E2E_REDIS_PASSWORD or generate .env with scripts/init-local.ps1")
+    with socket.create_connection((host, port), timeout=5) as sock:
+        stream = sock.makefile("rb")
+        send_redis_command(sock, stream, "AUTH", password)
+        value = send_redis_command(sock, stream, "GET", f"captcha:{captcha_id}")
+    if value is None:
+        raise RuntimeError(f"Captcha answer not found in Redis: {captcha_id}")
+    return int(value)
+
+
+def capture_browser_captcha(response) -> None:
+    if not response.url.rstrip("/").endswith("/api/auth/captcha") or not response.ok:
+        return
+    try:
+        payload = response.json()
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return
+        captcha_id = str(data.get("captchaId") or "")
+        image = str(data.get("imageBase64") or "").strip()
+        if captcha_id and image:
+            BROWSER_CAPTCHAS.append((captcha_id, image))
+    except Exception:
+        return
 
 
 def register_user_via_api(username: str) -> dict:
     cap = api_request("GET", "/api/auth/captcha")["data"]
-    answer = solve_captcha(cap["expression"])
+    answer = captcha_answer(cap["captchaId"])
     payload = {
         "username": username,
         "password": PASSWORD,
@@ -109,18 +309,22 @@ def register_user_via_api(username: str) -> dict:
     return resp["data"]
 
 
-def wait_for_captcha(page: Page) -> str:
-    expr = page.locator(".captcha-expr")
-    expect(expr).not_to_have_text("加载中...", timeout=15000)
-    expect(expr).not_to_have_text("获取失败，点击刷新", timeout=15000)
-    text = expr.inner_text().strip()
-    if not re.search(r"=\s*\?", text):
-        raise AssertionError(f"Captcha not ready: {text!r}")
-    return text
+def wait_for_captcha(page: Page) -> int:
+    image = page.locator(".captcha-image")
+    expect(image).to_be_visible(timeout=15000)
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        src = image.get_attribute("src") or ""
+        encoded = src.split(",", 1)[-1] if "," in src else src
+        for captcha_id, image_base64 in reversed(BROWSER_CAPTCHAS):
+            if encoded == image_base64:
+                return captcha_answer(captcha_id)
+        page.wait_for_timeout(100)
+    raise AssertionError("Captcha image loaded without a matching API challenge")
 
 
 def fill_captcha(page: Page) -> None:
-    answer = solve_captcha(wait_for_captcha(page))
+    answer = wait_for_captcha(page)
     page.locator(".captcha-input input").fill(str(answer))
 
 
@@ -154,14 +358,36 @@ def expect_hash(page: Page, fragment: str) -> None:
 
 
 def inject_auth(page: Page, auth: dict) -> None:
-    goto_hash(page, "/")
+    page.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
     page.evaluate(
-        """(auth) => {
-            localStorage.setItem('lianyu-token', auth.token);
-            localStorage.setItem('lianyu-token-name', auth.tokenName || 'lianyu-token');
+        """async (auth) => {
+            const toHex = bytes => Array.from(bytes)
+              .map(value => value.toString(16).padStart(2, '0'))
+              .join('')
+            const rawKey = crypto.getRandomValues(new Uint8Array(32))
+            const key = await crypto.subtle.importKey(
+              'raw', rawKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+            )
+            const iv = crypto.getRandomValues(new Uint8Array(12))
+            const encrypted = await crypto.subtle.encrypt(
+              { name: 'AES-GCM', iv }, key, new TextEncoder().encode(auth.token)
+            )
+            const combined = new Uint8Array(iv.length + encrypted.byteLength)
+            combined.set(iv, 0)
+            combined.set(new Uint8Array(encrypted), iv.length)
+            localStorage.setItem('_lkt', toHex(rawKey))
+            localStorage.setItem('_ltt', toHex(combined))
+            localStorage.setItem('lianyu-user-profile', JSON.stringify({
+              userId: auth.userId,
+              username: auth.username,
+              nickname: auth.nickname || '',
+              avatarUrl: auth.avatarUrl || '',
+            }))
+            localStorage.setItem('lianyu-last-username', auth.username || '')
         }""",
         auth,
     )
+    page.reload(wait_until="domcontentloaded")
     goto_hash(page, "/app")
 
 
@@ -180,7 +406,12 @@ def run_tests() -> TestRun:
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
     run = TestRun()
     username = f"e2e_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    mock_server, mock_ai_base_url = start_mock_openai()
+    vault_provider = "e2e-mock"
     auth_data: dict = {}
+    imported_character: dict = {}
+    chat_conversation: dict = {}
+    group_conversation: dict = {}
 
     with sync_playwright() as p:
         browser = launch_browser(p)
@@ -190,6 +421,7 @@ def run_tests() -> TestRun:
             viewport={"width": 1280, "height": 900},
         )
         page = context.new_page()
+        page.on("response", capture_browser_captcha)
 
         def snap(label: str) -> None:
             path = os.path.join(SCREENSHOT_DIR, f"{label}.png")
@@ -205,7 +437,8 @@ def run_tests() -> TestRun:
             assert resp.get("code") == 200, resp
             data = resp.get("data") or {}
             assert data.get("captchaId"), data
-            assert data.get("expression"), data
+            assert "expression" not in data, data
+            assert b64decode(data.get("imageBase64") or "").startswith(b"\x89PNG\r\n\x1a\n"), data
 
         def test_login_page() -> None:
             goto_hash(page, "/login")
@@ -241,16 +474,297 @@ def run_tests() -> TestRun:
         def test_session_injection() -> None:
             inject_auth(page, auth_data)
             expect_hash(page, "#/app")
-            token = page.evaluate("() => localStorage.getItem('lianyu-token')")
-            assert token == auth_data["token"]
+            encrypted_token = page.evaluate("() => localStorage.getItem('_ltt')")
+            assert encrypted_token and auth_data["token"] not in encrypted_token
 
         def test_authenticated_api() -> None:
-            resp = api_request("GET", "/api/characters", token=auth_data["token"])
+            resp = api_request("GET", "/api/character", token=auth_data["token"])
             if resp.get("code") != 200:
                 raise AssertionError(
-                    f"GET /api/characters failed: code={resp.get('code')} msg={resp.get('message')} "
-                    "(cloud backend may be degraded — UI steps will still run)"
+                    f"GET /api/character failed: code={resp.get('code')} msg={resp.get('message')}"
                 )
+
+        def test_openai_compatible_vault() -> None:
+            created = api_request(
+                "POST",
+                "/api/ai/vault",
+                {
+                    "provider": vault_provider,
+                    "apiKey": "sk-e2e-local-key-0001",
+                    "baseUrl": mock_ai_base_url,
+                    "modelDefault": "e2e-model",
+                    "remark": "Local deterministic E2E provider",
+                },
+                auth_data["token"],
+            )
+            assert created.get("code") == 200, created
+            assert created["data"]["provider"] == vault_provider
+            models = api_request(
+                "GET", f"/api/ai/models?provider={vault_provider}", token=auth_data["token"]
+            )
+            assert models.get("code") == 200, models
+            assert any(model.get("id") == "e2e-model" for model in models.get("data") or []), models
+
+        def test_character_card_round_trip() -> None:
+            card = {
+                "spec": "chara_card_v2",
+                "spec_version": "2.0",
+                "data": {
+                    "name": "E2E Card",
+                    "description": "A calm test companion.",
+                    "personality": "Patient and concise.",
+                    "scenario": "Local integration test.",
+                    "first_mes": "Hello from the card.",
+                    "mes_example": "<START>\n{{user}}: Hi\n{{char}}: Hello",
+                    "creator_notes": "Round-trip marker",
+                    "system_prompt": "",
+                    "post_history_instructions": "",
+                    "alternate_greetings": ["Welcome back."],
+                    "tags": ["e2e"],
+                    "creator": "LianYu E2E",
+                    "character_version": "1.0",
+                    "extensions": {"e2e/unknown": {"preserve": True}},
+                },
+            }
+            response = api_multipart(
+                "/api/character/import",
+                "e2e-card.json",
+                "application/json",
+                json.dumps(card).encode("utf-8"),
+                {"cityMode": "real", "city": "Shanghai"},
+                auth_data["token"],
+            )
+            assert response.get("code") == 200, response
+            imported_character.update(response["data"])
+            exported, content_type = api_bytes(
+                f"/api/character/{imported_character['id']}/export?format=json",
+                auth_data["token"],
+            )
+            assert "application/json" in content_type, content_type
+            exported_card = json.loads(exported)
+            assert exported_card["data"]["name"] == "E2E Card"
+            assert exported_card["data"]["extensions"]["e2e/unknown"]["preserve"] is True
+
+        def test_memory_privacy_api() -> None:
+            character_id = imported_character["id"]
+            update = api_request(
+                "PUT",
+                f"/api/character/{character_id}",
+                {"settings": {"memoryEnabled": False}},
+                auth_data["token"],
+            )
+            assert update.get("code") == 200, update
+            assert update["data"]["settings"]["memoryEnabled"] is False
+            recalls = api_request(
+                "GET", f"/api/memory/recalls?characterId={character_id}", token=auth_data["token"]
+            )
+            assert recalls.get("code") == 200, recalls
+            cleared = api_request(
+                "DELETE", f"/api/memory?characterId={character_id}", token=auth_data["token"]
+            )
+            assert cleared.get("code") == 200, cleared
+            enabled = api_request(
+                "PUT",
+                f"/api/character/{character_id}",
+                {"settings": {"memoryEnabled": True}},
+                auth_data["token"],
+            )
+            assert enabled.get("code") == 200, enabled
+            assert enabled["data"]["settings"]["memoryEnabled"] is True
+
+        def test_chat_and_memory_recall() -> None:
+            character_id = imported_character["id"]
+            created = api_request(
+                "POST",
+                "/api/conversation",
+                {"characterId": character_id, "mode": "SINGLE", "title": "E2E Chat"},
+                auth_data["token"],
+            )
+            assert created.get("code") == 200, created
+            chat_conversation.update(created["data"])
+
+            first = api_request(
+                "POST",
+                f"/api/conversation/{chat_conversation['id']}/messages",
+                {
+                    "provider": vault_provider,
+                    "model": "e2e-model",
+                    "content": "我喜欢夜跑。",
+                },
+                auth_data["token"],
+            )
+            assert first.get("code") == 200, first
+            assert "认真记住" in first["data"]["content"]
+
+            deadline = time.time() + 60
+            memories: list[dict] = []
+            while time.time() < deadline:
+                response = api_request(
+                    "GET", f"/api/memory?characterId={character_id}&size=50", token=auth_data["token"]
+                )
+                assert response.get("code") == 200, response
+                memories = response.get("data") or []
+                if any("夜跑" in (item.get("summary") or "") for item in memories):
+                    break
+                time.sleep(2)
+            assert any("夜跑" in (item.get("summary") or "") for item in memories), memories
+
+            second = api_request(
+                "POST",
+                f"/api/conversation/{chat_conversation['id']}/messages",
+                {
+                    "provider": vault_provider,
+                    "model": "e2e-model",
+                    "content": "还记得我的爱好吗？",
+                },
+                auth_data["token"],
+            )
+            assert second.get("code") == 200, second
+
+            deadline = time.time() + 20
+            recalls: list[dict] = []
+            while time.time() < deadline:
+                response = api_request(
+                    "GET",
+                    f"/api/memory/recalls?characterId={character_id}",
+                    token=auth_data["token"],
+                )
+                assert response.get("code") == 200, response
+                recalls = response.get("data") or []
+                if any((item.get("hitCount") or 0) > 0 for item in recalls):
+                    break
+                time.sleep(1)
+            assert any((item.get("hitCount") or 0) > 0 for item in recalls), recalls
+            assert any("夜跑" in summary for item in recalls for summary in item.get("summaries") or []), recalls
+
+        def test_group_chat_flow() -> None:
+            second_card = {
+                "spec": "chara_card_v2",
+                "spec_version": "2.0",
+                "data": {
+                    "name": "E2E Card Two",
+                    "description": "A second deterministic companion.",
+                    "personality": "Warm and direct.",
+                    "scenario": "Local integration test.",
+                    "first_mes": "Hello from card two.",
+                    "mes_example": "",
+                    "creator_notes": "Group E2E marker",
+                    "system_prompt": "",
+                    "post_history_instructions": "",
+                    "alternate_greetings": [],
+                    "tags": ["e2e"],
+                    "creator": "LianYu E2E",
+                    "character_version": "1.0",
+                    "extensions": {},
+                },
+            }
+            imported = api_multipart(
+                "/api/character/import",
+                "e2e-card-two.json",
+                "application/json",
+                json.dumps(second_card).encode("utf-8"),
+                {"cityMode": "real", "city": "Shanghai"},
+                auth_data["token"],
+            )
+            assert imported.get("code") == 200, imported
+            created = api_request(
+                "POST",
+                "/api/conversation/group",
+                {
+                    "characterIds": [imported_character["id"], imported["data"]["id"]],
+                    "title": "E2E Group",
+                },
+                auth_data["token"],
+            )
+            assert created.get("code") == 200, created
+            group_conversation.update(created["data"])
+            members = api_request(
+                "GET",
+                f"/api/conversation/group/{group_conversation['id']}/members",
+                token=auth_data["token"],
+            )
+            assert members.get("code") == 200 and len(members.get("data") or []) == 2, members
+            renamed = api_request(
+                "PATCH",
+                f"/api/conversation/group/{group_conversation['id']}/title",
+                {"title": "E2E Group Renamed"},
+                auth_data["token"],
+            )
+            assert renamed.get("code") == 200, renamed
+
+            ws_url = re.sub(r"^http", "ws", BASE_URL) + "/ws"
+            stomp_result = page.evaluate(
+                r"""({ wsUrl, token, conversationId, provider }) => new Promise((resolve, reject) => {
+                    const ws = new WebSocket(wsUrl)
+                    const nul = String.fromCharCode(0)
+                    const frame = (command, headers, body = '') => {
+                      const lines = Object.entries(headers).map(([key, value]) => `${key}:${value}`)
+                      return `${command}\n${lines.join('\n')}\n\n${body}${nul}`
+                    }
+                    const timer = setTimeout(() => {
+                      ws.close()
+                      reject(new Error('STOMP group message timeout'))
+                    }, 20000)
+                    ws.onerror = () => {
+                      clearTimeout(timer)
+                      reject(new Error('WebSocket connection failed'))
+                    }
+                    ws.onopen = () => ws.send(frame('CONNECT', {
+                      'accept-version': '1.2',
+                      'heart-beat': '0,0',
+                      host: 'localhost',
+                      token,
+                    }))
+                    ws.onmessage = event => {
+                      const data = String(event.data || '')
+                      if (data.startsWith('CONNECTED')) {
+                        ws.send(frame('SUBSCRIBE', {
+                          id: 'e2e-sub',
+                          destination: `/topic/group/${conversationId}`,
+                          ack: 'auto',
+                        }))
+                        setTimeout(() => ws.send(frame('SEND', {
+                          destination: `/app/group/${conversationId}/send`,
+                          'content-type': 'application/json',
+                        }, JSON.stringify({
+                          provider,
+                          model: 'e2e-model',
+                          content: '大家好，这是群聊端到端测试。',
+                        }))), 150)
+                      } else if (data.startsWith('ERROR')) {
+                        clearTimeout(timer)
+                        ws.close()
+                        reject(new Error(data))
+                      } else if (data.startsWith('MESSAGE') && data.includes('USER_MESSAGE')) {
+                        clearTimeout(timer)
+                        ws.close()
+                        resolve(data)
+                      }
+                    }
+                  })""",
+                {
+                    "wsUrl": ws_url,
+                    "token": auth_data["token"],
+                    "conversationId": group_conversation["id"],
+                    "provider": vault_provider,
+                },
+            )
+            assert "USER_MESSAGE" in stomp_result
+
+            deadline = time.time() + 45
+            records: list[dict] = []
+            while time.time() < deadline:
+                response = api_request(
+                    "GET",
+                    f"/api/conversation/{group_conversation['id']}/messages?limit=50",
+                    token=auth_data["token"],
+                )
+                assert response.get("code") == 200, response
+                records = (response.get("data") or {}).get("records") or []
+                if any(record.get("role") == "ASSISTANT" for record in records):
+                    break
+                time.sleep(1)
+            assert any(record.get("role") == "ASSISTANT" for record in records), records
 
         def test_home() -> None:
             goto_hash(page, "/app")
@@ -262,6 +776,7 @@ def run_tests() -> TestRun:
             goto_hash(page, "/app/characters")
             expect_hash(page, "#/app/characters")
             assert_page_title(page, "我的羁绊")
+            expect(page.get_by_role("button", name="导入角色卡")).to_be_visible()
             snap("06-characters")
 
         def test_character_square() -> None:
@@ -343,14 +858,11 @@ def run_tests() -> TestRun:
         def test_ai_models_api() -> None:
             resp = api_request(
                 "GET",
-                "/api/ai/models?provider=platform",
+                f"/api/ai/models?provider={vault_provider}",
                 token=auth_data["token"],
             )
-            if resp.get("code") != 200:
-                raise AssertionError(
-                    f"ai/models: code={resp.get('code')} msg={resp.get('message')} "
-                    "(expected if masked API key fix not deployed)"
-                )
+            assert resp.get("code") == 200, resp
+            assert any(model.get("id") == "e2e-model" for model in resp.get("data") or []), resp
 
         def test_start_chat_if_character_exists() -> None:
             goto_hash(page, "/app/characters")
@@ -376,8 +888,8 @@ def run_tests() -> TestRun:
             expect(confirm).to_be_visible(timeout=5000)
             confirm.locator("button").filter(has_text="退出登录").click()
             page.wait_for_url(re.compile(r"#/$|#/login"), timeout=15000)
-            token = page.evaluate("() => localStorage.getItem('lianyu-token')")
-            assert not token, "Token should be cleared after logout"
+            encrypted_token = page.evaluate("() => localStorage.getItem('_ltt')")
+            assert not encrypted_token, "Encrypted token should be cleared after logout"
             snap("16-after-logout")
 
         def test_login_existing_user() -> None:
@@ -394,9 +906,15 @@ def run_tests() -> TestRun:
             ("Captcha API (GET /api/auth/captcha)", test_captcha_api),
             ("Login page + captcha widget", test_login_page),
             ("Register page + captcha widget", test_register_page),
+            ("Register UI form (secondary)", test_register_ui_form),
             ("Register user via API", test_register_via_api),
             ("Inject session + open /app", test_session_injection),
-            ("Authenticated API (GET /api/characters)", test_authenticated_api),
+            ("Authenticated API (GET /api/character)", test_authenticated_api),
+            ("OpenAI-compatible local provider", test_openai_compatible_vault),
+            ("SillyTavern character card JSON round-trip", test_character_card_round_trip),
+            ("Memory privacy, recall and bulk-delete APIs", test_memory_privacy_api),
+            ("Single chat + memory extraction + recall audit", test_chat_and_memory_recall),
+            ("Group chat CRUD + authenticated STOMP message", test_group_chat_flow),
             ("Home dashboard", test_home),
             ("Characters page", test_characters_page),
             ("Character square catalog", test_character_square),
@@ -412,11 +930,11 @@ def run_tests() -> TestRun:
             ("Open chat from character", test_start_chat_if_character_exists),
             ("Logout", test_logout),
             ("Login with registered user", test_login_existing_user),
-            ("Register UI form (secondary)", test_register_ui_form),
         ]
 
         print(f"\nLianYu E2E — base URL: {BASE_URL}")
         print(f"Test user: {username}\n")
+        print(f"Mock OpenAI: {mock_ai_base_url}\n")
         for name, fn in steps:
             run.record(name, fn)
             if not run.results[-1].passed:
@@ -429,6 +947,7 @@ def run_tests() -> TestRun:
         json.dump(
             {
                 "baseUrl": BASE_URL,
+                "mockAiBaseUrl": mock_ai_base_url,
                 "username": username,
                 "passed": run.passed,
                 "failed": run.failed,
@@ -440,6 +959,9 @@ def run_tests() -> TestRun:
         )
     print(f"\nReport: {report_path}")
     print(f"Screenshots: {SCREENSHOT_DIR}")
+    if mock_server is not None:
+        mock_server.shutdown()
+        mock_server.server_close()
     return run
 
 

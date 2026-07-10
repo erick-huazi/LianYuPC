@@ -141,6 +141,10 @@ milvus:
 
 # LianYu 业务配置
 lianyu:
+  storage:
+    milvus:
+      # false 时不创建 Milvus 客户端，语义检索自动回退到 MySQL 最近记忆
+      enabled: ${LIANYU_STORAGE_MILVUS_ENABLED:true}
   api-docs:
     enabled: ${LIANYU_API_DOCS_ENABLED:true}
   security:
@@ -173,7 +177,13 @@ lianyu:
       profile-ttl-hours: 24
       recent-ttl-minutes: 60
       semantic-ttl-minutes: 15
+    audit:
+      # 仅记录哈希、命中 ID 与路径，不保存用户原始查询文本
+      enabled: ${LIANYU_MEMORY_AUDIT_ENABLED:true}
+      retention-days: ${LIANYU_MEMORY_AUDIT_RETENTION_DAYS:30}
   ai:
+    # 私网 OpenAI 兼容端点仅限可信的本地自托管环境；云端保持 false
+    allow-private-base-urls: ${LIANYU_AI_ALLOW_PRIVATE_BASE_URLS:false}
     # 是否开放 /api/ai/chat 直连（默认关闭，走会话接口）
     direct-chat-enabled: ${LIANYU_AI_DIRECT_CHAT:false}
     direct-chat-daily-limit: 50

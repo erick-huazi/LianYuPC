@@ -11,7 +11,7 @@
         :placeholder="t('memory.allCharacters')"
         clearable
         class="filter-select"
-        @change="fetchMemories"
+        @change="onFilterChange"
       >
         <el-option
           v-for="c in charactersStore.list"
@@ -21,7 +21,37 @@
         />
       </el-select>
       <el-button :icon="RefreshRight" @click="fetchMemories" :loading="loading">{{ t('memory.refresh') }}</el-button>
+      <el-button type="danger" plain :icon="Delete" :disabled="memories.length === 0" @click="confirmClearMemories">
+        {{ filterCharId ? '清空该角色记忆' : '清空全部记忆' }}
+      </el-button>
     </div>
+
+    <section class="recall-section glass stagger-item">
+      <div class="recall-header">
+        <div>
+          <h2>最近命中</h2>
+          <p>展示记忆在回复中被调用的时间与路径；不会保存原始提问。</p>
+        </div>
+        <div class="recall-actions">
+          <el-button text :icon="RefreshRight" :loading="recallLoading" @click="fetchRecalls">刷新</el-button>
+          <el-button text :icon="Delete" :disabled="recalls.length === 0" @click="confirmClearRecalls">清空</el-button>
+        </div>
+      </div>
+      <div v-if="recallLoading" class="recall-empty">加载中...</div>
+      <div v-else-if="recalls.length === 0" class="recall-empty">暂无命中记录</div>
+      <div v-else class="recall-list">
+        <div v-for="item in recalls" :key="item.id" class="recall-row">
+          <div class="recall-meta">
+            <span class="recall-route">{{ routeLabel(item.route) }}</span>
+            <span>{{ item.backend }}</span>
+            <span>{{ formatDate(item.createdAt) }}</span>
+          </div>
+          <div class="recall-summary">
+            {{ item.summaries?.length ? item.summaries.join(' · ') : `命中 ${item.hitCount || 0} 条记忆` }}
+          </div>
+        </div>
+      </div>
+    </section>
 
     <div v-if="loading" class="loading-state">
       <el-icon class="is-loading" :size="24"><Loading /></el-icon>
@@ -103,7 +133,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCharactersStore } from '@/stores/characters'
-import { listMemories, getMemory, deleteMemory } from '@/api/memory'
+import {
+  listMemories,
+  getMemory,
+  deleteMemory,
+  clearMemories,
+  listMemoryRecalls,
+  clearMemoryRecalls
+} from '@/api/memory'
 import { Loading, Collection, ArrowDown, ArrowRight, RefreshRight, Delete, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
@@ -117,6 +154,8 @@ const filterCharId = ref(null)
 const expandedId = ref(null)
 const sourceLoading = ref(false)
 const sourceMessages = ref([])
+const recalls = ref([])
+const recallLoading = ref(false)
 
 const groupedMemories = computed(() => {
   const groups = new Map()
@@ -138,8 +177,12 @@ const groupedMemories = computed(() => {
 
 onMounted(async () => {
   await charactersStore.fetchList().catch(() => [])
-  fetchMemories()
+  await Promise.all([fetchMemories(), fetchRecalls()])
 })
+
+async function onFilterChange() {
+  await Promise.all([fetchMemories(), fetchRecalls()])
+}
 
 async function fetchMemories() {
   loading.value = true
@@ -147,6 +190,17 @@ async function fetchMemories() {
     memories.value = await listMemories(filterCharId.value || undefined) || []
   } catch {} finally {
     loading.value = false
+  }
+}
+
+async function fetchRecalls() {
+  recallLoading.value = true
+  try {
+    recalls.value = await listMemoryRecalls(filterCharId.value || undefined) || []
+  } catch {
+    recalls.value = []
+  } finally {
+    recallLoading.value = false
   }
 }
 
@@ -182,6 +236,38 @@ async function confirmDeleteMem(mem) {
     memories.value = memories.value.filter(m => m.id !== mem.id)
     ElMessage.success(t('memory.deleted'))
   } catch {}
+}
+
+async function confirmClearMemories() {
+  const scope = filterCharId.value ? '当前角色' : '全部角色'
+  try {
+    await ElMessageBox.confirm(
+      `确定清空${scope}的长期记忆和命中记录吗？聊天消息不会被删除。`,
+      '清空长期记忆',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' }
+    )
+    const result = await clearMemories(filterCharId.value || undefined)
+    memories.value = []
+    recalls.value = []
+    ElMessage.success(`已清空 ${result?.deleted || 0} 条记忆`)
+  } catch {}
+}
+
+async function confirmClearRecalls() {
+  try {
+    await ElMessageBox.confirm('确定清空当前筛选范围内的记忆命中记录吗？', '清空命中记录', {
+      type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消'
+    })
+    await clearMemoryRecalls(filterCharId.value || undefined)
+    recalls.value = []
+    ElMessage.success('命中记录已清空')
+  } catch {}
+}
+
+function routeLabel(route) {
+  if (route === 'PROFILE') return '回复前注入'
+  if (route === 'SEMANTIC_CACHE') return '语义缓存'
+  return '语义检索'
 }
 
 function formatDate(ts) {
@@ -225,6 +311,36 @@ function formatTime(ts) {
 
 .filter-select {
   width: min(200px, 55vw);
+}
+
+.recall-section {
+  margin-bottom: $space-6;
+  padding: $space-4 $space-5;
+  border-radius: $radius-lg;
+}
+
+.recall-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $space-4;
+
+  h2 { margin: 0 0 $space-1; font-size: $font-size-base; color: $color-text-primary; }
+  p { margin: 0; font-size: $font-size-xs; color: $color-text-muted; }
+}
+
+.recall-actions { display: flex; flex-shrink: 0; }
+.recall-list { margin-top: $space-3; border-top: 1px solid rgba($color-pink-rgb, 0.06); }
+.recall-row { padding: $space-3 0; border-bottom: 1px solid rgba($color-pink-rgb, 0.05); }
+.recall-row:last-child { border-bottom: 0; }
+.recall-meta { display: flex; flex-wrap: wrap; gap: $space-2; font-size: 11px; color: $color-text-muted; }
+.recall-route { color: $color-pink-primary; font-weight: $font-weight-semibold; }
+.recall-summary { margin-top: $space-1; font-size: $font-size-sm; color: $color-text-secondary; line-height: 1.6; }
+.recall-empty { padding: $space-5 0 $space-2; text-align: center; font-size: $font-size-sm; color: $color-text-muted; }
+
+@media (max-width: 640px) {
+  .recall-header { flex-direction: column; }
+  .recall-actions { width: 100%; justify-content: flex-end; }
 }
 
 .loading-state, .empty-state {

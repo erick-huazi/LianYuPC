@@ -25,6 +25,8 @@ class MemoryRetrieverSemanticTest {
         MemoryVectorStore vectorStore = mock(MemoryVectorStore.class);
         MemoryMetaMapper memoryMetaMapper = mock(MemoryMetaMapper.class);
         MemoryCacheService cacheService = mock(MemoryCacheService.class);
+        MemoryPreferenceService preferenceService = enabledPreferences();
+        MemoryRecallAuditService auditService = mock(MemoryRecallAuditService.class);
 
         when(cacheService.getSemanticResults(any(), any(), anyString())).thenReturn(null);
         when(vectorStore.search(any(), any(), anyString(), anyInt(), any(Float.class)))
@@ -33,7 +35,7 @@ class MemoryRetrieverSemanticTest {
                 .thenReturn(List.of(new RerankerService.ScoredDoc(0, "【长期记忆/爱好】夜跑", 0.9f)));
 
         MemoryRetriever retriever = new MemoryRetriever(
-                rerankerService, vectorStore, memoryMetaMapper, cacheService);
+                rerankerService, vectorStore, memoryMetaMapper, cacheService, preferenceService, auditService);
 
         List<String> results = retriever.searchSemantic(2L, 3L, "夜跑", 3);
 
@@ -47,6 +49,8 @@ class MemoryRetrieverSemanticTest {
         MemoryVectorStore vectorStore = mock(MemoryVectorStore.class);
         MemoryMetaMapper memoryMetaMapper = mock(MemoryMetaMapper.class);
         MemoryCacheService cacheService = mock(MemoryCacheService.class);
+        MemoryPreferenceService preferenceService = enabledPreferences();
+        MemoryRecallAuditService auditService = mock(MemoryRecallAuditService.class);
 
         when(cacheService.getSemanticResults(any(), any(), anyString())).thenReturn(null);
         when(vectorStore.search(any(), any(), anyString(), anyInt(), any(Float.class)))
@@ -65,7 +69,7 @@ class MemoryRetrieverSemanticTest {
                 .thenReturn(List.of(new RerankerService.ScoredDoc(0, meta.getSummary(), 0.8f)));
 
         MemoryRetriever retriever = new MemoryRetriever(
-                rerankerService, vectorStore, memoryMetaMapper, cacheService);
+                rerankerService, vectorStore, memoryMetaMapper, cacheService, preferenceService, auditService);
 
         List<String> results = retriever.searchSemantic(2L, 3L, "工作", 3);
 
@@ -75,5 +79,11 @@ class MemoryRetrieverSemanticTest {
 
     private void assertTrueContains(String actual, String fragment) {
         org.junit.jupiter.api.Assertions.assertTrue(actual.contains(fragment));
+    }
+
+    private MemoryPreferenceService enabledPreferences() {
+        MemoryPreferenceService service = mock(MemoryPreferenceService.class);
+        when(service.isEnabled(any(), any())).thenReturn(true);
+        return service;
     }
 }

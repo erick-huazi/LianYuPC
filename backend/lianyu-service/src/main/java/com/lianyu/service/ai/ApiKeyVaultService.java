@@ -14,6 +14,7 @@ import com.lianyu.service.dto.VaultEntryResponse;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,9 @@ public class ApiKeyVaultService {
     private final ApiKeyVaultMapper vaultMapper;
     private final JasyptUtil jasyptUtil;
     private final StringRedisTemplate redisTemplate;
+
+    @Value("${lianyu.ai.allow-private-base-urls:false}")
+    private boolean allowPrivateBaseUrls;
 
     @Transactional
     public VaultEntryResponse create(Long userId, CreateVaultRequest request) {
@@ -66,7 +70,7 @@ public class ApiKeyVaultService {
         vault.setProvider(autoAlias ? PROVIDER_INSERT_PLACEHOLDER : alias);
         String apiKey = request.getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
-            apiKey = isOllamaEndpoint(baseUrl) ? "local" : "";
+            apiKey = isLocalKeyAllowed(baseUrl) ? "local" : "";
         }
         vault.setApiKeyEncrypted(jasyptUtil.encrypt(apiKey.trim()));
         vault.setKeyVersion(jasyptUtil.getCurrentVersion());
@@ -300,7 +304,7 @@ public class ApiKeyVaultService {
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 不能为空");
         }
-        if (!isOllamaEndpoint(baseUrl) && (apiKey == null || apiKey.isBlank())) {
+        if (!isLocalKeyAllowed(baseUrl) && (apiKey == null || apiKey.isBlank())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "API Key 不能为空");
         }
     }
@@ -323,6 +327,11 @@ public class ApiKeyVaultService {
 
     private String normalizeBaseUrl(String baseUrl) {
         boolean ollama = isOllamaEndpoint(baseUrl);
-        return OutboundUrlValidator.validateAndNormalize(baseUrl, ollama);
+        return OutboundUrlValidator.validateAndNormalize(baseUrl, ollama, allowPrivateBaseUrls);
+    }
+
+    private boolean isLocalKeyAllowed(String baseUrl) {
+        return isOllamaEndpoint(baseUrl)
+                || (allowPrivateBaseUrls && OutboundUrlValidator.isPrivateEndpoint(baseUrl));
     }
 }

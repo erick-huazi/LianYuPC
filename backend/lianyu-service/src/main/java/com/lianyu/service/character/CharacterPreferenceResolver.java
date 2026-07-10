@@ -14,6 +14,7 @@ public final class CharacterPreferenceResolver {
     public static final String KEY_DND_START_MINUTES = "dndStartMinutes";
     public static final String KEY_DND_END_MINUTES = "dndEndMinutes";
     public static final String KEY_SHOW_INNER_THOUGHTS = "showInnerThoughts";
+    public static final String KEY_MEMORY_ENABLED = "memoryEnabled";
 
     private static final int DEFAULT_DND_START = 23 * 60;
     private static final int DEFAULT_DND_END = 8 * 60;
@@ -49,6 +50,10 @@ public final class CharacterPreferenceResolver {
         return resolveBoolean(settings, KEY_SHOW_INNER_THOUGHTS, true);
     }
 
+    public static boolean memoryEnabled(Map<String, Object> settings) {
+        return resolveBoolean(settings, KEY_MEMORY_ENABLED, true);
+    }
+
     public static void applyCreationDefaults(Map<String, Object> settings) {
         if (settings == null) {
             return;
@@ -57,6 +62,7 @@ public final class CharacterPreferenceResolver {
         settings.putIfAbsent(KEY_DND_START_MINUTES, DEFAULT_DND_START);
         settings.putIfAbsent(KEY_DND_END_MINUTES, DEFAULT_DND_END);
         settings.putIfAbsent(KEY_SHOW_INNER_THOUGHTS, true);
+        settings.putIfAbsent(KEY_MEMORY_ENABLED, true);
     }
 
     public static boolean resolveBoolean(Map<String, Object> settings, String key, boolean fallback) {

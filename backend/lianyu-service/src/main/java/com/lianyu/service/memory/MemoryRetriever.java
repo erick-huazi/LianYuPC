@@ -31,6 +31,8 @@ public class MemoryRetriever {
     private final MemoryVectorStore memoryVectorStore;
     private final MemoryMetaMapper memoryMetaMapper;
     private final MemoryCacheService memoryCacheService;
+    private final MemoryPreferenceService memoryPreferenceService;
+    private final MemoryRecallAuditService recallAuditService;
 
     public static final int DEFAULT_TOOL_TOP_K = 5;
 
@@ -49,6 +51,9 @@ public class MemoryRetriever {
      * 结构化长期记忆，发消息前预注入 system prompt（路径 A）。
      */
     public String retrieveProfileContext(Long characterId, Long userId, String lastUserMessage) {
+        if (!memoryPreferenceService.isEnabled(userId, characterId)) {
+            return null;
+        }
         List<MemoryMeta> metas = loadContextMemoryMetas(characterId, userId, lastUserMessage);
         String facts = joinByType(metas, MemoryType.FACT, "用户画像");
         String emotions = joinByType(metas, MemoryType.EMOTION, "近期情绪线索");
@@ -57,6 +62,14 @@ public class MemoryRetriever {
         String result = Stream.of(facts, emotions, relations, rituals)
                 .filter(s -> s != null && !s.isBlank())
                 .collect(Collectors.joining("\n\n"));
+        recallAuditService.record(
+                userId,
+                characterId,
+                "PROFILE",
+                "mysql",
+                lastUserMessage,
+                metas.stream().map(MemoryMeta::getId).filter(id -> id != null).toList(),
+                metas.size());
         return result.isBlank() ? null : result;
     }
 
@@ -76,7 +89,7 @@ public class MemoryRetriever {
      * Agentic 语义检索：由 memory_search Tool 调用（路径 B）。
      */
     public List<String> searchSemantic(Long characterId, Long userId, String query, int topK) {
-        if (StrUtil.isBlank(query)) {
+        if (StrUtil.isBlank(query) || !memoryPreferenceService.isEnabled(userId, characterId)) {
             return List.of();
         }
         int k = topK > 0 ? topK : DEFAULT_TOOL_TOP_K;
@@ -87,10 +100,15 @@ public class MemoryRetriever {
         try {
             List<String> cached = memoryCacheService.getSemanticResults(userId, characterId, query);
             if (cached != null) {
-                return cached.size() > topK ? cached.subList(0, topK) : cached;
+                List<String> result = cached.size() > topK ? cached.subList(0, topK) : cached;
+                recallAuditService.record(userId, characterId, "SEMANTIC_CACHE", "redis", query,
+                        List.of(), result.size());
+                return result;
             }
 
             List<String> docTexts = new ArrayList<>();
+            Map<String, Long> memoryIdBySummary = new LinkedHashMap<>();
+            String retrievalBackend = memoryVectorStore.isAvailable() ? memoryVectorStore.backendName() : "mysql";
             try {
                 List<MemoryVectorStore.VectorHit> hits = memoryVectorStore.search(
                         characterId,
@@ -100,13 +118,23 @@ public class MemoryRetriever {
                         SIMILARITY_THRESHOLD);
                 for (MemoryVectorStore.VectorHit hit : hits) {
                     docTexts.add(hit.summary());
+                    if (hit.memoryId() != null) {
+                        memoryIdBySummary.putIfAbsent(hit.summary(), hit.memoryId());
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Vector search unavailable, falling back to recent memories: {}", e.getMessage());
             }
 
             if (docTexts.isEmpty()) {
-                docTexts = loadRecentMemoryMetas(characterId, userId).stream()
+                retrievalBackend = "mysql";
+                List<MemoryMeta> recent = loadRecentMemoryMetas(characterId, userId);
+                for (MemoryMeta meta : recent) {
+                    if (meta.getId() != null && meta.getSummary() != null) {
+                        memoryIdBySummary.putIfAbsent(meta.getSummary(), meta.getId());
+                    }
+                }
+                docTexts = recent.stream()
                         .map(m -> m.getSummary() != null ? m.getSummary() : "")
                         .filter(s -> !s.isBlank())
                         .toList();
@@ -131,9 +159,17 @@ public class MemoryRetriever {
                     .limit(topK)
                     .map(d -> "- " + d.text())
                     .toList();
+            List<Long> recalledIds = reranked.stream()
+                    .limit(topK)
+                    .map(d -> memoryIdBySummary.get(d.text()))
+                    .filter(id -> id != null)
+                    .distinct()
+                    .toList();
 
             log.info("Memory retrieved: {} results for query ({} chars)", summaries.size(), query.length());
             memoryCacheService.putSemanticResults(userId, characterId, query, summaries);
+            recallAuditService.record(userId, characterId, "SEMANTIC", retrievalBackend, query,
+                    recalledIds, summaries.size());
             return summaries;
         } catch (Exception e) {
             log.error("Memory retrieval failed", e);
@@ -284,6 +320,7 @@ public class MemoryRetriever {
 
     private MemoryMeta toMeta(CachedMemoryRow row) {
         MemoryMeta meta = new MemoryMeta();
+        meta.setId(row.getId());
         meta.setSummary(row.getSummary());
         meta.setMemoryType(row.getMemoryType());
         meta.setImportance(row.getImportance());
@@ -292,6 +329,7 @@ public class MemoryRetriever {
 
     private CachedMemoryRow toCachedRow(MemoryMeta meta) {
         CachedMemoryRow row = new CachedMemoryRow();
+        row.setId(meta.getId());
         row.setSummary(meta.getSummary());
         row.setMemoryType(meta.getMemoryType());
         row.setImportance(meta.getImportance());

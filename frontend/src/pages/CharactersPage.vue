@@ -5,9 +5,19 @@
         <h1 class="page-title">我的羁绊</h1>
         <p class="page-desc">点开头像继续对话，或创建属于你的角色</p>
       </div>
-      <el-button v-bubble-btn type="primary" class="btn-cta" :icon="Plus" @click="showCreateDialog">
-        创建角色
-      </el-button>
+      <div class="page-header__actions">
+        <el-button :icon="Upload" :loading="importing" @click="triggerCardImport">导入角色卡</el-button>
+        <el-button v-bubble-btn type="primary" class="btn-cta" :icon="Plus" @click="showCreateDialog">
+          创建角色
+        </el-button>
+        <input
+          ref="cardFileInput"
+          type="file"
+          accept=".png,.json,image/png,application/json"
+          style="display:none"
+          @change="handleCardImport"
+        />
+      </div>
     </header>
 
     <div v-if="loading" class="loading-state">
@@ -80,6 +90,15 @@
         <div class="card-footer" @click.stop>
           <el-button text :icon="ChatDotRound" size="small" @click="startChat(char)">对话</el-button>
           <el-button text :icon="Setting" size="small" @click="openCharacterSettings(char)">{{ t('characters.settings') }}</el-button>
+          <el-dropdown trigger="click" @command="format => handleCardExport(char, format)">
+            <el-button text :icon="Download" size="small">导出</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="png">PNG 角色卡</el-dropdown-item>
+                <el-dropdown-item command="json">JSON 角色卡</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button text :icon="Delete" size="small" class="btn-delete" @click="confirmDelete(char)">
             删除
           </el-button>
@@ -266,7 +285,7 @@ import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { uploadAvatar, generateCharacter } from '@/api/character'
+import { uploadAvatar, generateCharacter, importCharacterCard, exportCharacterCard } from '@/api/character'
 import { createConversation } from '@/api/conversation'
 import { useCharactersStore } from '@/stores/characters'
 import { useCharacterSquareStore } from '@/stores/characterSquare'
@@ -275,7 +294,7 @@ import { listNotifications } from '@/api/notification'
 import { useConversationUnread } from '@/composables/useConversationUnread'
 import { useResponsiveDialogWidth } from '@/composables/useResponsiveDialogWidth'
 import { useNotificationsStore } from '@/stores/notifications'
-import { Plus, Delete, User, Loading, ChatDotRound, UploadFilled, Setting } from '@element-plus/icons-vue'
+import { Plus, Delete, User, Loading, ChatDotRound, UploadFilled, Upload, Download, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveMediaUrl } from '@/utils/media'
 import { fixUtf8Mojibake } from '@/utils/textEncoding'
@@ -314,10 +333,12 @@ const submitting = ref(false)
 const generating = ref(false)
 const formRef = ref(null)
 const fileInput = ref(null)
+const cardFileInput = ref(null)
 const settingsText = ref('')
 const avatarFile = ref(null)
 const generatorDescription = ref('')
 const isDragging = ref(false)
+const importing = ref(false)
 
 const initialForm = () => ({
   name: '',
@@ -474,6 +495,64 @@ function showCreateDialog() {
 
 function triggerUpload() {
   fileInput.value?.click()
+}
+
+function triggerCardImport() {
+  cardFileInput.value?.click()
+}
+
+async function handleCardImport(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  if (!/\.(png|json)$/i.test(file.name)) {
+    ElMessage.warning('请选择 SillyTavern PNG 或 JSON 角色卡')
+    return
+  }
+  let city = getSavedUserCity()?.trim()
+  if (!city) {
+    try {
+      const answer = await ElMessageBox.prompt(
+        '导入角色需要一个现实城市，用于天气和主动陪伴。之后可以在角色设置中修改。',
+        '填写所在城市',
+        { inputPlaceholder: '例如：上海', inputPattern: /\S+/, inputErrorMessage: '请输入城市' }
+      )
+      city = answer.value.trim()
+      saveUserCity(city)
+    } catch {
+      return
+    }
+  }
+  importing.value = true
+  try {
+    const character = await importCharacterCard(file, { cityMode: 'real', city })
+    charactersStore.upsertLocal(character)
+    await charactersStore.fetchList({ force: true })
+    ElMessage.success(`已导入「${character.name}」`)
+  } finally {
+    importing.value = false
+  }
+}
+
+async function handleCardExport(character, format) {
+  try {
+    const blob = await exportCharacterCard(character.id, format)
+    const href = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = href
+    anchor.download = `${sanitizeDownloadName(character.name)}.${format}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(href)
+    ElMessage.success('角色卡已导出')
+  } catch {
+    // Error toast is handled by the HTTP interceptor.
+  }
+}
+
+function sanitizeDownloadName(name) {
+  return String(name || 'character').replace(/[\\/:*?"<>|\r\n]/g, '_').trim() || 'character'
 }
 
 function applyAvatarFile(file) {
@@ -807,8 +886,16 @@ async function startChat(char) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: $space-4;
   margin-bottom: $space-8;
   animation: fadeSlideUp 0.5s ease both;
+}
+
+.page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: $space-2;
 }
 
 .page-title {
@@ -987,6 +1074,15 @@ async function startChat(char) {
 }
 
 @media (max-width: 480px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .page-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .form-row-3 {
     grid-template-columns: 1fr;
   }

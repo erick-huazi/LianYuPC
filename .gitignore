@@ -34,10 +34,18 @@ backend/lianyu-service/src/main/resources/pet-voice-samples/*.wav
 !backend/lianyu-service/src/main/resources/pet-voice-samples/*-clip.wav
 
 # Node / Frontend
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-electron/
 frontend/release/
+docs/demo-video/.hyperframes/
+docs/demo-video/renders/
+scripts/e2e/artifacts/
+
+# Python
+__pycache__/
+*.py[cod]
 
 # Docker
 docker-compose.override.yml

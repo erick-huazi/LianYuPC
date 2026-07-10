@@ -38,6 +38,8 @@ class MemoryWriterDebounceTest {
         messageMapper = mock(MessageMapper.class);
         when(messageMapper.selectList(any())).thenReturn(List.of());
 
+        MemoryPreferenceService preferenceService = mock(MemoryPreferenceService.class);
+        when(preferenceService.isEnabled(any(), any())).thenReturn(true);
         writer = new MemoryWriter(
                 messageMapper,
                 mock(MemoryMetaMapper.class),
@@ -46,7 +48,8 @@ class MemoryWriterDebounceTest {
                 mock(MemoryExtractionService.class),
                 mock(MemoryVectorStore.class),
                 mock(MemoryMilvusSyncService.class),
-                redisTemplate);
+                redisTemplate,
+                preferenceService);
     }
 
     @Test

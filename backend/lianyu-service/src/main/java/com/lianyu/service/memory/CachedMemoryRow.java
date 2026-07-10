@@ -6,6 +6,7 @@ import lombok.Data;
 
 @Data
 public class CachedMemoryRow {
+    private Long id;
     private String summary;
     private MemoryType memoryType;
     private BigDecimal importance;

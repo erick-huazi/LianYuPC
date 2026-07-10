@@ -101,6 +101,9 @@ public class AiChatService {
     @Value("${lianyu.ai.vision.base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}")
     private String visionBaseUrl;
 
+    @Value("${lianyu.ai.allow-private-base-urls:false}")
+    private boolean allowPrivateBaseUrls;
+
     @Value("${lianyu.ai.embedding.api-key:}")
     private String embeddingApiKey;
 
@@ -1063,7 +1066,7 @@ public class AiChatService {
         String baseUrl = vault.getBaseUrl();
         if (!ApiKeyVaultService.isOllamaEndpoint(baseUrl)) {
             String resolved = baseUrl != null && !baseUrl.isBlank() ? baseUrl : platformBaseUrl;
-            OutboundUrlValidator.validateAndNormalize(resolved, false);
+            OutboundUrlValidator.validateAndNormalize(resolved, false, allowPrivateBaseUrls);
         }
         if (ApiKeyVaultService.isOllamaEndpoint(baseUrl)) {
             OllamaApi ollamaApi = OllamaApi.builder()

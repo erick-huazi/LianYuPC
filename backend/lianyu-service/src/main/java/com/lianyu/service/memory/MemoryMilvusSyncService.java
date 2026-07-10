@@ -31,7 +31,7 @@ public class MemoryMilvusSyncService {
     @Order(100)
     @EventListener(ApplicationReadyEvent.class)
     public void resyncOnStartupIfNeeded() {
-        if (!resyncOnStartup) {
+        if (!resyncOnStartup || !memoryVectorStore.isAvailable()) {
             return;
         }
         if (Boolean.TRUE.equals(redisTemplate.hasKey(RESYNC_DONE_KEY))) {
@@ -46,6 +46,9 @@ public class MemoryMilvusSyncService {
     }
 
     public int resyncAll() {
+        if (!memoryVectorStore.isAvailable()) {
+            return 0;
+        }
         List<MemoryMeta> all = memoryMetaMapper.selectList(
                 new LambdaQueryWrapper<MemoryMeta>()
                         .isNotNull(MemoryMeta::getSummary)
@@ -59,8 +62,12 @@ public class MemoryMilvusSyncService {
         return synced;
     }
 
+    public boolean isVectorStoreAvailable() {
+        return memoryVectorStore.isAvailable();
+    }
+
     public boolean repairOne(Long memoryId) {
-        if (memoryId == null) {
+        if (memoryId == null || !memoryVectorStore.isAvailable()) {
             return false;
         }
         MemoryMeta meta = memoryMetaMapper.selectById(memoryId);

@@ -121,7 +121,7 @@ function buildMainCjsBundle() {
     bundle: true,
     platform: 'node',
     format: 'cjs',
-    external: ['electron', 'active-win', 'bytenode'],
+    external: ['electron', 'get-windows', 'bytenode'],
     packages: 'external',
     minify: true,
     sourcemap: false,

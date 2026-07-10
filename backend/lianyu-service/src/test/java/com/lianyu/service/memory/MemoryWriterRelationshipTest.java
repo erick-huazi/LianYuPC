@@ -35,8 +35,11 @@ class MemoryWriterRelationshipTest {
     void retrieveProfileContext_includesRelationBlockBeforePromptReturn() {
         MemoryMetaMapper memoryMetaMapper = Mockito.mock(MemoryMetaMapper.class);
         MemoryCacheService memoryCacheService = Mockito.mock(MemoryCacheService.class);
+        MemoryPreferenceService preferenceService = Mockito.mock(MemoryPreferenceService.class);
+        when(preferenceService.isEnabled(any(), any())).thenReturn(true);
         MemoryRetriever retriever = new MemoryRetriever(
-                null, null, memoryMetaMapper, memoryCacheService);
+                null, null, memoryMetaMapper, memoryCacheService, preferenceService,
+                Mockito.mock(MemoryRecallAuditService.class));
 
         MemoryMeta fact = new MemoryMeta();
         fact.setId(1L);

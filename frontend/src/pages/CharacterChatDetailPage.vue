@@ -104,6 +104,9 @@
           <el-form-item :label="t('characterSettings.showInnerThoughts')">
             <el-switch v-model="form.showInnerThoughts" />
           </el-form-item>
+          <el-form-item label="允许长期记忆">
+            <el-switch v-model="form.memoryEnabled" />
+          </el-form-item>
           <el-form-item :label="t('characterSettings.blocked')">
             <el-switch v-model="form.blocked" />
           </el-form-item>
@@ -149,6 +152,14 @@
       </div>
       <el-button type="danger" plain :loading="clearing" @click="handleClearConversation">清空记录</el-button>
     </section>
+
+    <section class="danger-card glass stagger-item">
+      <div>
+        <h3>清空长期记忆</h3>
+        <p>删除这个角色已提取的记忆及命中记录，不删除聊天消息。</p>
+      </div>
+      <el-button type="danger" plain :loading="clearingMemories" @click="handleClearMemories">清空记忆</el-button>
+    </section>
   </div>
 </template>
 
@@ -160,6 +171,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Loading, User, WarningFilled } from '@element-plus/icons-vue'
 import { getCharacter, updateCharacter, uploadChatBackground } from '@/api/character'
 import { deleteConversation, listConversations } from '@/api/conversation'
+import { clearMemories } from '@/api/memory'
 import { resolveMediaUrl } from '@/utils/media'
 import { normalizeHex } from '@/utils/themeColor'
 
@@ -169,6 +181,7 @@ const router = useRouter()
 const loading = ref(true)
 const saving = ref(false)
 const clearing = ref(false)
+const clearingMemories = ref(false)
 const bgUploading = ref(false)
 const character = ref(null)
 const bgFileInput = ref(null)
@@ -193,6 +206,7 @@ const form = reactive({
   useGlobalChatBackground: true,
   proactiveEnabled: true,
   showInnerThoughts: true,
+  memoryEnabled: true,
   doNotDisturbEnabled: true,
   blocked: false,
   dndStartMinutes: 23 * 60,
@@ -239,6 +253,7 @@ async function loadCharacter() {
     form.useGlobalChatBackground = settings.useGlobalChatBackground ?? true
     form.proactiveEnabled = settings.proactiveEnabled ?? true
     form.showInnerThoughts = settings.showInnerThoughts ?? true
+    form.memoryEnabled = settings.memoryEnabled ?? true
     form.doNotDisturbEnabled = settings.doNotDisturbEnabled ?? true
     form.blocked = settings.blocked ?? false
     form.dndStartMinutes = Number.isFinite(Number(settings.dndStartMinutes)) ? Number(settings.dndStartMinutes) : 23 * 60
@@ -274,6 +289,7 @@ async function handleSave() {
       useGlobalChatBackground: form.useGlobalChatBackground,
       proactiveEnabled: form.proactiveEnabled,
       showInnerThoughts: form.showInnerThoughts,
+      memoryEnabled: form.memoryEnabled,
       doNotDisturbEnabled: form.doNotDisturbEnabled,
       dndStartMinutes: clampMinutes(form.dndStartMinutes),
       dndEndMinutes: clampMinutes(form.dndEndMinutes),
@@ -316,6 +332,26 @@ async function handleClearConversation() {
     ElMessage.success('聊天记录已清空')
   } finally {
     clearing.value = false
+  }
+}
+
+async function handleClearMemories() {
+  if (!character.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${character.value.name}」的全部长期记忆和命中记录吗？`,
+      '清空长期记忆',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  clearingMemories.value = true
+  try {
+    const result = await clearMemories(character.value.id)
+    ElMessage.success(`已清空 ${result?.deleted || 0} 条记忆`)
+  } finally {
+    clearingMemories.value = false
   }
 }
 

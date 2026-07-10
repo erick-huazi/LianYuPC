@@ -48,6 +48,7 @@ public class MemoryWriter {
     private final MemoryVectorStore memoryVectorStore;
     private final MemoryMilvusSyncService memoryMilvusSyncService;
     private final StringRedisTemplate redisTemplate;
+    private final MemoryPreferenceService memoryPreferenceService;
     private final ScheduledExecutorService rescheduleExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "memory-summary-reschedule");
         t.setDaemon(true);
@@ -55,6 +56,10 @@ public class MemoryWriter {
     });
 
     public void enqueueSummary(Long conversationId, Long characterId, Long userId) {
+        if (!memoryPreferenceService.isEnabled(userId, characterId)) {
+            log.debug("Memory summary skipped by character privacy setting: characterId={}", characterId);
+            return;
+        }
         String debounceKey = debounceKey(conversationId, characterId);
         Boolean first = redisTemplate.opsForValue().setIfAbsent(debounceKey, "0", DEBOUNCE_TTL);
         if (Boolean.FALSE.equals(first)) {
@@ -69,6 +74,10 @@ public class MemoryWriter {
 
     public void processSummary(MemorySummaryTask task) {
         try {
+            if (!memoryPreferenceService.isEnabled(task.userId(), task.characterId())) {
+                log.debug("Queued memory task dropped by character privacy setting: characterId={}", task.characterId());
+                return;
+            }
             List<Message> recentMsgs = messageMapper.selectList(
                     new LambdaQueryWrapper<Message>()
                             .eq(Message::getConversationId, task.conversationId())
@@ -108,7 +117,9 @@ public class MemoryWriter {
                 Long memoryId = findMemoryIdBySourceHash(sourceHash);
                 if (memoryId != null) {
                     MemoryMeta saved = memoryMetaMapper.selectById(memoryId);
-                    if (saved != null && (saved.getMilvusVecId() == null || saved.getMilvusVecId().isBlank())) {
+                    if (saved != null
+                            && memoryMilvusSyncService.isVectorStoreAvailable()
+                            && (saved.getMilvusVecId() == null || saved.getMilvusVecId().isBlank())) {
                         memoryMilvusSyncService.repairOne(memoryId);
                     }
                 }
@@ -135,7 +146,7 @@ public class MemoryWriter {
         String debounceKey = debounceKey(task.conversationId(), task.characterId());
         String pending = redisTemplate.opsForValue().get(debounceKey);
         redisTemplate.delete(debounceKey);
-        if (!"1".equals(pending)) {
+        if (!"1".equals(pending) || !memoryPreferenceService.isEnabled(task.userId(), task.characterId())) {
             return;
         }
         rescheduleExecutor.schedule(
@@ -189,7 +200,8 @@ public class MemoryWriter {
                 meta.setMilvusVecId(vecId);
                 memoryMetaMapper.updateById(meta);
             } else {
-                log.warn("Milvus insert returned null: memoryId={}, convCharacter={}/{}",
+                log.debug("Vector insert unavailable or failed: backend={}, memoryId={}, convCharacter={}/{}",
+                        memoryVectorStore.backendName(),
                         meta.getId(), task.characterId(), task.userId());
             }
             return MemoryUpsertResult.CREATED;
@@ -224,7 +236,8 @@ public class MemoryWriter {
             existing.setMilvusVecId(vecId);
             memoryMetaMapper.updateById(existing);
         } else {
-            log.warn("Milvus insert returned null on update: memoryId={}", existing.getId());
+            log.debug("Vector insert unavailable or failed on update: backend={}, memoryId={}",
+                    memoryVectorStore.backendName(), existing.getId());
         }
         return MemoryUpsertResult.UPDATED;
     }

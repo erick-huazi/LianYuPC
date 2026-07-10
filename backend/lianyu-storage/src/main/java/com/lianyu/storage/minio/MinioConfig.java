@@ -3,9 +3,8 @@ package com.lianyu.storage.minio;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -31,7 +30,7 @@ public class MinioConfig {
                 .build();
     }
 
-    @EventListener(ApplicationReadyEvent.class)
+    @PostConstruct
     public void initBucket() {
         try {
             MinioClient client = minioClient();

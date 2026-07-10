@@ -97,6 +97,7 @@ export async function electronMainProcessAdapter(config) {
 
 export function shouldUseMainProcessAdapter(config) {
   if (!import.meta.env.PROD) return false
+  if (config?.useRendererAdapter === true) return false
   const data = config?.data
   if (typeof FormData !== 'undefined' && data instanceof FormData) return false
   // 桌宠 / picker / 快捷聊天：与加固前一致走渲染进程直连，避免 api:request IPC 卡住

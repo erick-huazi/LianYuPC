@@ -6,6 +6,7 @@ import com.lianyu.common.base.Result;
 import com.lianyu.dao.entity.Character;
 import com.lianyu.dao.entity.Conversation;
 import com.lianyu.dao.entity.MemoryMeta;
+import com.lianyu.dao.entity.MemoryRecallLog;
 import com.lianyu.dao.entity.Message;
 import com.lianyu.dao.mapper.CharacterMapper;
 import com.lianyu.dao.mapper.ConversationMapper;
@@ -13,6 +14,7 @@ import com.lianyu.dao.mapper.MemoryMetaMapper;
 import com.lianyu.dao.mapper.MessageMapper;
 import com.lianyu.service.memory.MemoryCacheService;
 import com.lianyu.service.memory.MemoryWriter;
+import com.lianyu.service.memory.MemoryRecallAuditService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class MemoryController {
     private final ConversationMapper conversationMapper;
     private final MemoryWriter memoryWriter;
     private final MemoryCacheService memoryCacheService;
+    private final MemoryRecallAuditService memoryRecallAuditService;
 
     @Operation(summary = "记忆列表（按角色分组）")
     @GetMapping
@@ -123,6 +126,50 @@ public class MemoryController {
         return Result.ok(result);
     }
 
+    @Operation(summary = "最近记忆命中记录（不保存原始查询）")
+    @GetMapping("/recalls")
+    public Result<List<Map<String, Object>>> listRecalls(
+            @RequestParam(required = false) Long characterId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        long userId = StpUtil.getLoginIdAsLong();
+        List<MemoryRecallLog> logs = memoryRecallAuditService.list(userId, characterId, page, size);
+        Set<Long> memoryIds = logs.stream()
+                .flatMap(log -> log.getMemoryIds() == null ? java.util.stream.Stream.empty() : log.getMemoryIds().stream())
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        Map<Long, String> summaries = memoryIds.isEmpty()
+                ? Map.of()
+                : memoryMetaMapper.selectList(new LambdaQueryWrapper<MemoryMeta>()
+                        .in(MemoryMeta::getId, memoryIds)
+                        .eq(MemoryMeta::getUserId, userId)).stream()
+                        .filter(memory -> memory.getSummary() != null)
+                        .collect(Collectors.toMap(MemoryMeta::getId, MemoryMeta::getSummary, (a, b) -> a));
+        return Result.ok(logs.stream().map(log -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", log.getId());
+            row.put("characterId", log.getCharacterId());
+            row.put("route", log.getRoute());
+            row.put("backend", log.getBackend());
+            row.put("hitCount", log.getHitCount());
+            row.put("memoryIds", log.getMemoryIds());
+            row.put("summaries", log.getMemoryIds() == null ? List.of() : log.getMemoryIds().stream()
+                    .map(summaries::get)
+                    .filter(summary -> summary != null && !summary.isBlank())
+                    .toList());
+            row.put("createdAt", log.getCreatedAt());
+            return row;
+        }).toList());
+    }
+
+    @Operation(summary = "清空记忆命中记录")
+    @DeleteMapping("/recalls")
+    public Result<Void> clearRecalls(@RequestParam(required = false) Long characterId) {
+        long userId = StpUtil.getLoginIdAsLong();
+        memoryRecallAuditService.clear(userId, characterId);
+        return Result.ok();
+    }
+
     @Operation(summary = "删除记忆")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
@@ -140,6 +187,33 @@ public class MemoryController {
         memoryMetaMapper.deleteById(id);
         memoryCacheService.invalidate(userId, meta.getCharacterId());
         return Result.ok();
+    }
+
+    @Operation(summary = "清空当前用户的全部记忆或指定角色记忆")
+    @DeleteMapping
+    public Result<Map<String, Object>> clear(@RequestParam(required = false) Long characterId) {
+        long userId = StpUtil.getLoginIdAsLong();
+        LambdaQueryWrapper<MemoryMeta> query = new LambdaQueryWrapper<MemoryMeta>()
+                .eq(MemoryMeta::getUserId, userId);
+        if (characterId != null) {
+            query.eq(MemoryMeta::getCharacterId, characterId);
+        }
+        List<MemoryMeta> memories = memoryMetaMapper.selectList(query);
+        memoryWriter.deleteVectors(memories.stream()
+                .map(MemoryMeta::getMilvusVecId)
+                .filter(id -> id != null && !id.isBlank())
+                .toList());
+        memoryMetaMapper.delete(query);
+        memories.stream()
+                .map(MemoryMeta::getCharacterId)
+                .filter(id -> id != null)
+                .distinct()
+                .forEach(id -> memoryCacheService.invalidate(userId, id));
+        memoryRecallAuditService.clear(userId, characterId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deleted", memories.size());
+        result.put("characterId", characterId);
+        return Result.ok(result);
     }
 
     private List<Message> filterMessagesOwnedByUser(long userId, List<Message> messages) {

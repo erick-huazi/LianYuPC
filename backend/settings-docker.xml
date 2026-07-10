@@ -3,16 +3,10 @@
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
     <mirrors>
         <mirror>
-            <id>aliyun</id>
+            <id>maven-central</id>
             <mirrorOf>central</mirrorOf>
-            <name>Aliyun Maven Mirror</name>
-            <url>https://maven.aliyun.com/repository/public</url>
-        </mirror>
-        <mirror>
-            <id>aliyun-spring</id>
-            <mirrorOf>spring-milestones,spring-snapshots</mirrorOf>
-            <name>Aliyun Spring Mirror</name>
-            <url>https://maven.aliyun.com/repository/spring</url>
+            <name>Maven Central</name>
+            <url>https://repo.maven.apache.org/maven2</url>
         </mirror>
     </mirrors>
 </settings>

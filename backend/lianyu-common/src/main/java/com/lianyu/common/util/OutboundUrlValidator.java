@@ -27,6 +27,15 @@ public final class OutboundUrlValidator {
      * Ollama 本地端点单独放行（仅本机 11434）。
      */
     public static String validateAndNormalize(String baseUrl, boolean ollamaAllowed) {
+        return validateAndNormalize(baseUrl, ollamaAllowed, false);
+    }
+
+    /**
+     * @param allowPrivateAddresses opt-in for self-hosted local deployments. Cloud deployments must keep this false.
+     */
+    public static String validateAndNormalize(String baseUrl,
+                                              boolean ollamaAllowed,
+                                              boolean allowPrivateAddresses) {
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 不能为空");
         }
@@ -45,19 +54,23 @@ public final class OutboundUrlValidator {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 缺少主机名");
         }
         String lowerHost = host.toLowerCase(Locale.ROOT);
-        if (BLOCKED_HOSTS.contains(lowerHost)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 不允许指向本机或元数据地址");
-        }
-        if (lowerHost.endsWith(".local") || lowerHost.endsWith(".internal")) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 主机名不允许使用内网域名");
+        if ("metadata.google.internal".equals(lowerHost) || "0.0.0.0".equals(lowerHost)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 不允许指向元数据或通配地址");
         }
         if (ollamaAllowed && isOllamaLocalEndpoint(trimmed, lowerHost)) {
             return trimmed;
         }
+        if (BLOCKED_HOSTS.contains(lowerHost) && !allowPrivateAddresses) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 不允许指向本机或元数据地址");
+        }
+        if ((lowerHost.endsWith(".local") || lowerHost.endsWith(".internal")) && !allowPrivateAddresses) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Base URL 主机名不允许使用内网域名");
+        }
         try {
             InetAddress[] addresses = InetAddress.getAllByName(host);
             for (InetAddress address : addresses) {
-                if (isBlockedAddress(address)) {
+                if (isAlwaysBlockedAddress(address)
+                        || (!allowPrivateAddresses && isPrivateAddress(address))) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST,
                             "Base URL 解析到内网或保留地址，不允许访问");
                 }
@@ -68,20 +81,45 @@ public final class OutboundUrlValidator {
         return trimmed;
     }
 
+    public static boolean isPrivateEndpoint(String baseUrl) {
+        try {
+            URI uri = new URI(baseUrl);
+            String host = uri.getHost();
+            if (host == null || host.isBlank()) {
+                return false;
+            }
+            String lowerHost = host.toLowerCase(Locale.ROOT);
+            if ("localhost".equals(lowerHost) || "127.0.0.1".equals(lowerHost)
+                    || "::1".equals(lowerHost) || "host.docker.internal".equals(lowerHost)
+                    || lowerHost.endsWith(".local")) {
+                return true;
+            }
+            for (InetAddress address : InetAddress.getAllByName(host)) {
+                if (isPrivateAddress(address)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     public static boolean isOllamaLocalEndpoint(String baseUrl, String lowerHost) {
         if (baseUrl == null) {
             return false;
         }
-        String lower = baseUrl.toLowerCase(Locale.ROOT);
-        return (lower.contains(":11434") || lower.contains("ollama"))
-                && ("localhost".equals(lowerHost) || "127.0.0.1".equals(lowerHost));
+        try {
+            URI uri = new URI(baseUrl);
+            return uri.getPort() == 11434
+                    && ("localhost".equals(lowerHost) || "127.0.0.1".equals(lowerHost));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
-    private static boolean isBlockedAddress(InetAddress address) {
-        if (address.isAnyLocalAddress()
-                || address.isLoopbackAddress()
-                || address.isLinkLocalAddress()
-                || address.isSiteLocalAddress()) {
+    private static boolean isAlwaysBlockedAddress(InetAddress address) {
+        if (address.isAnyLocalAddress() || address.isLinkLocalAddress()) {
             return true;
         }
         byte[] bytes = address.getAddress();
@@ -98,5 +136,9 @@ public final class OutboundUrlValidator {
             }
         }
         return false;
+    }
+
+    private static boolean isPrivateAddress(InetAddress address) {
+        return address.isLoopbackAddress() || address.isSiteLocalAddress();
     }
 }

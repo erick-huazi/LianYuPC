@@ -202,7 +202,10 @@
             v-model="form.baseUrl"
             placeholder="例如 https://api.deepseek.com 或 http://localhost:11434"
           />
-          <p class="field-hint">决定实际连接哪个 AI 服务，须以 http:// 或 https:// 开头。DeepSeek 官方填 <code>https://api.deepseek.com</code>（不要带 /v1）。</p>
+          <p class="field-hint">
+            支持 OpenAI 兼容服务。DeepSeek 官方填 <code>https://api.deepseek.com</code>；
+            轻量本地模式也可连接 LM Studio、LocalAI 或 vLLM 的 <code>/v1</code> 地址。
+          </p>
         </el-form-item>
 
         <el-form-item label="默认模型（必填）" prop="modelDefault">
@@ -272,9 +275,21 @@ const isOllamaProvider = computed(() => {
   return url.includes(':11434') || url.includes('ollama')
 })
 
+const isLocalCompatibleProvider = computed(() => {
+  try {
+    const hostname = new URL(form.baseUrl.trim()).hostname.toLowerCase()
+    return hostname === 'localhost'
+      || hostname === '127.0.0.1'
+      || hostname === '::1'
+      || hostname === 'host.docker.internal'
+  } catch {
+    return false
+  }
+})
+
 const apiKeyPlaceholder = computed(() => {
   if (editingVault.value) return '留空表示不修改原密钥'
-  if (isOllamaProvider.value) return '本地 Ollama 可留空'
+  if (isOllamaProvider.value || isLocalCompatibleProvider.value) return '本地服务可留空'
   return '填写服务商提供的 API Key'
 })
 
@@ -300,7 +315,7 @@ const formRules = computed(() => ({
   baseUrl: [{ required: true, validator: validateHttpUrl, trigger: 'blur' }],
   modelDefault: [{ required: true, message: '请输入默认模型', trigger: 'blur' }],
   apiKey:
-    !editingVault.value && !isOllamaProvider.value
+    !editingVault.value && !isOllamaProvider.value && !isLocalCompatibleProvider.value
       ? [{ required: true, message: '请输入 API Key', trigger: 'blur' }]
       : []
 }))
@@ -402,7 +417,7 @@ async function handleSubmit() {
     }
     const data = {
       ...(alias ? { provider: alias } : {}),
-      apiKey: form.apiKey?.trim() || (isOllamaProvider.value ? 'local' : ''),
+      apiKey: form.apiKey?.trim() || ((isOllamaProvider.value || isLocalCompatibleProvider.value) ? 'local' : ''),
       baseUrl: form.baseUrl.trim(),
       modelDefault: form.modelDefault.trim(),
     }

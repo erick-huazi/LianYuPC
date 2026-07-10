@@ -41,3 +41,23 @@ export function uploadChatBackground(id, file) {
 export function generateCharacter(data) {
   return http.post('/character/generate', data, { timeout: 120000 })
 }
+
+export function importCharacterCard(file, { cityMode = 'real', city = '' } = {}) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('cityMode', cityMode)
+  if (city) formData.append('city', city)
+  return http.post('/character/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}
+
+export function exportCharacterCard(id, format = 'png') {
+  return http.get(`/character/${id}/export`, {
+    params: { format },
+    responseType: 'blob',
+    useRendererAdapter: true,
+    timeout: 120000
+  })
+}
