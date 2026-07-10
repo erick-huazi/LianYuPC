@@ -6,7 +6,7 @@
 
     <groupId>com.lianyu</groupId>
     <artifactId>lianyu-pc</artifactId>
-    <version>0.3.0-rc.1</version>
+    <version>0.3.0-rc.2</version>
     <packaging>pom</packaging>
 
     <name>LianYu-PC</name>

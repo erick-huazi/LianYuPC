@@ -7,8 +7,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "build" / "logo-source.png"
+SOURCE = ROOT / "build" / "logo-amiweave.png"
 OUT_PNG = ROOT / "public" / "logo.png"
+OUT_MAC_PNG = ROOT / "build" / "icon.png"
 OUT_ICO = ROOT / "build" / "icon.ico"
 
 ICO_SIZES = [(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (24, 24), (16, 16)]
@@ -139,7 +140,7 @@ def build_icon(src: Path) -> Image.Image:
 
 def save_png(img: Image.Image, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    img.save(dest, format="PNG", optimize=False, compress_level=3)
+    img.save(dest, format="PNG", optimize=True, compress_level=9)
 
 
 def save_ico(img: Image.Image, dest: Path) -> None:
@@ -164,14 +165,18 @@ def ensure_source() -> None:
 def main() -> None:
     ensure_source()
     icon = build_icon(SOURCE)
-    save_png(icon, OUT_PNG)
+    public_icon = icon.resize((512, 512), Image.Resampling.LANCZOS)
+    mac_icon = icon.resize((1024, 1024), Image.Resampling.LANCZOS)
+    save_png(public_icon, OUT_PNG)
+    save_png(mac_icon, OUT_MAC_PNG)
     save_ico(icon, OUT_ICO)
 
     from PIL import IcoImagePlugin
 
     entries = IcoImagePlugin.IcoImageFile(OUT_ICO).ico.entry
     dims = [e.dim for e in entries]
-    print(f"Wrote {OUT_PNG} ({icon.size[0]}px)")
+    print(f"Wrote {OUT_PNG} ({public_icon.size[0]}px)")
+    print(f"Wrote {OUT_MAC_PNG} ({mac_icon.size[0]}px)")
     print(f"Wrote {OUT_ICO} with sizes: {dims}")
 
 

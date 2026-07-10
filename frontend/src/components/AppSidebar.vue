@@ -2,10 +2,10 @@
   <aside class="app-sidebar" :class="{ collapsed: settingsStore.sidebarCollapsed }">
     <div class="sidebar-brand" @click="$router.push('/app')">
       <div class="brand-icon">
-        <img :src="APP_LOGO" alt="LianYu" class="brand-logo" />
+        <img :src="APP_LOGO" alt="Amiweave" class="brand-logo" />
       </div>
       <transition name="fade">
-        <span v-show="!settingsStore.sidebarCollapsed" class="brand-text">LianYu</span>
+        <span v-show="!settingsStore.sidebarCollapsed" class="brand-text">Amiweave</span>
       </transition>
     </div>
 

@@ -48,6 +48,16 @@ import { RENDERER_AUTH_TOKEN_SCRIPT } from './rendererTokenScript.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const nodeRequire = createRequire(import.meta.url)
+
+// Reuse RC-era local sessions and settings after the public product rename.
+const currentUserDataPath = app.getPath('userData')
+if (!fs.existsSync(currentUserDataPath)) {
+  const legacyUserDataPath = ['LianYu', 'lianyu-pc']
+    .map((name) => path.join(app.getPath('appData'), name))
+    .find((candidate) => fs.existsSync(candidate))
+  if (legacyUserDataPath) app.setPath('userData', legacyUserDataPath)
+}
+
 /** 主进程在 app.asar 内时，默认 fs 无法读取 asar 本体，需用 original-fs */
 const rawFs = nodeRequire('original-fs')
 
@@ -273,20 +283,20 @@ function verifyAsarIntegrity() {
     }
     if (!expected || expected.length !== 64) {
       log('asar integrity hash not found')
-      dialog.showErrorBox('LianYu', '客户端完整性校验文件缺失，请重新安装。')
+      dialog.showErrorBox('Amiweave', '客户端完整性校验文件缺失，请重新安装。')
       app.exit(1)
       return
     }
 
     if (hash !== expected) {
-      dialog.showErrorBox('LianYu', '客户端文件被篡改，请重新安装。')
+      dialog.showErrorBox('Amiweave', '客户端文件被篡改，请重新安装。')
       app.exit(1)
     }
 
     log('asar integrity verification OK')
   } catch (err) {
     log(`asar integrity verification failed: ${err.message}`)
-    dialog.showErrorBox('LianYu', '客户端完整性校验失败，请重新安装。')
+    dialog.showErrorBox('Amiweave', '客户端完整性校验失败，请重新安装。')
     app.exit(1)
   }
 }
@@ -634,7 +644,7 @@ function ensureTray() {
   if (tray) return tray
 
   tray = new Tray(resolveTrayIcon())
-  tray.setToolTip('LianYu - 恋语')
+  tray.setToolTip('Amiweave')
   tray.setContextMenu(buildTrayMenu())
   tray.on('double-click', () => {
     showMainWindow()
@@ -645,7 +655,7 @@ function ensureTray() {
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
-      label: '打开 LianYu',
+      label: '打开 Amiweave',
       click: () => showMainWindow(),
     },
     {
@@ -731,7 +741,7 @@ function showLauncherMessageNotification(payload = {}) {
   const name = String(payload.characterName || '她').trim() || '她'
   const body = `${name}给你发消息了哦`
   const notification = new Notification({
-    title: '恋语',
+    title: 'Amiweave',
     body,
     silent: false,
   })
@@ -1117,7 +1127,7 @@ function createMainWindow() {
     height: 800,
     minWidth: 960,
     minHeight: 640,
-    title: 'LianYu - 恋语',
+    title: 'Amiweave',
     icon: resolveDistPath('logo.png'),
     backgroundColor: resolveWindowBackgroundColor(appearanceMode),
     ...buildCaptionWindowOptions(),
@@ -1424,7 +1434,7 @@ function openQuickChatWindow(conversationId) {
     height: 560,
     minWidth: 320,
     minHeight: 420,
-    title: 'LianYu 聊天',
+    title: 'Amiweave 聊天',
     icon: resolveDistPath('logo.png'),
     backgroundColor: resolveWindowBackgroundColor(appearance),
     ...buildQuickChatWindowOptions(),
@@ -1921,16 +1931,21 @@ async function runLauncherSmokeTest() {
     })
     win.show()
     resetLauncherInteraction()
-    await new Promise((r) => setTimeout(r, 400))
-    const probe = await win.webContents.executeJavaScript(
-      `(() => ({
-        hasApi: typeof window.electronAPI !== 'undefined',
-        isElectron: window.electronAPI?.isElectron === true,
-        hasToggle: typeof window.electronAPI?.toggleCharacterPicker === 'function',
-        hasHitbox: !!document.querySelector('.pet-hitbox'),
-      }))()`,
-      true,
-    )
+    const probeDeadline = Date.now() + 5000
+    let probe = null
+    do {
+      probe = await win.webContents.executeJavaScript(
+        `(() => ({
+          hasApi: typeof window.electronAPI !== 'undefined',
+          isElectron: window.electronAPI?.isElectron === true,
+          hasToggle: typeof window.electronAPI?.toggleCharacterPicker === 'function',
+          hasHitbox: !!document.querySelector('.pet-hitbox'),
+        }))()`,
+        true,
+      )
+      if (probe?.hasApi && probe?.isElectron && probe?.hasToggle && probe?.hasHitbox) break
+      await new Promise((r) => setTimeout(r, 100))
+    } while (Date.now() < probeDeadline)
     if (!probe?.hasApi || !probe?.isElectron || !probe?.hasToggle || !probe?.hasHitbox) {
       throw new Error(`probe failed: ${JSON.stringify(probe)}`)
     }
@@ -1961,6 +1976,9 @@ async function runLauncherSmokeTest() {
 }
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.amiweave.desktop')
+}
 
 app.whenReady().then(() => {
   if (process.env.LIANYU_LAUNCHER_SMOKE === '1') {

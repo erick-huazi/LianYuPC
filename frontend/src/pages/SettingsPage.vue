@@ -43,7 +43,7 @@
         <div class="desktop-settings__row">
           <div>
             <div class="desktop-settings__label">开机自动启动</div>
-            <div class="desktop-settings__hint">登录 Windows 后自动在后台启动 LianYu</div>
+            <div class="desktop-settings__hint">登录 Windows 后自动在后台启动 Amiweave</div>
           </div>
           <el-switch v-model="desktopForm.launchAtLogin" @change="onDesktopChange" />
         </div>

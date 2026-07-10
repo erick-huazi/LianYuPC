@@ -1,20 +1,16 @@
-# LianYu-PC
+# Amiweave
 
 [![CI](https://github.com/erick-huazi/LianYuPC/actions/workflows/ci.yml/badge.svg)](https://github.com/erick-huazi/LianYuPC/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/erick-huazi/LianYuPC?include_prereleases)](https://github.com/erick-huazi/LianYuPC/releases)
 
-恋语是一个 AI 角色陪伴桌面/Web 应用。它把角色聊天、长期记忆、主动陪伴、桌面感知和多角色关系放在同一套可自托管系统中。
+Amiweave 是一个 AI 角色陪伴桌面/Web 应用。它把角色聊天、长期记忆、主动陪伴、桌面感知和多角色关系放在同一套可自托管系统中。
 
-## Screenshots And Demo
+## Screenshots
 
-[观看 18 秒产品演示（MP4）](docs/demo/lianyu-demo.mp4)
+![Amiweave 桌面首页](docs/screenshots/landing.jpg)
 
-| 桌面首页 | 核心能力 |
-|---|---|
-| ![LianYu 桌面首页](docs/screenshots/landing.png) | ![LianYu 核心能力](docs/screenshots/features.png) |
-
-<p align="center"><img src="docs/screenshots/landing-mobile.png" width="320" alt="LianYu 移动端首页"></p>
+<p align="center"><img src="docs/screenshots/landing-mobile.jpg" width="320" alt="Amiweave 移动端首页"></p>
 
 ## Features
 
@@ -133,11 +129,11 @@ npm run electron:dev
 发布版本号在前端 `package.json` 与后端 Maven Reactor 中保持一致。维护者完成验证后创建同名 tag：
 
 ```bash
-git tag v0.3.0-rc.1
-git push origin v0.3.0-rc.1
+git tag v0.3.0-rc.2
+git push origin v0.3.0-rc.2
 ```
 
-Release workflow 会重新运行前后端测试、构建 Windows 安装包、生成 SHA-256 校验文件并创建 GitHub Release。变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+Release workflow 会重新运行前后端测试，构建 Windows x64 与 macOS x64/arm64 安装包，生成 SHA-256 校验文件并创建 GitHub Release。候选版本尚未完成商业代码签名，安装时操作系统可能显示未知开发者提示。变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## Contributing
 
@@ -145,4 +141,4 @@ Release workflow 会重新运行前后端测试、构建 Windows 安装包、生
 
 ## License
 
-Copyright 2026 LianYu-PC contributors. Licensed under the [Apache License 2.0](LICENSE).
+Copyright 2026 Amiweave contributors. Licensed under the [Apache License 2.0](LICENSE).

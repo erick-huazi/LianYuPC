@@ -2,7 +2,6 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import asarmor from 'asarmor'
 import rcedit from 'rcedit'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -42,6 +41,12 @@ async function patchAsarArchive(asarPath) {
     console.log('app.asar not found, skipping asarmor patch')
     return false
   }
+  if (process.env.LIANYU_SKIP_ASARMOR === 'true') {
+    console.warn('Skipping asarmor patch for this local verification build')
+    return false
+  }
+
+  const { default: asarmor } = await import('asarmor')
 
   const patchedPath = `${asarPath}.patched`
   for (const stale of [`${asarPath}.tmp`, patchedPath, `${patchedPath}.tmp`]) {
@@ -73,15 +78,28 @@ function writeAsarIntegrityHex(context) {
 
 /** 把 logo 写进 exe，桌面快捷方式才会显示正确图标 */
 export default async function afterPack(context) {
-  if (context.electronPlatformName !== 'win32') return
-
   const asarPath = path.join(context.appOutDir, 'resources', 'app.asar')
   await patchAsarArchive(asarPath)
 
-  const exeName = `${context.packager.appInfo.productFilename}.exe`
-  const exePath = path.join(context.appOutDir, exeName)
-  const iconPath = path.join(root, 'build', 'icon.ico')
+  if (context.electronPlatformName === 'win32') {
+    const appInfo = context.packager.appInfo
+    const exeName = `${context.packager.appInfo.productFilename}.exe`
+    const exePath = path.join(context.appOutDir, exeName)
+    const iconPath = path.join(root, 'build', 'icon.ico')
 
-  await rcedit(exePath, { icon: iconPath })
+    await rcedit(exePath, {
+      'version-string': {
+        CompanyName: appInfo.companyName || 'Amiweave contributors',
+        FileDescription: appInfo.productName,
+        InternalName: appInfo.productFilename,
+        LegalCopyright: appInfo.copyright,
+        OriginalFilename: exeName,
+        ProductName: appInfo.productName,
+      },
+      'file-version': appInfo.shortVersion || appInfo.buildVersion,
+      'product-version': appInfo.shortVersionWindows || appInfo.getVersionInWeirdWindowsForm(),
+      icon: iconPath,
+    })
+  }
   writeAsarIntegrityHex(context)
 }

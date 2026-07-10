@@ -1,6 +1,6 @@
 # 生产静态资源 + Nginx（API/WS 反代 backend:8080）
 # 构建: docker compose --profile full build frontend
-# 或:   docker build -t lianyu-pc/frontend:dev ./frontend
+# 或:   docker build -t amiweave/frontend:dev ./frontend
 
 FROM node:20-alpine AS build
 WORKDIR /build

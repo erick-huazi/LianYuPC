@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -198,15 +198,35 @@ const viteEnv = {
 }
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+const platformByHost = { win32: 'win', darwin: 'mac' }
+const targetPlatform = process.argv[2] || platformByHost[process.platform]
+
+if (!['win', 'mac'].includes(targetPlatform)) {
+  throw new Error(`Unsupported desktop target: ${targetPlatform || process.platform}`)
+}
+if (platformByHost[process.platform] !== targetPlatform) {
+  throw new Error(`${targetPlatform} packages must be built on a matching host`)
+}
+
+const productName = pkg.build?.productName || 'Amiweave'
+const distributableExtensions = new Set(['.exe', '.dmg', '.zip'])
+
+function hasDistributable(dirPath) {
+  if (!fs.existsSync(dirPath)) return false
+  return fs.readdirSync(dirPath).some((name) => distributableExtensions.has(path.extname(name)))
+}
 
 function resolveReleaseOutDir(version) {
   const primary = path.join('release', `v${version}`)
   const primaryFull = path.join(root, primary)
-  const installer = path.join(primaryFull, `LianYu Setup ${version}.exe`)
-  if (fs.existsSync(installer)) return primary
+  if (hasDistributable(primaryFull)) return primary
 
-  const winUnpacked = path.join(primaryFull, 'win-unpacked')
-  if (fs.existsSync(winUnpacked)) {
+  const partialPrefixes = targetPlatform === 'win'
+    ? ['win-unpacked']
+    : ['mac', 'mac-arm64', 'mac-universal']
+  const hasPartial = fs.existsSync(primaryFull)
+    && fs.readdirSync(primaryFull).some((name) => partialPrefixes.some((prefix) => name.startsWith(prefix)))
+  if (hasPartial) {
     const fallback = `${primary}-rebuild`
     console.warn(`Partial release folder exists without installer (${primary}), using ${fallback}`)
     return fallback
@@ -218,31 +238,41 @@ const outDir = resolveReleaseOutDir(pkg.version)
 const outDirFull = path.join(root, outDir)
 fs.mkdirSync(outDirFull, { recursive: true })
 
-function killLianYuProcesses() {
+function killDesktopProcesses() {
   if (process.platform !== 'win32') return
-  try {
-    execSync('taskkill /F /IM LianYu.exe /T', { stdio: 'ignore' })
-    console.log('Stopped running LianYu.exe before packaging')
-  } catch {
-    /* not running */
+  for (const executable of ['Amiweave.exe', 'LianYu.exe']) {
+    try {
+      execSync(`taskkill /F /IM ${executable} /T`, { stdio: 'ignore' })
+      console.log(`Stopped running ${executable} before packaging`)
+    } catch {
+      /* not running */
+    }
   }
 }
 
 function removePartialReleaseArtifacts() {
-  const installer = path.join(outDirFull, `LianYu Setup ${pkg.version}.exe`)
-  const winUnpacked = path.join(outDirFull, 'win-unpacked')
-  if (fs.existsSync(installer)) return
-  if (!fs.existsSync(winUnpacked)) return
-  try {
-    fs.rmSync(winUnpacked, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
-    console.log(`Removed partial release folder: ${path.relative(root, winUnpacked)}`)
-  } catch (err) {
-    console.warn(`Could not remove partial release folder (continuing): ${err.message}`)
+  if (hasDistributable(outDirFull) || !fs.existsSync(outDirFull)) return
+  const partialPrefixes = targetPlatform === 'win'
+    ? ['win-unpacked']
+    : ['mac', 'mac-arm64', 'mac-universal']
+  for (const name of fs.readdirSync(outDirFull)) {
+    if (!partialPrefixes.some((prefix) => name.startsWith(prefix))) continue
+    const partialPath = path.join(outDirFull, name)
+    try {
+      fs.rmSync(partialPath, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+      console.log(`Removed partial release folder: ${path.relative(root, partialPath)}`)
+    } catch (err) {
+      console.warn(`Could not remove partial release folder (continuing): ${err.message}`)
+    }
   }
 }
 
 ensureElectronRuntime(root)
-execSync('python scripts/regenerate-icon.py', { stdio: 'inherit' })
+execFileSync(process.env.PYTHON || 'python', ['scripts/regenerate-icon.py'], {
+  cwd: root,
+  stdio: 'inherit',
+  env: process.env,
+})
 removePreViteStaleEntries()
 execSync('npx vite build', { stdio: 'inherit', env: viteEnv })
 
@@ -268,14 +298,22 @@ if (process.env.LIANYU_PACKAGE_AUDITABLE_SOURCE === 'true') {
 console.log('\n--- Launcher smoke test (pre-pack) ---')
 execSync('node scripts/smoke-launcher.mjs', { stdio: 'inherit', cwd: root })
 
-killLianYuProcesses()
+killDesktopProcesses()
 removePartialReleaseArtifacts()
 
 const outputArg = `--config.directories.output=${outDir.replace(/\\/g, '/')}`
-execSync(`npx electron-builder --win ${outputArg}`, {
+const builderPlatformArg = targetPlatform === 'win' ? '--win' : '--mac'
+const nativeRebuildArg = process.env.LIANYU_SKIP_NATIVE_REBUILD === 'true'
+  ? '--config.npmRebuild=false'
+  : ''
+execSync(`npx electron-builder ${builderPlatformArg} ${outputArg} ${nativeRebuildArg}`.trim(), {
   stdio: 'inherit',
   env: process.env,
 })
 
-console.log(`\n安装包已生成: ${outDir}/LianYu Setup ${pkg.version}.exe`)
+const artifacts = fs.readdirSync(outDirFull)
+  .filter((name) => distributableExtensions.has(path.extname(name)))
+  .sort()
+console.log(`\n${productName} ${targetPlatform} artifacts:`)
+for (const artifact of artifacts) console.log(`- ${path.join(outDir, artifact)}`)
 console.log(`API Origin (packed in runtime-secrets.bin): ${packApiOrigin}`)

@@ -4,8 +4,8 @@
       to="/app"
       class="header-brand"
     >
-      <img :src="APP_LOGO" alt="LianYu" class="header-logo" />
-      <span class="header-wordmark">LianYu</span>
+      <img :src="APP_LOGO" alt="Amiweave" class="header-logo" />
+      <span class="header-wordmark">Amiweave</span>
     </router-link>
 
     <div class="header-drag-region" aria-hidden="true" />

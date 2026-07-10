@@ -1,8 +1,8 @@
-# LianYu Demo Visual Identity
+# Amiweave Demo Visual Identity
 
 ## Style Prompt
 
-A quiet, warm product film that feels like entering the existing LianYu desktop app at night. Real interface captures remain the primary visual evidence. Typography and motion should support intimacy and trust: restrained editorial headings, precise product labels, generous negative space, slow focus pulls, and small coral accents. The result should feel human and technically credible rather than promotional or futuristic.
+A quiet, warm product film that feels like entering the existing Amiweave desktop app at night. Real interface captures remain the primary visual evidence. Typography and motion should support intimacy and trust: restrained editorial headings, precise product labels, generous negative space, slow focus pulls, and small coral accents. The result should feel human and technically credible rather than promotional or futuristic.
 
 ## Colors
 

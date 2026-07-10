@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing version tag to publish (for example v0.3.0-rc.1)"
+        description: "Existing version tag to publish (for example v0.3.0-rc.2)"
         required: true
         type: string
 
@@ -52,7 +52,7 @@ jobs:
       - run: npm run build
       - run: npm run test -- --run
 
-  desktop:
+  desktop-windows:
     runs-on: windows-2022
     defaults:
       run:
@@ -82,32 +82,63 @@ jobs:
           if ($backendVersion -ne $frontendVersion) {
             throw "Backend version $backendVersion does not match frontend version $frontendVersion"
           }
-      - run: npm run electron:build
+      - run: npm run electron:build:win
         env:
           LIANYU_PACKAGE_AUDITABLE_SOURCE: "true"
-      - name: Create checksums
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem release -Recurse -File | Where-Object {
-            $_.FullName -notmatch '[\\/]win-unpacked[\\/]' -and
-            ($_.Extension -eq '.exe' -or $_.Extension -eq '.blockmap')
-          }
-          $lines = foreach ($file in $files) {
-            $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
-            "$hash  $($file.Name)"
-          }
-          $lines | Set-Content -Encoding ascii release/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: lianyu-windows
+          name: amiweave-windows
           path: |
-            frontend/release/v*/LianYu Setup *.exe
-            frontend/release/v*/LianYu Setup *.exe.blockmap
-            frontend/release/SHA256SUMS.txt
+            frontend/release/v*/Amiweave-*.exe
+            frontend/release/v*/Amiweave-*.exe.blockmap
+          if-no-files-found: error
+
+  desktop-macos:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install Pillow==11.3.0
+      - run: npm ci
+      - name: Verify tag matches project versions
+        shell: bash
+        run: |
+          frontend_version=$(node -p "require('./package.json').version")
+          backend_version=$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' ../backend/pom.xml | head -n 1)
+          if [[ "v${frontend_version}" != "${RELEASE_TAG}" ]]; then
+            echo "Tag ${RELEASE_TAG} does not match frontend version v${frontend_version}" >&2
+            exit 1
+          fi
+          if [[ "${backend_version}" != "${frontend_version}" ]]; then
+            echo "Backend version ${backend_version} does not match frontend version ${frontend_version}" >&2
+            exit 1
+          fi
+      - run: npm run electron:build:mac
+        env:
+          LIANYU_PACKAGE_AUDITABLE_SOURCE: "true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amiweave-macos
+          path: |
+            frontend/release/v*/Amiweave-*.dmg
+            frontend/release/v*/Amiweave-*.zip
+            frontend/release/v*/Amiweave-*.blockmap
           if-no-files-found: error
 
   publish:
-    needs: [verify-backend, verify-frontend, desktop]
+    needs: [verify-backend, verify-frontend, desktop-windows, desktop-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,21 +146,39 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
       - uses: actions/download-artifact@v4
         with:
-          name: lianyu-windows
+          pattern: amiweave-*
+          merge-multiple: true
           path: release-assets
+      - name: Create combined checksums
+        shell: bash
+        run: |
+          : > release-assets/SHA256SUMS.txt
+          while IFS= read -r -d '' file; do
+            hash=$(sha256sum "$file" | cut -d ' ' -f 1)
+            printf '%s  %s\n' "$hash" "$(basename "$file")" >> release-assets/SHA256SUMS.txt
+          done < <(find release-assets -type f ! -name SHA256SUMS.txt -print0 | sort -z)
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mapfile -d '' assets < <(find release-assets -type f \
-            \( -name '*.exe' -o -name '*.blockmap' -o -name 'SHA256SUMS.txt' \) -print0)
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.blockmap' -o -name 'SHA256SUMS.txt' \) -print0)
+          state_args=()
+          if [[ "${RELEASE_TAG}" == *-* ]]; then
+            state_args+=(--prerelease)
+          fi
+          notes_args=(--generate-notes)
+          notes_file="docs/releases/${RELEASE_TAG}.md"
+          if [[ -f "${notes_file}" ]]; then
+            notes_args=(--notes-file "${notes_file}")
+          fi
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
-            gh release edit "${RELEASE_TAG}" --draft=false --prerelease
+            gh release edit "${RELEASE_TAG}" --title "Amiweave ${RELEASE_TAG}" --draft=false "${state_args[@]}"
           else
             gh release create "${RELEASE_TAG}" "${assets[@]}" \
               --verify-tag \
-              --title "LianYu ${RELEASE_TAG}" \
-              --generate-notes \
-              --prerelease
+              --title "Amiweave ${RELEASE_TAG}" \
+              "${notes_args[@]}" \
+              "${state_args[@]}"
           fi

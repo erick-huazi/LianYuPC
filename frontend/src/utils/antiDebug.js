@@ -6,8 +6,11 @@
  */
 
 let timer = null
-let debuggerLast = 0
-let hiddenAt = 0
+const DEBUGGER_PAUSE_THRESHOLD_MS = 1500
+
+export function exceedsDebuggerPauseThreshold(elapsedMs) {
+  return Number.isFinite(elapsedMs) && elapsedMs > DEBUGGER_PAUSE_THRESHOLD_MS
+}
 
 /** 反调试主入口（仅 Electron 生产环境执行） */
 export function initAntiDebug() {
@@ -23,8 +26,6 @@ export function initAntiDebug() {
 function initDebuggerLoop() {
   // 使用 debugger 语句检测调试器是否附加
   // 如果浏览器 DevTools 打开，遇到 debugger 语句会暂停；否则直接跳过
-  debuggerLast = performance.now()
-
   function check() {
     // 页面隐藏（最小化/关闭到托盘）时：Chromium 会节流 setTimeout，
     // 导致间隔被拉长到数秒，此时检查无意义且会导致误杀 —— 直接跳过本次检测
@@ -33,31 +34,21 @@ function initDebuggerLoop() {
       return
     }
 
-    const now = performance.now()
-    // 若两次检查间隔超过 500ms，说明 debugger 语句触发了暂停（调试器已附加）
-    if (now - debuggerLast > 500) {
+    // Only measure time spent at the debugger statement. Measuring the whole
+    // timer interval produces false positives during a busy startup.
+    const debuggerStartedAt = performance.now()
+    // eslint-disable-next-line no-debugger
+    debugger
+    const debuggerElapsed = performance.now() - debuggerStartedAt
+    if (exceedsDebuggerPauseThreshold(debuggerElapsed)) {
       // 检测到调试器！清理关键信息并通知主进程退出
       localStorage.clear()
       sessionStorage.clear()
       window.electronAPI?.quitApp?.()
       return
     }
-    debuggerLast = now
-    // eslint-disable-next-line no-debugger
-    debugger
     timer = setTimeout(check, 100)
   }
-
-  // 页面可见性变化时重置时间基准，避免后台节流累积时长
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      hiddenAt = performance.now()
-    } else {
-      // 恢复时补偿隐藏期间的时差
-      const hiddenDuration = performance.now() - hiddenAt
-      debuggerLast += hiddenDuration
-    }
-  })
 
   timer = setTimeout(check, 100)
 }

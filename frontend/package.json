@@ -1,6 +1,8 @@
 {
-  "name": "lianyu-pc",
-  "version": "0.3.0-rc.1",
+  "name": "amiweave-desktop",
+  "version": "0.3.0-rc.2",
+  "description": "A self-hostable AI companion desktop application with long-term memory and proactive presence.",
+  "author": "Amiweave contributors",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -10,6 +12,8 @@
     "electron:dev": "node scripts/electron-dev.mjs",
     "icon:regenerate": "python scripts/regenerate-icon.py",
     "electron:build": "node scripts/electron-pack.mjs",
+    "electron:build:win": "node scripts/electron-pack.mjs win",
+    "electron:build:mac": "node scripts/electron-pack.mjs mac",
     "electron:release": "node scripts/electron-release.mjs",
     "electron:release:minor": "node scripts/electron-release.mjs minor",
     "electron:release:major": "node scripts/electron-release.mjs major",
@@ -48,9 +52,9 @@
     "form-data": "^4.0.6"
   },
   "build": {
-    "appId": "com.lianyu.pc",
-    "productName": "LianYu",
-    "artifactName": "${productName} Setup ${version}.${ext}",
+    "appId": "com.amiweave.desktop",
+    "productName": "Amiweave",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -79,6 +83,26 @@
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.social-networking"
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -90,8 +114,8 @@
       "uninstallerIcon": "build/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "LianYu",
-      "uninstallDisplayName": "LianYu",
+      "shortcutName": "Amiweave",
+      "uninstallDisplayName": "Amiweave",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
     }

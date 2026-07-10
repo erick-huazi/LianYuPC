@@ -121,9 +121,9 @@ export default {
   },
   auth: {
     brandLogin: '与心之所向，促膝长谈',
-    brandRegister: '创建你的 LianYu 账号，开启你的故事',
+    brandRegister: '创建你的 Amiweave 账号，开启你的故事',
     welcomeBack: '欢迎回来',
-    loginDesc: '登录你的 LianYu 账号继续对话',
+    loginDesc: '登录你的 Amiweave 账号继续对话',
     registerTitle: '注册账号',
     registerBrand: '初次相遇',
     username: '用户名',
