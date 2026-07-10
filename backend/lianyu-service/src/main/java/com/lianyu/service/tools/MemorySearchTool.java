@@ -30,12 +30,12 @@ public class MemorySearchTool {
         List<String> lines = memoryRetriever.searchSemantic(
                 scope.characterId(), scope.userId(), query, MemoryRetriever.DEFAULT_TOOL_TOP_K);
         if (CollUtil.isEmpty(lines)) {
-            log.debug("memory_search empty: userId={}, characterId={}, query={}",
-                    scope.userId(), scope.characterId(), query);
+            log.debug("memory_search empty: userId={}, characterId={}",
+                    scope.userId(), scope.characterId());
             return "（未找到相关长期记忆）";
         }
-        log.info("memory_search hit: userId={}, characterId={}, query={}, count={}",
-                scope.userId(), scope.characterId(), query, lines.size());
+        log.info("memory_search hit: userId={}, characterId={}, count={}",
+                scope.userId(), scope.characterId(), lines.size());
         return String.join("\n", lines);
     }
 }
