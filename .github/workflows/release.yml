@@ -101,8 +101,8 @@ jobs:
         with:
           name: lianyu-windows
           path: |
-            frontend/release/**/*.exe
-            frontend/release/**/*.blockmap
+            frontend/release/v*/LianYu Setup *.exe
+            frontend/release/v*/LianYu Setup *.exe.blockmap
             frontend/release/SHA256SUMS.txt
           if-no-files-found: error
 
