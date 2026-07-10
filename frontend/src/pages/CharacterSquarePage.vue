@@ -590,7 +590,7 @@ async function startChat(characterId) {
 
 .square-page__ambient {
   position: absolute;
-  inset: -$space-8 -$space-4;
+  inset: (-$space-8) (-$space-4);
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
