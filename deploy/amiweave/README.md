@@ -35,6 +35,18 @@ without a Maven build:
 AMIWEAVE_SKIP_BUILD=1 sh deploy/amiweave/deploy.sh
 ```
 
+Routine deployments build and replace only the backend, wait for it to become
+healthy, and then reconcile the gateway. Existing MySQL, Redis, RabbitMQ, and
+MinIO containers are not recreated. To intentionally apply infrastructure
+configuration changes, run:
+
+```sh
+AMIWEAVE_REFRESH_INFRA=1 sh deploy/amiweave/deploy.sh
+```
+
+Changing `APP_REVISION` does not enter the stateful service environments, so a
+normal application release cannot invalidate their Compose configuration hash.
+
 The service limits are sized for a 4 GB host. A 2 GB swap file is recommended
 as an out-of-memory safety margin; it is not a substitute for monitoring.
 

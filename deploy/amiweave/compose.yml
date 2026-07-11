@@ -67,10 +67,11 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     mem_limit: 768m
-    env_file:
-      - ../../.env
     environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: lianyu
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     command:
       - --innodb-buffer-pool-size=256M
       - --max-connections=100
@@ -87,8 +88,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     mem_limit: 256m
-    env_file:
-      - ../../.env
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
       - redis_data:/data
@@ -102,8 +103,6 @@ services:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
     mem_limit: 512m
-    env_file:
-      - ../../.env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
