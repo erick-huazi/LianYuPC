@@ -35,28 +35,28 @@
         <spring-security-crypto.version>6.3.4</spring-security-crypto.version>
 
         <!-- Data -->
-        <mybatis-plus.version>3.5.9</mybatis-plus.version>
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <mysql-connector.version>8.4.0</mysql-connector.version>
         <flyway.version>10.20.1</flyway.version>
 
         <!-- Middleware -->
-        <sa-token.version>1.39.0</sa-token.version>
+        <sa-token.version>1.45.0</sa-token.version>
         <minio.version>8.5.13</minio.version>
         <milvus.version>2.4.5</milvus.version>
         <jasypt.version>3.0.5</jasypt.version>
 
         <!-- Resilience -->
-        <resilience4j.version>2.2.0</resilience4j.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
 
         <!-- Docs -->
         <knife4j.version>4.5.0</knife4j.version>
 
         <!-- Utils -->
-        <lombok.version>1.18.34</lombok.version>
-        <commons-pool2.version>2.12.0</commons-pool2.version>
-        <hutool.version>5.8.34</hutool.version>
-        <webpush.version>5.1.1</webpush.version>
-        <bouncycastle.version>1.78.1</bouncycastle.version>
+        <lombok.version>1.18.46</lombok.version>
+        <commons-pool2.version>2.13.1</commons-pool2.version>
+        <hutool.version>5.8.47</hutool.version>
+        <webpush.version>5.1.2</webpush.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
 
         <!-- Test -->
         <testcontainers.version>1.20.3</testcontainers.version>
@@ -224,7 +224,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>3.15.0</version>
                 <configuration>
                     <parameters>true</parameters>
                 </configuration>
