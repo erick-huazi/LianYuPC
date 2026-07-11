@@ -37,7 +37,7 @@
         <!-- Data -->
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <mysql-connector.version>8.4.0</mysql-connector.version>
-        <flyway.version>10.20.1</flyway.version>
+        <flyway.version>12.11.0</flyway.version>
 
         <!-- Middleware -->
         <sa-token.version>1.39.0</sa-token.version>
