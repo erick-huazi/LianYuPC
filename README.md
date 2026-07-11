@@ -4,6 +4,8 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/erick-huazi/LianYuPC?include_prereleases)](https://github.com/erick-huazi/LianYuPC/releases)
 
+[Privacy Policy](PRIVACY.md) | [Code Signing Policy](CODE_SIGNING_POLICY.md) | [Security Policy](SECURITY.md)
+
 Amiweave 是一个 AI 角色陪伴桌面/Web 应用。它把角色聊天、长期记忆、主动陪伴、桌面感知和多角色关系放在同一套可自托管系统中。
 
 ## Screenshots
@@ -134,6 +136,13 @@ git push origin v0.3.0-rc.2
 ```
 
 Release workflow 会重新运行前后端测试，构建 Windows x64 与 macOS x64/arm64 安装包，生成 SHA-256 校验文件并创建 GitHub Release。候选版本尚未完成商业代码签名，安装时操作系统可能显示未知开发者提示。变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+### Windows Code Signing
+
+Windows releases accepted into the open-source signing program use **free code
+signing provided by SignPath.io, certificate by SignPath Foundation**. Current
+unsigned candidates are labeled as unsigned. See the
+[Code Signing Policy](CODE_SIGNING_POLICY.md).
 
 ## Contributing
 
