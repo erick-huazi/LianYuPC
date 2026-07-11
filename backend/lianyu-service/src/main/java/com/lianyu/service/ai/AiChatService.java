@@ -221,15 +221,16 @@ public class AiChatService {
 
     public ChatResult chatBlocking(Long userId, AiChatRequest request) {
         try {
+            VaultEntryResponse vault = resolveVault(userId, request.getProvider());
+            String model = resolveModel(request, vault);
+            ChatModel chatModel = buildChatModel(
+                    vault, model, vaultService.decryptKeyForChat(vault.getId()));
+
             return timeLimiter.executeCompletionStage(scheduler, () ->
                     CompletableFuture.supplyAsync(() -> {
                         try {
                             return bulkhead.executeCallable(() ->
                                     circuitBreaker.executeCallable(() -> {
-                                        VaultEntryResponse vault = resolveVault(userId, request.getProvider());
-                                        String model = resolveModel(request, vault);
-                                        ChatModel chatModel = buildChatModel(vault, model, vaultService.decryptKeyForChat(vault.getId()));
-
                                         return withChatToolScope(userId, request, () -> {
                                         List<Message> messages = toSpringMessages(request.getMessages());
                                         Prompt prompt = buildPrompt(request, vault, messages);
