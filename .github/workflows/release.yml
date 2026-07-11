@@ -85,12 +85,18 @@ jobs:
       - run: npm run electron:build:win
         env:
           LIANYU_PACKAGE_AUDITABLE_SOURCE: "true"
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Verify Windows signing policy
+        shell: pwsh
+        run: ./scripts/verify-windows-signing.ps1 -ReleaseTag "${{ env.RELEASE_TAG }}"
       - uses: actions/upload-artifact@v7
         with:
           name: amiweave-windows
           path: |
             frontend/release/v*/Amiweave-*.exe
             frontend/release/v*/Amiweave-*.exe.blockmap
+            frontend/release/v*/WINDOWS_SIGNING_STATUS.json
           if-no-files-found: error
 
   desktop-macos:
@@ -167,7 +173,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mapfile -d '' assets < <(find release-assets -type f \
-            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.blockmap' -o -name 'SHA256SUMS.txt' \) -print0)
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.blockmap' -o -name '*_SIGNING_STATUS.json' -o -name 'SHA256SUMS.txt' \) -print0)
           state_args=()
           if [[ "${RELEASE_TAG}" == *-* ]]; then
             state_args+=(--prerelease)

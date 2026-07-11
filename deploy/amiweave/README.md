@@ -54,6 +54,12 @@ Route `amiweave.com` to the loopback origin with the host's existing reverse pro
 or a dedicated Cloudflare Tunnel. Do not bind this stack directly to public
 `80`, `443`, or ports already owned by another project.
 
+The gateway serves the public download site from `deploy/amiweave/site` while
+keeping `/api/` and `/ws` on the backend proxy. Update `release.json`, download
+links, signing notices, and checksums together when publishing a desktop release.
+The root page is deliberately cache-disabled; screenshots use a seven-day
+browser cache.
+
 ## Rollback
 
 Check out the previous Git revision and rerun `deploy.sh`. The named Compose

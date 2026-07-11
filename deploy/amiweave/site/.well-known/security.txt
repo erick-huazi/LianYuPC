@@ -1,0 +1,5 @@
+Contact: https://github.com/erick-huazi/LianYuPC/security/advisories/new
+Canonical: https://amiweave.com/.well-known/security.txt
+Policy: https://github.com/erick-huazi/LianYuPC/blob/main/SECURITY.md
+Preferred-Languages: en, zh
+Expires: 2027-07-11T00:00:00Z

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "product": "Amiweave",
+  "version": "0.3.0-rc.2",
+  "tag": "v0.3.0-rc.2",
+  "prerelease": true,
+  "publishedAt": "2026-07-10T16:49:17Z",
+  "signing": {
+    "windows": "unsigned-signpath-application-pending",
+    "macos": "unsigned"
+  },
+  "artifacts": [
+    {
+      "platform": "windows",
+      "architecture": "x64",
+      "name": "Amiweave-0.3.0-rc.2-win-x64.exe",
+      "bytes": 164702581,
+      "sha256": "5048c322f0dc09c0f373ed85ae1078fdb051788222f491380b3937a7525d3952"
+    },
+    {
+      "platform": "macos",
+      "architecture": "arm64",
+      "name": "Amiweave-0.3.0-rc.2-mac-arm64.dmg",
+      "bytes": 189728418,
+      "sha256": "40f53a44a35bc738e0851721951864fa12859ee28b0646dd0e9e69b3d12fe957"
+    },
+    {
+      "platform": "macos",
+      "architecture": "x64",
+      "name": "Amiweave-0.3.0-rc.2-mac-x64.dmg",
+      "bytes": 191370099,
+      "sha256": "3d18082cf738e32cd35c6652447b193b5f9d021f12c5e3584bcd49f9ffdc7852"
+    }
+  ]
+}

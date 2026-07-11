@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111318" />
+    <meta
+      name="description"
+      content="Download Amiweave, the open-source AI companion desktop application."
+    />
+    <meta property="og:title" content="Amiweave Desktop" />
+    <meta
+      property="og:description"
+      content="Long-term memory, proactive presence, desktop awareness, and multi-character relationships."
+    />
+    <meta property="og:image" content="https://amiweave.com/screenshots/landing.jpg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://amiweave.com/" />
+    <title>Amiweave Desktop</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/site.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="/" aria-label="Amiweave home">
+          <span class="brand__mark" aria-hidden="true">A</span>
+          <span>Amiweave</span>
+        </a>
+        <div class="nav__links">
+          <a href="#downloads">Downloads</a>
+          <a href="https://github.com/erick-huazi/LianYuPC/releases/tag/v0.3.0-rc.2">Release notes</a>
+          <a href="https://github.com/erick-huazi/LianYuPC">Source</a>
+        </div>
+      </nav>
+
+      <div class="hero__content">
+        <p class="eyebrow">v0.3.0-rc.2 / desktop candidate</p>
+        <h1>Amiweave</h1>
+        <p class="hero__lead">
+          An open-source desktop companion with long-term memory, proactive
+          presence, and opt-in desktop awareness.
+        </p>
+        <div class="hero__actions">
+          <a
+            class="button button--primary"
+            id="primary-download"
+            href="https://github.com/erick-huazi/LianYuPC/releases/download/v0.3.0-rc.2/Amiweave-0.3.0-rc.2-win-x64.exe"
+          >
+            <span id="primary-download-label">Download for Windows</span>
+            <span aria-hidden="true">&darr;</span>
+          </a>
+          <a class="button button--secondary" href="#downloads">All platforms</a>
+        </div>
+        <p class="signing-notice">
+          <strong>Unsigned candidate.</strong> SignPath Foundation review is pending.
+        </p>
+      </div>
+
+      <a class="hero__next" href="#downloads">
+        Downloads <span aria-hidden="true">&darr;</span>
+      </a>
+    </header>
+
+    <main>
+      <section class="release-band" aria-label="Release status">
+        <div class="release-band__inner">
+          <span class="status-dot" aria-hidden="true"></span>
+          <p>
+            <strong>Release candidate.</strong> Suitable for testing. Stable
+            releases will require trusted Windows signatures before publication.
+          </p>
+          <a href="https://github.com/erick-huazi/LianYuPC/blob/main/CODE_SIGNING_POLICY.md">
+            Signing policy <span aria-hidden="true">&#8599;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="downloads section" id="downloads">
+        <div class="section__header">
+          <p class="eyebrow eyebrow--dark">Current release</p>
+          <h2>Choose your build</h2>
+          <p>All packages connect to the hosted API at <code>https://amiweave.com</code>.</p>
+        </div>
+
+        <div class="download-grid">
+          <article class="download-item" data-platform="windows">
+            <div class="download-item__topline">
+              <h3>Windows</h3>
+              <span class="download-item__status">Unsigned</span>
+            </div>
+            <p class="download-item__meta">Windows 10/11 &middot; x64 &middot; 157 MB</p>
+            <p>NSIS installer for standard 64-bit Windows computers.</p>
+            <a
+              class="button button--download"
+              href="https://github.com/erick-huazi/LianYuPC/releases/download/v0.3.0-rc.2/Amiweave-0.3.0-rc.2-win-x64.exe"
+            >
+              Download .exe <span aria-hidden="true">&darr;</span>
+            </a>
+          </article>
+
+          <article class="download-item" data-platform="mac-arm64">
+            <div class="download-item__topline">
+              <h3>macOS Apple silicon</h3>
+              <span class="download-item__status">Unsigned</span>
+            </div>
+            <p class="download-item__meta">M1 or newer &middot; arm64 &middot; 181 MB</p>
+            <p>Disk image for Apple silicon Mac computers.</p>
+            <a
+              class="button button--download"
+              href="https://github.com/erick-huazi/LianYuPC/releases/download/v0.3.0-rc.2/Amiweave-0.3.0-rc.2-mac-arm64.dmg"
+            >
+              Download .dmg <span aria-hidden="true">&darr;</span>
+            </a>
+          </article>
+
+          <article class="download-item" data-platform="mac-x64">
+            <div class="download-item__topline">
+              <h3>macOS Intel</h3>
+              <span class="download-item__status">Unsigned</span>
+            </div>
+            <p class="download-item__meta">Intel Mac &middot; x64 &middot; 183 MB</p>
+            <p>Disk image for Intel-based Mac computers.</p>
+            <a
+              class="button button--download"
+              href="https://github.com/erick-huazi/LianYuPC/releases/download/v0.3.0-rc.2/Amiweave-0.3.0-rc.2-mac-x64.dmg"
+            >
+              Download .dmg <span aria-hidden="true">&darr;</span>
+            </a>
+          </article>
+        </div>
+      </section>
+
+      <section class="verification section">
+        <div class="verification__intro">
+          <p class="eyebrow eyebrow--dark">Verify before running</p>
+          <h2>Every artifact has a published checksum</h2>
+        </div>
+        <div class="verification__links">
+          <a href="https://github.com/erick-huazi/LianYuPC/releases/download/v0.3.0-rc.2/SHA256SUMS.txt">
+            SHA256SUMS.txt <span aria-hidden="true">&darr;</span>
+          </a>
+          <a href="https://github.com/erick-huazi/LianYuPC/blob/main/PRIVACY.md">
+            Privacy policy <span aria-hidden="true">&#8599;</span>
+          </a>
+          <a href="https://github.com/erick-huazi/LianYuPC/blob/main/SECURITY.md">
+            Security policy <span aria-hidden="true">&#8599;</span>
+          </a>
+          <a href="https://github.com/erick-huazi/LianYuPC">
+            Source code <span aria-hidden="true">&#8599;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="preview" aria-labelledby="preview-title">
+        <div class="preview__copy">
+          <p class="eyebrow">Inside Amiweave</p>
+          <h2 id="preview-title">Built around presence, not a disposable chat window</h2>
+        </div>
+        <img
+          src="/screenshots/features.png"
+          alt="Amiweave interface showing streaming chat, group chat, and long-term memory capabilities"
+          width="1434"
+          height="896"
+          loading="lazy"
+        />
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Amiweave &middot; Apache-2.0</span>
+      <div>
+        <a href="https://github.com/erick-huazi/LianYuPC/issues">Support</a>
+        <a href="https://github.com/erick-huazi/LianYuPC/releases">All releases</a>
+      </div>
+    </footer>
+  </body>
+</html>

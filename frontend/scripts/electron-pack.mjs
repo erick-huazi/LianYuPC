@@ -305,6 +305,12 @@ removePartialReleaseArtifacts()
 const outputArg = `--config.directories.output=${outDir.replace(/\\/g, '/')}`
 const builderPlatformArg = targetPlatform === 'win' ? '--win' : '--mac'
 const builderArgs = [builderPlatformArg, outputArg, '--publish', 'never']
+const hasWindowsSigningCredentials = targetPlatform === 'win'
+  && Boolean(process.env.WIN_CSC_LINK || process.env.CSC_LINK)
+if (hasWindowsSigningCredentials) {
+  builderArgs.push('--config.win.signAndEditExecutable=true')
+  console.log('Windows signing credentials detected; enabling electron-builder signing')
+}
 if (process.env.LIANYU_SKIP_NATIVE_REBUILD === 'true') {
   builderArgs.push('--config.npmRebuild=false')
 }
