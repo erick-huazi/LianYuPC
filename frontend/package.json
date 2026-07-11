@@ -41,7 +41,7 @@
     "electron": "^42.3.2",
     "electron-builder": "^26.8.1",
     "javascript-obfuscator": "^5.4.3",
-    "rcedit": "^4.0.1",
+    "rcedit": "^5.0.2",
     "sass": "^1.80.7",
     "vite": "^5.4.11",
     "vite-plugin-electron": "^1.0.1",
