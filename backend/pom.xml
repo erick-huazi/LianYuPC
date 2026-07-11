@@ -41,7 +41,7 @@
 
         <!-- Middleware -->
         <sa-token.version>1.39.0</sa-token.version>
-        <minio.version>8.5.13</minio.version>
+        <minio.version>9.0.3</minio.version>
         <milvus.version>2.4.5</milvus.version>
         <jasypt.version>3.0.5</jasypt.version>
 
