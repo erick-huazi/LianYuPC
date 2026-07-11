@@ -3,7 +3,6 @@ package com.lianyu.storage.minio;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
-import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,16 +23,20 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient() {
+        MinioClient client = createClient();
+        initBucket(client);
+        return client;
+    }
+
+    MinioClient createClient() {
         return MinioClient.builder()
                 .endpoint(endpoint)
                 .credentials(accessKey, secretKey)
                 .build();
     }
 
-    @PostConstruct
-    public void initBucket() {
+    void initBucket(MinioClient client) {
         try {
-            MinioClient client = minioClient();
             boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
             if (!exists) {
                 client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
