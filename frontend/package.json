@@ -38,7 +38,7 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.6",
     "asarmor": "^3.0.2",
-    "electron": "^42.3.2",
+    "electron": "^43.1.0",
     "electron-builder": "^26.8.1",
     "javascript-obfuscator": "^5.4.3",
     "rcedit": "^4.0.1",
